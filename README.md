@@ -37,7 +37,8 @@ Wanted arm functionalities:
 2. `grasp` 
 
 
-## Status: 
+<details>
+## Status
 
 ### DONE: 
 - [x] Create pkg skeleton 
@@ -46,7 +47,7 @@ Wanted arm functionalities:
 ### TODO: 
 - [ ] Go through moveit2 tutorials 
 - [ ] Define SW patterns that makes sense to use
-
+</details>
 
 
 
