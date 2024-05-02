@@ -38,7 +38,7 @@ Wanted arm functionalities:
 
 
 <details>
-<summary><h1>Status</h1></summary>
+<summary><h2>Status</h2></summary>
 
 ### DONE: 
 - [x] Create pkg skeleton 
@@ -50,5 +50,11 @@ Wanted arm functionalities:
 </details>
 
 
+<details> 
+<summary><h3> Useful learning links</h3>
 
+- [Declare variables as const](https://www.cppstories.com/2016/12/please-declare-your-variables-as-const/)
+- [Complicated variable initialization](https://www.cppstories.com/2016/11/iife-for-complex-initialization/)
+- [C++ good practices](https://ctu-mrs.github.io/docs/introduction/c_to_cpp.html)
 
+</summary>
