@@ -38,7 +38,7 @@ Wanted arm functionalities:
 
 
 <details>
-## Status
+<summary>## Status</summary>
 
 ### DONE: 
 - [x] Create pkg skeleton 
