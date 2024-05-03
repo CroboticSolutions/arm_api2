@@ -59,11 +59,12 @@ Wanted arm functionalities:
 
 
 <details> 
-<summary><h3> Useful learning links</h3>
+<summary><h3> Useful learning links</h3></summary>
 
 - [Declare variables as const](https://www.cppstories.com/2016/12/please-declare-your-variables-as-const/)
 - [Complicated variable initialization](https://www.cppstories.com/2016/11/iife-for-complex-initialization/)
 - [C++ good practices](https://ctu-mrs.github.io/docs/introduction/c_to_cpp.html)
 - [MoveIt2! C++ iface](https://moveit.picknik.ai/main/doc/examples/move_group_interface/move_group_interface_tutorial.html)
+- [How to setup VSCode](https://picknik.ai/vscode/docker/ros2/2024/01/23/ROS2-and-VSCode.html)
 
-</summary>
+</details>
