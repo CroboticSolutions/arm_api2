@@ -37,6 +37,12 @@ Wanted arm functionalities:
 2. `grasp` 
 
 <details>
+<summary><h3> Dev help </summary>
+
+You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2. 
+</details>
+
+<details>
 <summary><h2> Arm interfaces </h2></summary>
 
 * [franka_ros2](https://support.franka.de/docs/franka_ros2.html)
