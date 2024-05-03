@@ -61,6 +61,8 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 ### TODO: 
 - [ ] Go through moveit2 tutorials 
 - [ ] Define SW patterns that makes sense to use
+- [ ] Add gazebo
+- [ ] Implement first arm api for the franka for ros 2
 </details>
 
 
