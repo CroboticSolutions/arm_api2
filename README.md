@@ -42,7 +42,7 @@ Wanted arm functionalities:
 * [franka_ros2](https://support.franka.de/docs/franka_ros2.html)
 * [kinova_ros2](https://github.com/Kinovarobotics/ros2_kortex)
 * [UR_ros2](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver)
-<details>
+</details>
 
 
 <details>
