@@ -71,6 +71,7 @@ int main(int argc, char * argv[])
     return msg; 
   }(); 
 
+  // setPoseTarget
   move_group_interface.setPoseTarget(target_pose); 
 
   // Create a plan to that target pose
@@ -82,7 +83,7 @@ int main(int argc, char * argv[])
 
   // Execute the plan 
   if (success) {
-    move_group_interface.execute(plan);
+    draw_trajectory_tool_path(plan.trajectory_);
     moveit_visual_tools.trigger(); 
     prompt("Press 'Next' in the RvizVisualToolsGui window to execute"); 
     draw_title("Executing"); 

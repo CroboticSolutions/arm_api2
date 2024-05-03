@@ -11,6 +11,9 @@ find_package(moveit_ros_planning_interface REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
 
+# include headers
+include_directories(include)
+
 add_executable(arm_api2 src/arm_api2.cpp)
 target_include_directories(arm_api2 PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -27,9 +30,14 @@ install(TARGETS arm_api2
   DESTINATION lib/${PROJECT_NAME})
 
 add_executable(moveit2_iface src/moveit2_iface.cpp)
-target_include_directories(moveit2_iface PUBLIC
+target_include_directories(moveit2_iface 
+PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
+  $<INSTALL_INTERFACE:include>
+  PRIVATE
+  include/)
+
+# TODO: Build moveit2_iface
 target_compile_features(moveit2_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
   moveit2_iface

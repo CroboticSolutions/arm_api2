@@ -1,3 +1,6 @@
-#include "moveit2_iface.hpp"
+#include "arm_api2/moveit2_iface.hpp"
 
-Movet2Iface::Movet2Iface 
+int main(int argc, char * argv[])
+{
+    
+}
