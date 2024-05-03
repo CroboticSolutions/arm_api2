@@ -26,6 +26,21 @@ ament_target_dependencies(
 install(TARGETS arm_api2
   DESTINATION lib/${PROJECT_NAME})
 
+add_executable(moveit2_iface src/moveit2_iface.cpp)
+target_include_directories(moveit2_iface PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(moveit2_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+ament_target_dependencies(
+  moveit2_iface
+  "moveit_ros_planning_interface"
+  "moveit_visual_tools"
+  "rclcpp"
+)
+
+install(TARGETS moveit2_iface
+  DESTINATION lib/${PROJECT_NAME})
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights

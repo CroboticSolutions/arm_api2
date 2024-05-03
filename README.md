@@ -36,6 +36,14 @@ Wanted arm functionalities:
 1. `go_to_pose`
 2. `grasp` 
 
+<details>
+<summary><h2> Arm interfaces </h2></summary>
+
+* [franka_ros2](https://support.franka.de/docs/franka_ros2.html)
+* [kinova_ros2](https://github.com/Kinovarobotics/ros2_kortex)
+* [UR_ros2](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver)
+<details>
+
 
 <details>
 <summary><h2>Status</h2></summary>
@@ -56,5 +64,6 @@ Wanted arm functionalities:
 - [Declare variables as const](https://www.cppstories.com/2016/12/please-declare-your-variables-as-const/)
 - [Complicated variable initialization](https://www.cppstories.com/2016/11/iife-for-complex-initialization/)
 - [C++ good practices](https://ctu-mrs.github.io/docs/introduction/c_to_cpp.html)
+- [MoveIt2! C++ iface](https://moveit.picknik.ai/main/doc/examples/move_group_interface/move_group_interface_tutorial.html)
 
 </summary>
