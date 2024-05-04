@@ -74,5 +74,6 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 - [C++ good practices](https://ctu-mrs.github.io/docs/introduction/c_to_cpp.html)
 - [MoveIt2! C++ iface](https://moveit.picknik.ai/main/doc/examples/move_group_interface/move_group_interface_tutorial.html)
 - [How to setup VSCode](https://picknik.ai/vscode/docker/ros2/2024/01/23/ROS2-and-VSCode.html)
+- [First Cpp node for ROS 2](https://turtlebot.github.io/turtlebot4-user-manual/tutorials/first_node_cpp.html) 
 
 </details>

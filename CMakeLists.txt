@@ -29,7 +29,7 @@ ament_target_dependencies(
 install(TARGETS arm_api2
   DESTINATION lib/${PROJECT_NAME})
 
-add_executable(moveit2_iface src/moveit2_iface.cpp)
+add_executable(moveit2_iface src/moveit2_iface.cpp src/moveit2_iface_node.cpp)
 target_include_directories(moveit2_iface 
 PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

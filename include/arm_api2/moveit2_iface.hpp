@@ -8,47 +8,74 @@
 #include <thread>
 #include <string>
 
+//* yaml params
 #include <yaml-cpp/yaml.h>
 
-// include ROS
+//* ros
 #include <rclcpp/rclcpp.hpp>
 
+//* msgs
+#include "geometry_msgs/msg/pose_stamped.hpp"
 
-namespace arm_api2
+// *std placeholders
+using namespace std::chrono_literals;  
+using std::placeholders::_1;
+using std::placeholders::_2; 
+
+class m2Iface: public rclcpp::Node
 {
 
-class Moveit2_iface
-{
-private: 
+    public:
 
-    rclcpp::Node m_ros_node; 
-    YAML::Node m_robot_config; 
+        m2Iface();  
+        //~Moveit2Iface();
+
+        /* namespace param, maybe redundant */ 
+        std::string ns_; 
+
+    private: 
+
+        YAML::Node config; 
+
+        /*config*/
+        YAML::Node init_config(std::string yaml_path);
+
+        /* init methods */
+        void init_subscribers();
+        void init_publishers(); 
+
+        /* subs */
+        rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr    pose_cmd_sub_;
+
+        /* pubs */
+        rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr       pose_state_pub_;
+        /* rclcpp::Publisher<arm_api2_msgs::msg::State>::SharedPtr             arm_state_pub_;*/ 
+
+ 
+
+        /* callbacks */
+        void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg); 
+
+        /* setters */
+        //bool setPlanningScene() const {return m_planningScene}; 
+        //bool setMoveGroup() const {return m_moveGroup}; 
+        //bool setPlanningSceneMonitor() const {return m_planningSceneMonitor}; 
 
 
-public: 
+        /* getters */
 
-    // Constructor failed
-    // Moveit2_iface(rclcpp::Node* node, YAML::Node config)
-    //    : m_ros_node { node }
-    //    , m_robot_config { config }
-    //    {}
-
-    //bool setPlanningScene() const {return m_planningScene}; 
-    //bool setMoveGroup() const {return m_moveGroup}; 
-    //bool setPlanningScene
 
 
 }; 
 
-} //namespace arm_api2
 #endif
 
 // MoveIt2 ROS wrappers for cpp
 // https://moveit.picknik.ai/main/doc/examples/examples.html#movegroup-ros-wrappers-in-c
 // TODO: 
-// - [] Class init (constructor)
-// - [] Class destrcutor 
-// - [] private vs public variables 
+// - [x] Class init (constructor)
+// - [] Class destrcutor -- 
+// - [x] private vs public variables --> everything node related (private) 
 // - [] Init robot model 
 // - [] Init planning scene 
 // - [] Init move_group 
