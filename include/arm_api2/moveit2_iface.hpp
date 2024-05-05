@@ -14,6 +14,11 @@
 //* ros
 #include <rclcpp/rclcpp.hpp>
 
+//* moveit
+#include <moveit/move_group_interface/move_group_interface.h>
+#include <moveit/robot_model_loader/robot_model_loader.h>
+#include <moveit/robot_model/robot_model.h>
+
 //* msgs
 #include "geometry_msgs/msg/pose_stamped.hpp"
 
@@ -35,6 +40,16 @@ class m2Iface: public rclcpp::Node
 
     private: 
 
+        // PLANNING_GROUP
+        std::string PLANNING_GROUP;  
+
+        // timers
+        rclcpp::TimerBase::SharedPtr                                        timer_;
+
+        /* flags*/
+        bool moveGroupInit; 
+        bool nodeInit; 
+        
         YAML::Node config; 
 
         /*config*/
@@ -51,15 +66,20 @@ class m2Iface: public rclcpp::Node
         rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr       pose_state_pub_;
         /* rclcpp::Publisher<arm_api2_msgs::msg::State>::SharedPtr             arm_state_pub_;*/ 
 
- 
-
         /* callbacks */
         void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg); 
+        void run(); 
 
         /* setters */
-        //bool setPlanningScene() const {return m_planningScene}; 
-        //bool setMoveGroup() const {return m_moveGroup}; 
+        /* RobotModel */
+        // const moveit::core::RobotModelPtr setRobotModel()
+        bool setPlanningSceneIface();  
+        bool setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName); 
         //bool setPlanningSceneMonitor() const {return m_planningSceneMonitor}; 
+
+        // init kinematic model
+        moveit::core::RobotModelPtr& kinematic_model; 
+        moveit::core::RobotStatePtr robot_state; 
 
 
         /* getters */
@@ -76,6 +96,7 @@ class m2Iface: public rclcpp::Node
 // - [x] Class init (constructor)
 // - [] Class destrcutor -- 
 // - [x] private vs public variables --> everything node related (private) 
+// - [] MoveIt cpp iface https://moveit.picknik.ai/main/doc/examples/move_group_interface/move_group_interface_tutorial.html
 // - [] Init robot model 
 // - [] Init planning scene 
 // - [] Init move_group 
