@@ -9,17 +9,14 @@ m2Iface::m2Iface(): Node("moveit2_iface")
     auto node_ = std::make_shared<rclcpp::Node>(this->get_name(), 
                                                rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));
 
-
-    
-
     //robotDescLoaded = loadRobotDesc
     moveGroupInit = setMoveGroup(node_, PLANNING_GROUP); 
 
-    // robot Model Loader --> fix this
-    robot_model_loader::RobotModelLoader robot_model_loader(node_);    
+    // robot Model Loader --> fix this part
+    /* robot_model_loader::RobotModelLoader robot_model_loader(node_);    
     kinematic_model = new robot_model_loader.getModel();
     robot_state = new moveit::core::RobotState(kinematic_model);
-    RCLCPP_INFO(this->get_logger(), "Model frame: %s", kinematic_model->getModelFrame().c_str());
+    RCLCPP_INFO(this->get_logger(), "Model frame: %s", kinematic_model->getModelFrame().c_str()); */
 
     ns_ = this->get_namespace(); 	
     // TODO: Load yaml path from param
@@ -74,8 +71,9 @@ void m2Iface::run()
     if(nodeInit)
     {
         if(moveGroupInit)
-        {
-            const moveit::core::JointModelGroup* joint_model_group = kinematic_model->getJointModelGroup(PLANNING_GROUP);
+        {   
+            // enable this part
+            /*const moveit::core::JointModelGroup* joint_model_group = kinematic_model->getJointModelGroup(PLANNING_GROUP);
             const std::vector<std::string>& joint_names = joint_model_group->getVariableNames();
 
             std::vector<double> joint_values;
@@ -88,11 +86,14 @@ void m2Iface::run()
             robot_state->enforceBounds();
 
             robot_state->setToRandomPositions(joint_model_group);
-            const Eigen::Isometry3d& end_effector_state = robot_state->getGlobalLinkTransform("panda_link8");
+            const Eigen::Isometry3d& end_effector_state = robot_state->getGlobalLinkTransform("panda_link8");*/
+
+
 
             /* Print end-effector pose. Remember that this is in the model frame */
-            RCLCPP_INFO_STREAM(this->get_logger(), "Translation: \n" << end_effector_state.translation() << "\n");
-            RCLCPP_INFO_STREAM(this->get_logger(), "Rotation: \n" << end_effector_state.rotation() << "\n");
+            /* RCLCPP_INFO_STREAM(this->get_logger(), "Translation: \n" << end_effector_state.translation() << "\n");
+            RCLCPP_INFO_STREAM(this->get_logger(), "Rotation: \n" << end_effector_state.rotation() << "\n"); */
+            RCLCPP_INFO_STREAM(this->get_logger(), "Running..."); 
 
         }
     }

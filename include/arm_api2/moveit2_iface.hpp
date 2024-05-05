@@ -78,8 +78,8 @@ class m2Iface: public rclcpp::Node
         //bool setPlanningSceneMonitor() const {return m_planningSceneMonitor}; 
 
         // init kinematic model
-        moveit::core::RobotModelPtr& kinematic_model; 
-        moveit::core::RobotStatePtr robot_state; 
+        /*moveit::core::RobotModelPtr& kinematic_model; 
+        moveit::core::RobotStatePtr robot_state; */
 
 
         /* getters */
