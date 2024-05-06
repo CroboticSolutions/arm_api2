@@ -1,9 +1,10 @@
 #include "arm_api2/moveit2_iface.hpp"
 
-m2Iface::m2Iface(): Node("moveit2_iface")
+m2Iface::m2Iface(): Node("moveit2_iface") 
 {   
+    this->set_parameter(rclcpp::Parameter("use_sim_time", false));
     auto node_ = std::make_shared<rclcpp::Node>(this->get_name(), 
-                                               rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));
+                                               rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(false));
 
     // Load config 
     // TODO: Load config path from param
@@ -11,6 +12,7 @@ m2Iface::m2Iface(): Node("moveit2_iface")
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
 
     // Load arm basically --> two important params
+    // Manual param specification --> https://github.com/moveit/moveit2_tutorials/blob/8eaef05bfbabde3f35910ad054a819d79e70d3fc/doc/tutorials/quickstart_in_rviz/launch/demo.launch.py#L105
     PLANNING_GROUP      = config["robot"]["arm_name"].as<std::string>(); 
     EE_LINK_NAME        = config["robot"]["ee_link_name"].as<std::string>();
     ROBOT_DESC          = config["robot"]["robot_desc"].as<std::string>();  
@@ -19,6 +21,7 @@ m2Iface::m2Iface(): Node("moveit2_iface")
     // MoveIt related things!
     moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP); 
     pSceneMonitorInit   = setPlanningSceneMonitor(node_, ROBOT_DESC);
+    robotModelInit      = setRobotModel(node_); 
 
     // Currently not used :) 
     ns_ = this->get_namespace(); 	
@@ -77,7 +80,6 @@ bool m2Iface::setRobotModel(rclcpp::Node::SharedPtr nodePtr)
     const moveit::core::RobotModelPtr& kinematic_model = robot_model_loader.getModel(); 
     //m_planningScenePtr = new planning_scene::PlanningScene(kinematic_model);
     RCLCPP_INFO_STREAM(this->get_logger(), "Robot model frame is: " << kinematic_model->getModelFrame().c_str());
-    planning_scene::PlanningScene planning_scene(kinematic_model);
     return true;
 }
 
