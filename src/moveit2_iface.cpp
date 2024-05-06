@@ -2,37 +2,25 @@
 
 m2Iface::m2Iface(): Node("moveit2_iface")
 {   
-    // devel --> use demo from moveit2_tutorials
-
-  
     auto node_ = std::make_shared<rclcpp::Node>(this->get_name(), 
                                                rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));
 
     // Load config 
     // TODO: Load config path from param
-    config = init_config("/root/ws_moveit2/src/arm_api2/config/franka.yaml"); 
+    config = init_config("/root/ws_moveit2/src/arm_api2/config/franka_demo.yaml"); 
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
 
     // Load arm basically --> two important params
     PLANNING_GROUP = config["robot"]["arm_name"].as<std::string>(); 
-    EE_LINK_NAME   = config["robot"]["ee_link_name"].as<std::string>(); 
+    EE_LINK_NAME   = config["robot"]["ee_link_name"].as<std::string>();
+    ROBOT_DESC = config["robot"]["robot_desc"].as<std::string>();  
+    PLANNING_SCENE = config["robot"]["planning_scene"].as<std::string>(); 
     
-    //robotDescLoaded = loadRobotDesc
     moveGroupInit = setMoveGroup(node_, PLANNING_GROUP); 
+    pSceneMonitorInit = setPlanningSceneMonitor(node_, ROBOT_DESC);
 
-    // todo: fix this part
-    /*robot_model_loader::RobotModelLoader robot_model_loader(node_);
-    const moveit::core::RobotModelPtr& kinematic_model = robot_model_loader.getModel();
-    RCLCPP_INFO(this->get_logger(), "Model frame: %s", kinematic_model->getModelFrame().c_str());*/
-
-    // robot Model Loader --> fix this part
-    /* robot_model_loader::RobotModelLoader robot_model_loader(node_);    
-    kinematic_model = new robot_model_loader.getModel();
-    robot_state = new moveit::core::RobotState(kinematic_model);
-    RCLCPP_INFO(this->get_logger(), "Model frame: %s", kinematic_model->getModelFrame().c_str()); */
-
+    // Currently not used :) 
     ns_ = this->get_namespace(); 	
-
 
     init_publishers(); 
     init_subscribers(); 
@@ -45,6 +33,14 @@ m2Iface::m2Iface(): Node("moveit2_iface")
     oldPoseCmd.pose.position.x = 5.0; 
     nodeInit = true; 
 }
+
+/* TODO: Check how to properly describe destructor
+m2Iface::~m2Iface()
+{
+    rclcpp::shutdown(); 
+    // TODO: How to make correct shutdown with the destructor
+}
+*/
 
 YAML::Node m2Iface::init_config(std::string yaml_path)
 {   
@@ -80,17 +76,27 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
     return true; 
 }
 
-bool m2Iface::setPlanningScene()
-{
-
-    return true; 
-}
-
+/* This is not neccessary*/
 bool m2Iface::setRobotModel(rclcpp::Node::SharedPtr nodePtr)
 {
-    //robot_model_loader::RobotModelLoader robot_model_loader(&nodePtr); 
-    //m_robotModelPtr = new robot_model_loader.getModel(); 
-    return false; 
+  
+    robot_model_loader::RobotModelLoader robot_model_loader(nodePtr);
+    const moveit::core::RobotModelPtr& kinematic_model = robot_model_loader.getModel(); 
+    //m_planningScenePtr = new planning_scene::PlanningScene(kinematic_model);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Robot model frame is: " << kinematic_model->getModelFrame().c_str());
+    planning_scene::PlanningScene planning_scene(kinematic_model);
+    return true;
+}
+
+bool m2Iface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::string name)
+{
+    // https://moveit.picknik.ai/main/doc/examples/planning_scene_ros_api/planning_scene_ros_api_tutorial.html
+    // https://github.com/moveit/moveit2_tutorials/blob/main/doc/examples/planning_scene/src/planning_scene_tutorial.cpp
+    m_pSceneMonitorPtr = new planning_scene_monitor::PlanningSceneMonitor(nodePtr, name); 
+    m_pSceneMonitorPtr->startSceneMonitor(PLANNING_SCENE); 
+    //TODO: Check what's difference between planning_Scene and planning_scene_monitor
+    RCLCPP_INFO_STREAM(this->get_logger(), "Created planning scene monitor!");
+    return true; 
 }
 
 void m2Iface::executePlan(bool async=false)
@@ -107,6 +113,29 @@ void m2Iface::executePlan(bool async=false)
     }
 
 }
+
+void m2Iface::executeMove()
+{
+    if (comparePositions(newPoseCmd, oldPoseCmd))
+        {   
+            auto steady_clock = rclcpp::Clock();
+            RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), steady_clock, 2000, "Same pose commanded!"); 
+        }else{
+            // this is blocking call I think!
+            m_moveGroupPtr->setPoseTarget(newPoseCmd); 
+            executePlan(true); 
+            recivCmd = false; 
+            oldPoseCmd = std::move(newPoseCmd); 
+            RCLCPP_INFO_STREAM(this->get_logger(), "Executing path!"); 
+    }
+}
+
+void m2Iface::getArmState() 
+{
+  currPose = m_moveGroupPtr->getCurrentPose(); 
+  m_robotStatePtr = m_moveGroupPtr->getCurrentState();
+}
+
 
 // TODO: Move to utils
 bool m2Iface::comparePositions(geometry_msgs::msg::PoseStamped pose1, geometry_msgs::msg::PoseStamped pose2)
@@ -128,21 +157,14 @@ bool m2Iface::run()
     if(!nodeInit){RCLCPP_ERROR(this->get_logger(), "Node not fully initialized!"); return false;} 
     if(!moveGroupInit){RCLCPP_ERROR(this->get_logger(), "Move group not initialized"); return false;} 
 
+    getArmState(); 
+    pose_state_pub_->publish(currPose); 
     if (recivCmd){
-
-        if (comparePositions(newPoseCmd, oldPoseCmd))
-        {   
-            auto steady_clock = rclcpp::Clock();
-            RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), steady_clock, 2000, "Same pose commanded!"); 
-        }else{
-            // this is blocking call I think!
-            m_moveGroupPtr->setPoseTarget(newPoseCmd); 
-            executePlan(true); 
-            recivCmd = false; 
-            oldPoseCmd = std::move(newPoseCmd); 
-            RCLCPP_INFO_STREAM(this->get_logger(), "Executing path!"); 
-        }
+        // TODO: Wrap it further
+       executeMove(); 
     }
+
+    //TODO: Add state checker --> different states, different commands
 
     // Clean execution of run method
     return true;     

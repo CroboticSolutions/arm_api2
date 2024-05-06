@@ -8,8 +8,9 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
-find_package(rclcpp REQUIRED)
+find_package(moveit_ros REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
+find_package(rclcpp REQUIRED)
 
 # include headers
 include_directories(include)
@@ -41,12 +42,21 @@ PUBLIC
 target_compile_features(moveit2_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
   moveit2_iface
+  "moveit_ros"
   "moveit_ros_planning_interface"
   "moveit_visual_tools"
   "rclcpp"
 )
 
-install(TARGETS moveit2_iface
+# Install launch directory
+install(DIRECTORY 
+  launch
+  config
+  DESTINATION share/${PROJECT_NAME}
+)
+
+install(TARGETS 
+  moveit2_iface
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)

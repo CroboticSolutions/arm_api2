@@ -51,6 +51,15 @@ Wanted arm functionalities:
 1. `go_to_pose`
 2. `grasp` 
 
+## Launch
+
+Launch ign simulation with following command: 
+```
+ros2 launch panda ign.launch.py
+```
+
+
+
 <details>
 <summary><h3> Dev help </summary>
 
@@ -75,11 +84,12 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 - [x] Decouple header and source
 - [x] Create first publisher and subscriber 
 - [x] Init MoveGroup
+- [x] Add ign running
+- [ ] Add ctl 
 
 ### TODO: 
 - [ ] Go through moveit2 tutorials 
 - [ ] Define SW patterns that makes sense to use
-- [ ] Add gazebo
 - [ ] Init planning scene 
 - [ ] Add for the real robot 
 - [ ] Enable autocomplete with the compile_commands
@@ -97,5 +107,6 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 - [How to setup VSCode](https://picknik.ai/vscode/docker/ros2/2024/01/23/ROS2-and-VSCode.html)
 - [First Cpp node for ROS 2](https://turtlebot.github.io/turtlebot4-user-manual/tutorials/first_node_cpp.html) 
 - [Composition of ROS nodes](https://answers.ros.org/question/316870/ros2-composition-and-node-names-with-launch-files/)
+- [planning_scene](https://github.com/moveit/moveit2_tutorials/blob/main/doc/examples/planning_scene/src/planning_scene_tutorial.cpp)
 
 </details>

@@ -16,6 +16,8 @@
 
 //* moveit
 #include <moveit/move_group_interface/move_group_interface.h>
+#include <moveit/planning_scene_monitor/planning_scene_monitor.h>
+#include <moveit/planning_scene/planning_scene.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_model/robot_model.h>
@@ -35,18 +37,20 @@ class m2Iface: public rclcpp::Node
     public:
 
         m2Iface();  
-        //~Moveit2Iface();
+        //~m2Iface();
 
         /* namespace param, maybe redundant */ 
         std::string ns_; 
 
     private: 
 
-        // arm definition
+        /* arm_definition */
         std::string PLANNING_GROUP; 
         std::string EE_LINK_NAME;  
+        std::string ROBOT_DESC; 
+        std::string PLANNING_SCENE; 
 
-        // timers
+        /* timers */
         rclcpp::TimerBase::SharedPtr                                        timer_;
         
         /* config_file */
@@ -64,50 +68,42 @@ class m2Iface: public rclcpp::Node
 
         /* pubs */
         rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr       pose_state_pub_;
-        /* rclcpp::Publisher<arm_api2_msgs::msg::State>::SharedPtr             arm_state_pub_;*/ 
 
         /* callbacks */
-        void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg); 
+        void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
         bool run(); 
 
         /* setters */
-        /* RobotModel */
-        // const moveit::core::RobotModelPtr setRobotModel()
-        bool setPlanningScene();  
         bool setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName); 
         bool setRobotModel(rclcpp::Node::SharedPtr nodePtr); 
+        bool setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::string name);
+
+        /* getters */
+        void getArmState();  
 
         /* utils */
         bool comparePositions(geometry_msgs::msg::PoseStamped pose1, geometry_msgs::msg::PoseStamped pose2); 
 
         /* funcs */
         void executePlan(bool async); 
+        void executeMove();  
 
-        // init kinematic model
-        /*moveit::core::RobotModelPtr& kinematic_model; 
-        moveit::core::RobotStatePtr robot_state; */
-        // moveit::core::RobotModelPtr m_kinematicModelPtr; 
-        // moveit::core::RobotStatePtr m_robotStatePtr; 
-        // recreate from control_arm.cpp
         moveit::planning_interface::MoveGroupInterface *m_moveGroupPtr; 
-        moveit::planning_interface::PlanningSceneInterface *m_planningSceneInterfacePtr; 
+        //moveit::planning_interface::PlanningSceneInterface *m_planningSceneInterfacePtr; 
+        planning_scene_monitor::PlanningSceneMonitor *m_pSceneMonitorPtr; 
+        moveit::core::RobotStatePtr m_robotStatePtr;  
 
         /* flags*/
-        bool moveGroupInit; 
+        bool moveGroupInit;
+        bool robotModelInit;  
+        bool pSceneMonitorInit;
         bool nodeInit; 
         bool recivCmd; 
 
         /* ros vars */
         geometry_msgs::msg::PoseStamped newPoseCmd; 
         geometry_msgs::msg::PoseStamped oldPoseCmd; 
-
-
-        
-
-
-        /* getters */
-
-
+        geometry_msgs::msg::PoseStamped currPose; 
 
 }; 
 
@@ -117,9 +113,11 @@ class m2Iface: public rclcpp::Node
 // https://moveit.picknik.ai/main/doc/examples/examples.html#movegroup-ros-wrappers-in-c
 // TODO: 
 // - [x] Class init (constructor)
-// - [] Class destrcutor -- 
+// - [ ] Class destrcutor -- 
 // - [x] private vs public variables --> everything node related (private) 
-// - [] MoveIt cpp iface https://moveit.picknik.ai/main/doc/examples/move_group_interface/move_group_interface_tutorial.html
-// - [] Init robot model 
-// - [] Init planning scene 
-// - [] Init move_group 
+// - [x] Init move_group 
+// - [ ] Add planning scene monitor
+// - [ ] Add all func from arm_api
+// - [ ] MoveIt cpp iface https://moveit.picknik.ai/main/doc/examples/move_group_interface/move_group_interface_tutorial.html
+// - [ ] Init robot model 
+// - [ ] Init planning scene monitor 
