@@ -14,6 +14,21 @@ For building ROS 2 packages and moveit, it is neccessary to use [colcon](https:/
 colcon build --packages-select arm_api2
 ```
 
+Build with the compile commands: 
+```
+colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+```
+
+Building with `--symlink-install` causes it to fail often, you can run: 
+```
+colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON --continue-on-error
+```
+
+Full verbose build command: 
+```
+colcon build --symlink-install --packages-select moveit2_tutorials --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_VERBOSE_MAKEFILE=ON
+```
+
 ## Aim of the repository
 
 With `arm_api` as precursor, which was intended to provide simple ROS interfacing with 

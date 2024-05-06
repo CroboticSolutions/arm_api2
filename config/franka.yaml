@@ -1,6 +1,6 @@
 robot: 
-  arm_name: panda_manipulator
-  ee_link_name: panda_hand_tcp
+  arm_name: panda_arm
+  ee_link_name: panda_link8
   planning_frame: world
   num_cart_pts: 20
 topic:

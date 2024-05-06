@@ -16,8 +16,10 @@
 
 //* moveit
 #include <moveit/move_group_interface/move_group_interface.h>
+#include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_model/robot_model.h>
+#include <moveit/robot_state/robot_state.h>
 
 //* msgs
 #include "geometry_msgs/msg/pose_stamped.hpp"
@@ -40,16 +42,14 @@ class m2Iface: public rclcpp::Node
 
     private: 
 
-        // PLANNING_GROUP
-        std::string PLANNING_GROUP;  
+        // arm definition
+        std::string PLANNING_GROUP; 
+        std::string EE_LINK_NAME;  
 
         // timers
         rclcpp::TimerBase::SharedPtr                                        timer_;
-
-        /* flags*/
-        bool moveGroupInit; 
-        bool nodeInit; 
         
+        /* config_file */
         YAML::Node config; 
 
         /*config*/
@@ -68,19 +68,40 @@ class m2Iface: public rclcpp::Node
 
         /* callbacks */
         void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg); 
-        void run(); 
+        bool run(); 
 
         /* setters */
         /* RobotModel */
         // const moveit::core::RobotModelPtr setRobotModel()
-        bool setPlanningSceneIface();  
+        bool setPlanningScene();  
         bool setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName); 
-        //bool setPlanningSceneMonitor() const {return m_planningSceneMonitor}; 
+        bool setRobotModel(rclcpp::Node::SharedPtr nodePtr); 
+
+        /* utils */
+        bool comparePositions(geometry_msgs::msg::PoseStamped pose1, geometry_msgs::msg::PoseStamped pose2); 
+
+        /* funcs */
+        void executePlan(bool async); 
 
         // init kinematic model
         /*moveit::core::RobotModelPtr& kinematic_model; 
         moveit::core::RobotStatePtr robot_state; */
+        // moveit::core::RobotModelPtr m_kinematicModelPtr; 
+        // moveit::core::RobotStatePtr m_robotStatePtr; 
+        // recreate from control_arm.cpp
         moveit::planning_interface::MoveGroupInterface *m_moveGroupPtr; 
+        moveit::planning_interface::PlanningSceneInterface *m_planningSceneInterfacePtr; 
+
+        /* flags*/
+        bool moveGroupInit; 
+        bool nodeInit; 
+        bool recivCmd; 
+
+        /* ros vars */
+        geometry_msgs::msg::PoseStamped newPoseCmd; 
+        geometry_msgs::msg::PoseStamped oldPoseCmd; 
+
+
         
 
 

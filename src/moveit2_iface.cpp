@@ -4,13 +4,26 @@ m2Iface::m2Iface(): Node("moveit2_iface")
 {   
     // devel --> use demo from moveit2_tutorials
 
-    // necessary constants
-    PLANNING_GROUP = std::string("panda_arm"); 
+  
     auto node_ = std::make_shared<rclcpp::Node>(this->get_name(), 
                                                rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));
 
+    // Load config 
+    // TODO: Load config path from param
+    config = init_config("/root/ws_moveit2/src/arm_api2/config/franka.yaml"); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
+
+    // Load arm basically --> two important params
+    PLANNING_GROUP = config["robot"]["arm_name"].as<std::string>(); 
+    EE_LINK_NAME   = config["robot"]["ee_link_name"].as<std::string>(); 
+    
     //robotDescLoaded = loadRobotDesc
     moveGroupInit = setMoveGroup(node_, PLANNING_GROUP); 
+
+    // todo: fix this part
+    /*robot_model_loader::RobotModelLoader robot_model_loader(node_);
+    const moveit::core::RobotModelPtr& kinematic_model = robot_model_loader.getModel();
+    RCLCPP_INFO(this->get_logger(), "Model frame: %s", kinematic_model->getModelFrame().c_str());*/
 
     // robot Model Loader --> fix this part
     /* robot_model_loader::RobotModelLoader robot_model_loader(node_);    
@@ -19,9 +32,8 @@ m2Iface::m2Iface(): Node("moveit2_iface")
     RCLCPP_INFO(this->get_logger(), "Model frame: %s", kinematic_model->getModelFrame().c_str()); */
 
     ns_ = this->get_namespace(); 	
-    // TODO: Load yaml path from param
-    config = init_config("/root/ws_moveit2/src/arm_api2/config/franka.yaml"); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
+
+
     init_publishers(); 
     init_subscribers(); 
 
@@ -29,6 +41,8 @@ m2Iface::m2Iface(): Node("moveit2_iface")
     std::chrono::duration<double> SYSTEM_DT(0.05);
     timer_ = this->create_wall_timer(SYSTEM_DT, std::bind(&m2Iface::run, this));
 
+    // Init anything for the old pose because it is non existent at the beggining
+    oldPoseCmd.pose.position.x = 5.0; 
     nodeInit = true; 
 }
 
@@ -53,9 +67,9 @@ void m2Iface::init_subscribers()
 
 void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
-    geometry_msgs::msg::PoseStamped pose_cmd; 
-    pose_cmd.pose = msg->pose; 
-    std::cout << "Reciv msg" << std::endl; 
+    
+    newPoseCmd.pose = msg->pose; 
+    recivCmd = true; 
 }
 
 bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName)
@@ -66,35 +80,70 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
     return true; 
 }
 
-void m2Iface::run()
+bool m2Iface::setPlanningScene()
 {
-    if(nodeInit)
-    {
-        if(moveGroupInit)
+
+    return true; 
+}
+
+bool m2Iface::setRobotModel(rclcpp::Node::SharedPtr nodePtr)
+{
+    //robot_model_loader::RobotModelLoader robot_model_loader(&nodePtr); 
+    //m_robotModelPtr = new robot_model_loader.getModel(); 
+    return false; 
+}
+
+void m2Iface::executePlan(bool async=false)
+{
+
+    moveit::planning_interface::MoveGroupInterface::Plan plan;
+    bool success = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+    
+    if (success) {
+        if (async) {m_moveGroupPtr->asyncExecute(plan);}
+        else {m_moveGroupPtr->execute(plan);};  
+    }else {
+        RCLCPP_ERROR(this->get_logger(), "Planning failed!"); 
+    }
+
+}
+
+// TODO: Move to utils
+bool m2Iface::comparePositions(geometry_msgs::msg::PoseStamped pose1, geometry_msgs::msg::PoseStamped pose2)
+{
+    bool x_cond = false;  bool y_cond = false;  bool z_cond = false; 
+    double dist = 0.01; 
+
+    if (std::abs(pose1.pose.position.x - pose2.pose.position.x) < dist) x_cond = true; 
+    if (std::abs(pose1.pose.position.y - pose2.pose.position.y) < dist) y_cond = true; 
+    if (std::abs(pose1.pose.position.z - pose2.pose.position.z) < dist) z_cond = true; 
+
+    bool cond = x_cond && y_cond && z_cond;  
+
+    return cond; 
+}
+
+bool m2Iface::run()
+{
+    if(!nodeInit){RCLCPP_ERROR(this->get_logger(), "Node not fully initialized!"); return false;} 
+    if(!moveGroupInit){RCLCPP_ERROR(this->get_logger(), "Move group not initialized"); return false;} 
+
+    if (recivCmd){
+
+        if (comparePositions(newPoseCmd, oldPoseCmd))
         {   
-            // enable this part
-            /*const moveit::core::JointModelGroup* joint_model_group = kinematic_model->getJointModelGroup(PLANNING_GROUP);
-            const std::vector<std::string>& joint_names = joint_model_group->getVariableNames();
-
-            std::vector<double> joint_values;
-            robot_state->copyJointGroupPositions(joint_model_group, joint_values);
-            for (std::size_t i = 0; i < joint_names.size(); ++i)
-            {
-                RCLCPP_INFO(this->get_logger(), "Joint %s: %f", joint_names[i].c_str(), joint_values[i]);
-            }
-            robot_state->setJointGroupPositions(joint_model_group, joint_values);
-            robot_state->enforceBounds();
-
-            robot_state->setToRandomPositions(joint_model_group);
-            const Eigen::Isometry3d& end_effector_state = robot_state->getGlobalLinkTransform("panda_link8");*/
-
-
-
-            /* Print end-effector pose. Remember that this is in the model frame */
-            /* RCLCPP_INFO_STREAM(this->get_logger(), "Translation: \n" << end_effector_state.translation() << "\n");
-            RCLCPP_INFO_STREAM(this->get_logger(), "Rotation: \n" << end_effector_state.rotation() << "\n"); */
-            RCLCPP_INFO_STREAM(this->get_logger(), "Running..."); 
-
+            auto steady_clock = rclcpp::Clock();
+            RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), steady_clock, 2000, "Same pose commanded!"); 
+        }else{
+            // this is blocking call I think!
+            m_moveGroupPtr->setPoseTarget(newPoseCmd); 
+            executePlan(true); 
+            recivCmd = false; 
+            oldPoseCmd = std::move(newPoseCmd); 
+            RCLCPP_INFO_STREAM(this->get_logger(), "Executing path!"); 
         }
     }
+
+    // Clean execution of run method
+    return true;     
 }
