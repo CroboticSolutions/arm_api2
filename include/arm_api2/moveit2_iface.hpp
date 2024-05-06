@@ -80,6 +80,8 @@ class m2Iface: public rclcpp::Node
         // init kinematic model
         /*moveit::core::RobotModelPtr& kinematic_model; 
         moveit::core::RobotStatePtr robot_state; */
+        moveit::planning_interface::MoveGroupInterface *m_moveGroupPtr; 
+        
 
 
         /* getters */

@@ -61,7 +61,7 @@ void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName)
 {
     // set mGroupIface 
-    auto mGroupIface = moveit::planning_interface::MoveGroupInterface(nodePtr, groupName);
+    m_moveGroupPtr = new moveit::planning_interface::MoveGroupInterface(nodePtr, groupName);
     
     return true; 
 }
