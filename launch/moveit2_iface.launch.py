@@ -21,7 +21,8 @@ from launch_ros.actions import Node
 
 import os
 
-#https://roboticsbackend.com/ros2-yaml-params/
+# https://roboticsbackend.com/ros2-yaml-params/
+# https://roboticsbackend.com/rclcpp-params-tutorial-get-set-ros2-params-with-cpp/
 yaml = "franka_demo.yaml"
 
 def generate_launch_description(): 
@@ -39,6 +40,7 @@ def generate_launch_description():
         name ='movei2_iface_node', 
         executable ='moveit2_iface', 
         #parameters = [config]
+        # Stupid naming conventions 
     )
 
     ld.add_action(node)

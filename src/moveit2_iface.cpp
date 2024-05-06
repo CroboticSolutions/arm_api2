@@ -11,13 +11,14 @@ m2Iface::m2Iface(): Node("moveit2_iface")
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
 
     // Load arm basically --> two important params
-    PLANNING_GROUP = config["robot"]["arm_name"].as<std::string>(); 
-    EE_LINK_NAME   = config["robot"]["ee_link_name"].as<std::string>();
-    ROBOT_DESC = config["robot"]["robot_desc"].as<std::string>();  
-    PLANNING_SCENE = config["robot"]["planning_scene"].as<std::string>(); 
+    PLANNING_GROUP      = config["robot"]["arm_name"].as<std::string>(); 
+    EE_LINK_NAME        = config["robot"]["ee_link_name"].as<std::string>();
+    ROBOT_DESC          = config["robot"]["robot_desc"].as<std::string>();  
+    PLANNING_SCENE      = config["robot"]["planning_scene"].as<std::string>(); 
     
-    moveGroupInit = setMoveGroup(node_, PLANNING_GROUP); 
-    pSceneMonitorInit = setPlanningSceneMonitor(node_, ROBOT_DESC);
+    // MoveIt related things!
+    moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP); 
+    pSceneMonitorInit   = setPlanningSceneMonitor(node_, ROBOT_DESC);
 
     // Currently not used :) 
     ns_ = this->get_namespace(); 	
@@ -25,7 +26,7 @@ m2Iface::m2Iface(): Node("moveit2_iface")
     init_publishers(); 
     init_subscribers(); 
 
-    // TODO: Add as reconfigurable param
+    // TODO: Add as reconfigurable param 
     std::chrono::duration<double> SYSTEM_DT(0.05);
     timer_ = this->create_wall_timer(SYSTEM_DT, std::bind(&m2Iface::run, this));
 
@@ -33,14 +34,6 @@ m2Iface::m2Iface(): Node("moveit2_iface")
     oldPoseCmd.pose.position.x = 5.0; 
     nodeInit = true; 
 }
-
-/* TODO: Check how to properly describe destructor
-m2Iface::~m2Iface()
-{
-    rclcpp::shutdown(); 
-    // TODO: How to make correct shutdown with the destructor
-}
-*/
 
 YAML::Node m2Iface::init_config(std::string yaml_path)
 {   
@@ -133,9 +126,9 @@ void m2Iface::executeMove()
 void m2Iface::getArmState() 
 {
   currPose = m_moveGroupPtr->getCurrentPose(); 
+  // current_state_monitor
   m_robotStatePtr = m_moveGroupPtr->getCurrentState();
 }
-
 
 // TODO: Move to utils
 bool m2Iface::comparePositions(geometry_msgs::msg::PoseStamped pose1, geometry_msgs::msg::PoseStamped pose2)
@@ -163,8 +156,6 @@ bool m2Iface::run()
         // TODO: Wrap it further
        executeMove(); 
     }
-
-    //TODO: Add state checker --> different states, different commands
 
     // Clean execution of run method
     return true;     
