@@ -93,6 +93,7 @@ class m2Iface: public rclcpp::Node
         //moveit::planning_interface::PlanningSceneInterface *m_planningSceneInterfacePtr; 
         planning_scene_monitor::PlanningSceneMonitor *m_pSceneMonitorPtr; 
         moveit::core::RobotStatePtr m_robotStatePtr;  
+        moveit::core::RobotModelPtr kinematic_model; 
 
         /* flags*/
         bool moveGroupInit;

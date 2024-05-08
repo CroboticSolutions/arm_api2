@@ -29,6 +29,18 @@ Full verbose build command:
 colcon build --symlink-install --packages-select moveit2_tutorials --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_VERBOSE_MAKEFILE=ON
 ```
 
+### Aliases
+
+Copy to `~/.bashrc` and source it. 
+
+```
+alias cbp="colcon build --symlink-install --packages-select" 
+```
+
+```
+cbp arm_api2
+``` 
+
 ## Aim of the repository
 
 With `arm_api` as precursor, which was intended to provide simple ROS interfacing with 

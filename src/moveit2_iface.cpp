@@ -97,7 +97,7 @@ bool m2Iface::setRobotModel(rclcpp::Node::SharedPtr nodePtr)
 {
   
     robot_model_loader::RobotModelLoader robot_model_loader(nodePtr);
-    const moveit::core::RobotModelPtr& kinematic_model = robot_model_loader.getModel(); 
+    kinematic_model = robot_model_loader.getModel(); 
     //m_planningScenePtr = new planning_scene::PlanningScene(kinematic_model);
     RCLCPP_INFO_STREAM(this->get_logger(), "Robot model loaded!");
     RCLCPP_INFO_STREAM(this->get_logger(), "Robot model frame is: " << kinematic_model->getModelFrame().c_str());
@@ -148,7 +148,7 @@ void m2Iface::executeMove()
 
 void m2Iface::getArmState() 
 {
-  currPose = m_moveGroupPtr->getCurrentPose(); 
+  currPose = m_moveGroupPtr->getCurrentPose(EE_LINK_NAME); 
   // current_state_monitor
   m_robotStatePtr = m_moveGroupPtr->getCurrentState();
 }
@@ -173,8 +173,23 @@ bool m2Iface::run()
     if(!nodeInit){RCLCPP_ERROR(this->get_logger(), "Node not fully initialized!"); return false;} 
     if(!moveGroupInit){RCLCPP_ERROR(this->get_logger(), "Move group not initialized"); return false;} 
 
-    //getArmState(); 
-    //pose_state_pub_->publish(currPose); 
+    getArmState(); 
+    pose_state_pub_->publish(currPose); 
+
+    // Construct robot state
+    // moveit::core::RobotStatePtr kinematic_state(new moveit::core::RobotState(kinematic_model));
+    //kinematic_state->setToDefaultValues();
+    const moveit::core::JointModelGroup* joint_model_group = kinematic_model->getJointModelGroup(PLANNING_GROUP);
+    const std::vector<std::string>& joint_names = joint_model_group->getVariableNames();
+    
+    // Get joint values 
+    std::vector<double> joint_values;
+    m_robotStatePtr->copyJointGroupPositions(joint_model_group, joint_values);
+    for (std::size_t i = 0; i < joint_names.size(); ++i)
+    {
+    RCLCPP_INFO(this->get_logger(), "Joint %s: %f", joint_names[i].c_str(), joint_values[i]);
+    }
+
     if (recivCmd){
         // TODO: Wrap it further
        executeMove(); 
