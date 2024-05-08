@@ -7,6 +7,13 @@ m2Iface::m2Iface(): Node("moveit2_iface")
                                                rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(false));
 
     // Load config 
+    /*auto moveGroupNode = std::make_shared<rclcpp::Node>("move_group", 
+                                                        rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true)); 
+
+    moveGroupNode->declare_parameter("robot_description", rclcpp::PARAMETER_STRING); 
+
+    std::cout << "Test param" << moveGroupNode->get_parameter("robot_description") << std::endl; */
+
     // TODO: Load config path from param
     config = init_config("/root/ws_moveit2/src/arm_api2/config/franka_demo.yaml"); 
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
@@ -17,9 +24,15 @@ m2Iface::m2Iface(): Node("moveit2_iface")
     EE_LINK_NAME        = config["robot"]["ee_link_name"].as<std::string>();
     ROBOT_DESC          = config["robot"]["robot_desc"].as<std::string>();  
     PLANNING_SCENE      = config["robot"]["planning_scene"].as<std::string>(); 
+    MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
+
+    RCLCPP_INFO_STREAM(this->get_logger(), "robot_description: " << ROBOT_DESC); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "planning_group: " << PLANNING_GROUP);
+    RCLCPP_INFO_STREAM(this->get_logger(), "move_group_ns: " << MOVE_GROUP_NS);  
+
     
     // MoveIt related things!
-    moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP); 
+    moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP, MOVE_GROUP_NS); 
     pSceneMonitorInit   = setPlanningSceneMonitor(node_, ROBOT_DESC);
     robotModelInit      = setRobotModel(node_); 
 
@@ -64,10 +77,17 @@ void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
     recivCmd = true; 
 }
 
-bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName)
+bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName, std::string moveNs)
 {
+    // check if moveNs is empty
+    if (moveNs == "null") moveNs=""; 
+
     // set mGroupIface 
-    m_moveGroupPtr = new moveit::planning_interface::MoveGroupInterface(nodePtr, groupName);
+    m_moveGroupPtr = new moveit::planning_interface::MoveGroupInterface(nodePtr, 
+        moveit::planning_interface::MoveGroupInterface::Options(
+            groupName,
+            moveit::planning_interface::MoveGroupInterface::ROBOT_DESCRIPTION,
+            moveNs));
     RCLCPP_INFO_STREAM(this->get_logger(), "Move group interface set up!"); 
     
     return true; 

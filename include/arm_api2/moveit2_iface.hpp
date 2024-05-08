@@ -49,6 +49,7 @@ class m2Iface: public rclcpp::Node
         std::string EE_LINK_NAME;  
         std::string ROBOT_DESC; 
         std::string PLANNING_SCENE; 
+        std::string MOVE_GROUP_NS; 
 
         /* timers */
         rclcpp::TimerBase::SharedPtr                                        timer_;
@@ -74,7 +75,7 @@ class m2Iface: public rclcpp::Node
         bool run(); 
 
         /* setters */
-        bool setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName); 
+        bool setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName, std::string moveNs); 
         bool setRobotModel(rclcpp::Node::SharedPtr nodePtr); 
         bool setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::string name);
 

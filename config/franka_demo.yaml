@@ -1,8 +1,8 @@
 robot: 
-  #arm_name: arm
-  arm_name: panda_arm  #moveit2_tutorials demo.launch.py
+  arm_name: panda_arm
   ee_link_name: panda_link8
   robot_desc: robot_description
+  move_group_ns: 
   planning_scene: planning_scene
   planning_frame: world
   num_cart_pts: 20
