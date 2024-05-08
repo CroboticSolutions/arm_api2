@@ -1,8 +1,8 @@
 robot: 
   arm_name: arm  
-  ee_link_name: panda_link8
+  ee_link_name: panda_hand_tcp
   robot_desc: robot_description
-  move_group_ns : 
+  move_group_ns: 
   planning_scene: planning_scene
   planning_frame: world
   num_cart_pts: 20

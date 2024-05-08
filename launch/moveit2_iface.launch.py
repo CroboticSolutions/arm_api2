@@ -37,7 +37,6 @@ def generate_launch_description():
 
     node = Node(
         package ='arm_api2', 
-        namespace="move_group", 
         name ='movei2_iface_node', 
         executable ='moveit2_iface', 
         #parameters = [config]

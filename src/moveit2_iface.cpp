@@ -15,7 +15,7 @@ m2Iface::m2Iface(): Node("moveit2_iface")
     std::cout << "Test param" << moveGroupNode->get_parameter("robot_description") << std::endl; */
 
     // TODO: Load config path from param
-    config = init_config("/root/ws_moveit2/src/arm_api2/config/franka_demo.yaml"); 
+    config = init_config("/root/ws_moveit2/src/arm_api2/config/franka_sim.yaml"); 
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
 
     // Load arm basically --> two important params
@@ -29,7 +29,6 @@ m2Iface::m2Iface(): Node("moveit2_iface")
     RCLCPP_INFO_STREAM(this->get_logger(), "robot_description: " << ROBOT_DESC); 
     RCLCPP_INFO_STREAM(this->get_logger(), "planning_group: " << PLANNING_GROUP);
     RCLCPP_INFO_STREAM(this->get_logger(), "move_group_ns: " << MOVE_GROUP_NS);  
-
     
     // MoveIt related things!
     moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP, MOVE_GROUP_NS); 
@@ -174,8 +173,8 @@ bool m2Iface::run()
     if(!nodeInit){RCLCPP_ERROR(this->get_logger(), "Node not fully initialized!"); return false;} 
     if(!moveGroupInit){RCLCPP_ERROR(this->get_logger(), "Move group not initialized"); return false;} 
 
-    getArmState(); 
-    pose_state_pub_->publish(currPose); 
+    //getArmState(); 
+    //pose_state_pub_->publish(currPose); 
     if (recivCmd){
         // TODO: Wrap it further
        executeMove(); 
