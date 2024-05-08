@@ -68,6 +68,7 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
 {
     // set mGroupIface 
     m_moveGroupPtr = new moveit::planning_interface::MoveGroupInterface(nodePtr, groupName);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Move group interface set up!"); 
     
     return true; 
 }
@@ -79,6 +80,7 @@ bool m2Iface::setRobotModel(rclcpp::Node::SharedPtr nodePtr)
     robot_model_loader::RobotModelLoader robot_model_loader(nodePtr);
     const moveit::core::RobotModelPtr& kinematic_model = robot_model_loader.getModel(); 
     //m_planningScenePtr = new planning_scene::PlanningScene(kinematic_model);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Robot model loaded!");
     RCLCPP_INFO_STREAM(this->get_logger(), "Robot model frame is: " << kinematic_model->getModelFrame().c_str());
     return true;
 }
