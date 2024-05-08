@@ -108,5 +108,8 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 - [First Cpp node for ROS 2](https://turtlebot.github.io/turtlebot4-user-manual/tutorials/first_node_cpp.html) 
 - [Composition of ROS nodes](https://answers.ros.org/question/316870/ros2-composition-and-node-names-with-launch-files/)
 - [planning_scene](https://github.com/moveit/moveit2_tutorials/blob/main/doc/examples/planning_scene/src/planning_scene_tutorial.cpp)
+- [custom moveit ns](https://github.com/moveit/moveit2/issues/2415)
+- [publish robot_description](https://github.com/moveit/moveit2_tutorials/issues/525)
 
 </details>
+
