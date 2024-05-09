@@ -2,48 +2,36 @@
 
 m2Iface::m2Iface(): Node("moveit2_iface") 
 {   
-    this->set_parameter(rclcpp::Parameter("use_sim_time", false));
-    auto node_ = std::make_shared<rclcpp::Node>(this->get_name(), 
-                                               rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(false));
-
-    // Load config 
-    /*auto moveGroupNode = std::make_shared<rclcpp::Node>("move_group", 
-                                                        rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true)); 
-
-    moveGroupNode->declare_parameter("robot_description", rclcpp::PARAMETER_STRING); 
-
-    std::cout << "Test param" << moveGroupNode->get_parameter("robot_description") << std::endl; */
+    node_ = std::make_shared<rclcpp::Node>(this->get_name(), 
+                                               rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));
 
     // TODO: Load config path from param
-    config = init_config("/root/ws_moveit2/src/arm_api2/config/franka_sim.yaml"); 
+    this->declare_parameter<std::string>("config_path", "/root/ws_moveit2/src/arm_api2/config/franka_demo.yaml");
+    this->get_parameter("config_path", config_path);
+    
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
+
+    // TODO: Add as reconfigurable param 
+    std::chrono::duration<double> SYSTEM_DT(0.05);
+    timer_ = this->create_wall_timer(SYSTEM_DT, std::bind(&m2Iface::run, this));
 
     // Load arm basically --> two important params
     // Manual param specification --> https://github.com/moveit/moveit2_tutorials/blob/8eaef05bfbabde3f35910ad054a819d79e70d3fc/doc/tutorials/quickstart_in_rviz/launch/demo.launch.py#L105
+    config              = init_config(config_path);  
     PLANNING_GROUP      = config["robot"]["arm_name"].as<std::string>(); 
     EE_LINK_NAME        = config["robot"]["ee_link_name"].as<std::string>();
     ROBOT_DESC          = config["robot"]["robot_desc"].as<std::string>();  
     PLANNING_SCENE      = config["robot"]["planning_scene"].as<std::string>(); 
     MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
-
-    RCLCPP_INFO_STREAM(this->get_logger(), "robot_description: " << ROBOT_DESC); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "planning_group: " << PLANNING_GROUP);
-    RCLCPP_INFO_STREAM(this->get_logger(), "move_group_ns: " << MOVE_GROUP_NS);  
     
-    // MoveIt related things!
-    moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP, MOVE_GROUP_NS); 
-    pSceneMonitorInit   = setPlanningSceneMonitor(node_, ROBOT_DESC);
-    robotModelInit      = setRobotModel(node_); 
-
     // Currently not used :) 
     ns_ = this->get_namespace(); 	
-
     init_publishers(); 
     init_subscribers(); 
+    init_moveit(); 
 
-    // TODO: Add as reconfigurable param 
-    std::chrono::duration<double> SYSTEM_DT(0.05);
-    timer_ = this->create_wall_timer(SYSTEM_DT, std::bind(&m2Iface::run, this));
+    RCLCPP_INFO_STREAM(this->get_logger(), "Initialized node!"); 
+
 
     // Init anything for the old pose because it is non existent at the beggining
     oldPoseCmd.pose.position.x = 5.0; 
@@ -69,6 +57,17 @@ void m2Iface::init_subscribers()
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
 }
 
+void m2Iface::init_moveit()
+{
+
+    RCLCPP_INFO_STREAM(this->get_logger(), "robot_description: " << ROBOT_DESC); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "planning_group: " << PLANNING_GROUP);
+    RCLCPP_INFO_STREAM(this->get_logger(), "move_group_ns: " << MOVE_GROUP_NS);  
+    // MoveIt related things!
+    moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP, MOVE_GROUP_NS); 
+    pSceneMonitorInit   = setPlanningSceneMonitor(node_, ROBOT_DESC);
+    robotModelInit      = setRobotModel(node_);
+}
 void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
     
@@ -81,12 +80,14 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
     // check if moveNs is empty
     if (moveNs == "null") moveNs=""; 
 
+    m_moveGroupPtr = new moveit::planning_interface::MoveGroupInterface(nodePtr, groupName); 
     // set mGroupIface 
+    /*
     m_moveGroupPtr = new moveit::planning_interface::MoveGroupInterface(nodePtr, 
         moveit::planning_interface::MoveGroupInterface::Options(
             groupName,
             moveit::planning_interface::MoveGroupInterface::ROBOT_DESCRIPTION,
-            moveNs));
+            moveNs));*/
     RCLCPP_INFO_STREAM(this->get_logger(), "Move group interface set up!"); 
     
     return true; 
@@ -171,24 +172,10 @@ bool m2Iface::comparePositions(geometry_msgs::msg::PoseStamped pose1, geometry_m
 bool m2Iface::run()
 {
     if(!nodeInit){RCLCPP_ERROR(this->get_logger(), "Node not fully initialized!"); return false;} 
-    if(!moveGroupInit){RCLCPP_ERROR(this->get_logger(), "Move group not initialized"); return false;} 
+    if(!moveGroupInit) {RCLCPP_ERROR(this->get_logger(), "MoveIt interface not initialized!"); return false;} 
 
-    getArmState(); 
-    pose_state_pub_->publish(currPose); 
-
-    // Construct robot state
-    // moveit::core::RobotStatePtr kinematic_state(new moveit::core::RobotState(kinematic_model));
-    //kinematic_state->setToDefaultValues();
-    const moveit::core::JointModelGroup* joint_model_group = kinematic_model->getJointModelGroup(PLANNING_GROUP);
-    const std::vector<std::string>& joint_names = joint_model_group->getVariableNames();
-    
-    // Get joint values 
-    std::vector<double> joint_values;
-    m_robotStatePtr->copyJointGroupPositions(joint_model_group, joint_values);
-    for (std::size_t i = 0; i < joint_names.size(); ++i)
-    {
-    RCLCPP_INFO(this->get_logger(), "Joint %s: %f", joint_names[i].c_str(), joint_values[i]);
-    }
+    // Time is ok, uses sim time! --> in sim case, not in demo case (demo case doesn't publish clock)
+    RCLCPP_INFO_STREAM(this->get_logger(),  "Running: " << node_->now().seconds());   
 
     if (recivCmd){
         // TODO: Wrap it further

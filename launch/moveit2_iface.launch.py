@@ -30,7 +30,7 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
-    config = os.path.join(
+    config_path_ = os.path.join(
          get_package_share_directory('arm_api2'), 
         "config", 
         yaml
@@ -40,7 +40,8 @@ def generate_launch_description():
         package ='arm_api2', 
         name ='movei2_iface_node', 
         executable ='moveit2_iface', 
-        parameters = [{"use_sim_time": use_sim_time}]
+        parameters = [{"use_sim_time": use_sim_time}, 
+                      {"config_path": config_path_}]
         # Stupid naming conventions 
     )
 
