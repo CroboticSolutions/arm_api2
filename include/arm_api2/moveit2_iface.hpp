@@ -39,10 +39,14 @@ class m2Iface: public rclcpp::Node
         m2Iface();  
         //~m2Iface();
 
+
+
         /* namespace param, maybe redundant */ 
         std::string ns_; 
 
     private: 
+
+        rclcpp::Node::SharedPtr node_; 
 
         /* arm_definition */
         std::string PLANNING_GROUP; 
@@ -53,6 +57,9 @@ class m2Iface: public rclcpp::Node
 
         /* timers */
         rclcpp::TimerBase::SharedPtr                                        timer_;
+
+        /* parameters */
+        std::string                                                         config_path; 
         
         /* config_file */
         YAML::Node config; 
@@ -63,6 +70,7 @@ class m2Iface: public rclcpp::Node
         /* init methods */
         void init_subscribers();
         void init_publishers(); 
+        void init_moveit(); 
 
         /* subs */
         rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr    pose_cmd_sub_;
@@ -93,6 +101,7 @@ class m2Iface: public rclcpp::Node
         //moveit::planning_interface::PlanningSceneInterface *m_planningSceneInterfacePtr; 
         planning_scene_monitor::PlanningSceneMonitor *m_pSceneMonitorPtr; 
         moveit::core::RobotStatePtr m_robotStatePtr;  
+        moveit::core::RobotModelPtr kinematic_model; 
 
         /* flags*/
         bool moveGroupInit;

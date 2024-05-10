@@ -23,14 +23,15 @@ import os
 
 # https://roboticsbackend.com/ros2-yaml-params/
 # https://roboticsbackend.com/rclcpp-params-tutorial-get-set-ros2-params-with-cpp/
-yaml = "franka_demo.yaml"
+yaml = "franka_sim.yaml"
+use_sim_time = True
 
 def generate_launch_description(): 
 
     ld = LaunchDescription()
 
-    config = os.path.join(
-        get_package_share_directory('arm_api2'), 
+    config_path_ = os.path.join(
+         get_package_share_directory('arm_api2'), 
         "config", 
         yaml
     )
@@ -39,7 +40,8 @@ def generate_launch_description():
         package ='arm_api2', 
         name ='movei2_iface_node', 
         executable ='moveit2_iface', 
-        #parameters = [config]
+        parameters = [{"use_sim_time": use_sim_time}, 
+                      {"config_path": config_path_}]
         # Stupid naming conventions 
     )
 

@@ -29,6 +29,18 @@ Full verbose build command:
 colcon build --symlink-install --packages-select moveit2_tutorials --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_VERBOSE_MAKEFILE=ON
 ```
 
+### Aliases
+
+Copy to `~/.bashrc` and source it. 
+
+```
+alias cbp="colcon build --symlink-install --packages-select" 
+```
+
+```
+cbp arm_api2
+``` 
+
 ## Aim of the repository
 
 With `arm_api` as precursor, which was intended to provide simple ROS interfacing with 
@@ -110,6 +122,7 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 - [planning_scene](https://github.com/moveit/moveit2_tutorials/blob/main/doc/examples/planning_scene/src/planning_scene_tutorial.cpp)
 - [custom moveit ns](https://github.com/moveit/moveit2/issues/2415)
 - [publish robot_description](https://github.com/moveit/moveit2_tutorials/issues/525)
+- [joint state clock not in sync](https://answers.ros.org/question/417209/how-to-extract-position-of-the-gripper-in-ros2moveit2/)
 
 </details>
 

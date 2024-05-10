@@ -5,10 +5,11 @@
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit_visual_tools/moveit_visual_tools.h>
+#include <geometry_msgs/msg/pose.hpp>
 
-
-#define GROUP "panda_arm"
+#define GROUP "arm"
 #define PLANNING_FRAME "base_link"
+#define EE_LINK_NAME "panda_link8"
 
 int main(int argc, char * argv[])
 {
@@ -108,6 +109,23 @@ int main(int argc, char * argv[])
 
   // setPoseTarget
   move_group_interface.setPoseTarget(target_pose); 
+  // print current pose
+  geometry_msgs::msg::Pose current_pose = move_group_interface.getCurrentPose().pose;
+
+  double time = node->now().seconds();
+
+  RCLCPP_INFO(node->get_logger(), "Current time is: %f", time); 
+
+  // Print the current pose of the end effector
+  RCLCPP_INFO(node->get_logger(), "Current pose: %f %f %f %f %f %f %f",
+    current_pose.position.x,
+    current_pose.position.y,
+    current_pose.position.z,
+    current_pose.orientation.x,
+    current_pose.orientation.y,
+    current_pose.orientation.z,
+    current_pose.orientation.w);
+
 
   // Create a plan to that target pose
   auto const [success, plan] = [&move_group_interface]{
