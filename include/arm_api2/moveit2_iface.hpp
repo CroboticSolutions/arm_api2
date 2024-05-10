@@ -53,6 +53,7 @@ class m2Iface: public rclcpp::Node
         std::string EE_LINK_NAME;  
         std::string ROBOT_DESC; 
         std::string PLANNING_SCENE; 
+        std::string PLANNING_FRAME; 
         std::string MOVE_GROUP_NS; 
 
         /* timers */

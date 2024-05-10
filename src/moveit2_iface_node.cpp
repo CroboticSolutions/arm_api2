@@ -10,9 +10,18 @@ int main(int argc, char * argv [])
     
     // Add multithreaded executor --> Check MoveIt states for multithreaded executor and relation with time 
     //rclcpp::executors::MultiThreadedExecutor executor;
-    rclcpp::executors::SingleThreadedExecutor executor; 
-    executor.add_node(node); 
-    executor.spin(); 
+    //rclcpp::executors::SingleThreadedExecutor executor; 
+    //executor.add_node(node); 
+    //executor.spin(); 
+
+    auto executor = std::make_unique<rclcpp::executors::MultiThreadedExecutor>();
+    rclcpp::Rate loop_rate(1000);
+    while (rclcpp::ok())
+    {
+        executor->spin_node_once(node);
+        loop_rate.sleep();
+    }
+
 
     // Test like this :) [Without executors]
     //rclcpp::spin(node); 
