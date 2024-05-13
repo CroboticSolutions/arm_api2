@@ -36,23 +36,24 @@ class m2Iface: public rclcpp::Node
 
     public:
 
-        m2Iface();  
+        m2Iface(const rclcpp::NodeOptions &options);  
         //~m2Iface();
-
-
 
         /* namespace param, maybe redundant */ 
         std::string ns_; 
 
     private: 
 
-        rclcpp::Node::SharedPtr node_; 
+        rclcpp::Node::SharedPtr node_;
+        rclcpp::Executor::SharedPtr executor_;
+        std::thread executor_thread_;
 
         /* arm_definition */
         std::string PLANNING_GROUP; 
         std::string EE_LINK_NAME;  
         std::string ROBOT_DESC; 
         std::string PLANNING_SCENE; 
+        std::string PLANNING_FRAME; 
         std::string MOVE_GROUP_NS; 
 
         /* timers */
@@ -97,7 +98,7 @@ class m2Iface: public rclcpp::Node
         void executePlan(bool async); 
         void executeMove();  
 
-        moveit::planning_interface::MoveGroupInterface *m_moveGroupPtr; 
+        moveit::planning_interface::MoveGroupInterfacePtr m_moveGroupPtr; 
         //moveit::planning_interface::PlanningSceneInterface *m_planningSceneInterfacePtr; 
         planning_scene_monitor::PlanningSceneMonitor *m_pSceneMonitorPtr; 
         moveit::core::RobotStatePtr m_robotStatePtr;  

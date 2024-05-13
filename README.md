@@ -100,10 +100,11 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 - [ ] Add ctl 
 
 ### TODO: 
-- [ ] Go through moveit2 tutorials 
+- [ ] Fix segmentation fault
+- [x] Go through moveit2 tutorials 
 - [ ] Define SW patterns that makes sense to use
 - [ ] Init planning scene 
-- [ ] Add for the real robot 
+- [x] Add for the real robot 
 - [ ] Enable autocomplete with the compile_commands
 - [ ] Implement first arm api for the franka for ros 2
 </details>
@@ -123,6 +124,7 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 - [custom moveit ns](https://github.com/moveit/moveit2/issues/2415)
 - [publish robot_description](https://github.com/moveit/moveit2_tutorials/issues/525)
 - [joint state clock not in sync](https://answers.ros.org/question/417209/how-to-extract-position-of-the-gripper-in-ros2moveit2/)
+- [issue for initializing MGI](https://github.com/moveit/moveit2/issues/496)
 
 </details>
 
