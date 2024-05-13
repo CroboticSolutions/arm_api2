@@ -100,10 +100,11 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 - [ ] Add ctl 
 
 ### TODO: 
-- [ ] Go through moveit2 tutorials 
+- [ ] Fix segmentation fault
+- [x] Go through moveit2 tutorials 
 - [ ] Define SW patterns that makes sense to use
 - [ ] Init planning scene 
-- [ ] Add for the real robot 
+- [x] Add for the real robot 
 - [ ] Enable autocomplete with the compile_commands
 - [ ] Implement first arm api for the franka for ros 2
 </details>

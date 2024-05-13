@@ -187,15 +187,8 @@ bool m2Iface::run()
     if(!nodeInit){RCLCPP_ERROR(this->get_logger(), "Node not fully initialized!"); return false;} 
     if(!moveGroupInit) {RCLCPP_ERROR(this->get_logger(), "MoveIt interface not initialized!"); return false;} 
 
-    double enterT = node_->now().seconds(); 
     getArmState(); 
     pose_state_pub_->publish(currPose); 
-    double dT = node_->now().seconds() - enterT;
-     RCLCPP_INFO_STREAM(this->get_logger(),  "dT: " << dT);   
-
-    // Time is ok, uses sim time! --> in sim case, not in demo case (demo case doesn't publish clock)
-    RCLCPP_INFO_STREAM(this->get_logger(),  "Running: " << node_->now().seconds());   
-    // Get current state (at least try?)
 
     if (recivCmd){
         // TODO: Wrap it further
