@@ -123,6 +123,7 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 - [custom moveit ns](https://github.com/moveit/moveit2/issues/2415)
 - [publish robot_description](https://github.com/moveit/moveit2_tutorials/issues/525)
 - [joint state clock not in sync](https://answers.ros.org/question/417209/how-to-extract-position-of-the-gripper-in-ros2moveit2/)
+- [issue for initializing MGI](https://github.com/moveit/moveit2/issues/496)
 
 </details>
 
