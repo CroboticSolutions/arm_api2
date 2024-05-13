@@ -1,17 +1,17 @@
 #include "arm_api2/moveit2_iface.hpp"
 
-m2Iface::m2Iface(): Node("moveit2_iface") 
+m2Iface::m2Iface(const rclcpp::NodeOptions &options)
+    : Node("moveit2_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_iface_node")), 
+     executor_(std::make_shared<rclcpp::executors::SingleThreadedExecutor>()) 
 {   
     /*node_ = std::make_shared<rclcpp::Node>(this->get_name(), 
                                            rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));*/
 
     
-    node_ = std::shared_ptr<rclcpp::Node>(std::move(this)); 
-    
-    /*node_->set_parameter("use_sim_time", true); */
+    /*node_ = std::shared_ptr<rclcpp::Node>(std::move(this));*/
 
     // TODO: Load config path from param
-    this->declare_parameter<std::string>("config_path", "/root/ws_moveit2/src/arm_api2/config/franka_demo.yaml");
+    // this->declare_parameter<std::string>("config_path", "/root/ws_moveit2/src/arm_api2/config/franka_demo.yaml");
     this->get_parameter("config_path", config_path);
     
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
@@ -86,15 +86,18 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
 {
     // check if moveNs is empty
     if (moveNs == "null") moveNs=""; 
-    
-    m_moveGroupPtr = new moveit::planning_interface::MoveGroupInterface(nodePtr, 
+
+    //https://github.com/moveit/moveit2/issues/496
+    m_moveGroupPtr = std::make_shared<moveit::planning_interface::MoveGroupInterface>(nodePtr, 
         moveit::planning_interface::MoveGroupInterface::Options(
             groupName,
-            moveit::planning_interface::MoveGroupInterface::ROBOT_DESCRIPTION,
+            "robot_description",
             moveNs));
     m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME); 
     m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME); 
     m_moveGroupPtr->startStateMonitor(); 
+    executor_->add_node(node_); 
+    executor_thread_ = std::thread([this]() {executor_->spin();});
     RCLCPP_INFO_STREAM(this->get_logger(), "Move group interface set up!"); 
     
     return true; 
