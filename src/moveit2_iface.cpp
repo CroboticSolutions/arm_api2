@@ -22,6 +22,7 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     PLANNING_SCENE      = config["robot"]["planning_scene"].as<std::string>(); 
     MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
     NUM_CART_PTS        = config["robot"]["num_cart_pts"].as<int>(); 
+    JOINT_STATES        = config["robot"]["joint_states"].as<std::string>(); 
     
     // Currently not used :) 
     ns_ = this->get_namespace(); 	
@@ -35,6 +36,9 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     // Init anything for the old pose because it is non existent at the beggining
     m_oldPoseCmd.pose.position.x = 5.0; 
     nodeInit = true; 
+
+    // Add Moveit Servo! 
+    // https://moveit.picknik.ai/humble/doc/examples/realtime_servo/realtime_servo_tutorial.html
 }
 
 YAML::Node m2Iface::init_config(std::string yaml_path)
@@ -116,7 +120,7 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
     // set move group stuff
     m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME); 
     m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME); 
-    m_moveGroupPtr->startStateMonitor(); 
+    m_moveGroupPtr->startStateMonitor(JOINT_STATES); 
     // executor
     executor_->add_node(node_); 
     executor_thread_ = std::thread([this]() {executor_->spin();});
@@ -181,6 +185,8 @@ void m2Iface::execCartesian(bool async=false)
     // plan Cartesian path
     m_moveGroupPtr->computeCartesianPath(cartesianWaypoints, eefStep, jumpThr, trajectory);
     execTrajectory(trajectory, async); 
+    recivCmd = false; 
+    m_oldPoseCmd = std::move(m_currPoseCmd); 
 }
 
 void m2Iface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async=false)
@@ -200,7 +206,7 @@ void m2Iface::getArmState()
 
 // TODO: Move to utils
 bool m2Iface::comparePositions(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2)
-{
+{   
     // Returns false if different positions
     bool x_cond = false;  bool y_cond = false;  bool z_cond = false; 
     double d = 0.01; 
@@ -214,7 +220,7 @@ bool m2Iface::comparePositions(geometry_msgs::msg::PoseStamped p1, geometry_msgs
     return cond; 
 }
 
-// utils method
+// TODO: move to utils
 std::vector<geometry_msgs::msg::Pose> m2Iface::createCartesianWaypoints(geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2, int n) 
 {
     std::vector<geometry_msgs::msg::Pose> result;
@@ -265,7 +271,13 @@ bool m2Iface::run()
 
     if (robotState == CART_TRAJ_CTL)
     {
-        if (recivCmd) execCartesian(false); 
+        if (recivCmd) execCartesian(true); 
+    }
+
+    if (robotState == SERVO_CTL)
+    {   
+        // Test servo ctl 
+        //https://moveit.picknik.ai/humble/doc/examples/realtime_servo/realtime_servo_tutorial.html
     }
 
     RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), steady_clock, LOG_STATE_TIMEOUT, "arm_api2 is in " << stateNames[robotState] << " mode."); 

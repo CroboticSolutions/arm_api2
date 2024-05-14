@@ -61,6 +61,7 @@ class m2Iface: public rclcpp::Node
         std::string PLANNING_SCENE; 
         std::string PLANNING_FRAME; 
         std::string MOVE_GROUP_NS; 
+        std::string JOINT_STATES; 
         int NUM_CART_PTS; 
 
         /* timers */
