@@ -4,14 +4,6 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     : Node("moveit2_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_iface_node")), 
      executor_(std::make_shared<rclcpp::executors::SingleThreadedExecutor>()) 
 {   
-    /*node_ = std::make_shared<rclcpp::Node>(this->get_name(), 
-                                           rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));*/
-
-    
-    /*node_ = std::shared_ptr<rclcpp::Node>(std::move(this));*/
-
-    // TODO: Load config path from param
-    // this->declare_parameter<std::string>("config_path", "/root/ws_moveit2/src/arm_api2/config/franka_demo.yaml");
     this->get_parameter("config_path", config_path);
     
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
@@ -34,13 +26,13 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     ns_ = this->get_namespace(); 	
     init_publishers(); 
     init_subscribers(); 
+    init_services(); 
     init_moveit(); 
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized node!"); 
 
-
     // Init anything for the old pose because it is non existent at the beggining
-    oldPoseCmd.pose.position.x = 5.0; 
+    m_oldPoseCmd.pose.position.x = 5.0; 
     nodeInit = true; 
 }
 
@@ -63,6 +55,14 @@ void m2Iface::init_subscribers()
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
 }
 
+void m2Iface::init_services()
+{
+    auto change_state_name = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
+    change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, 
+                                                                              std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
+}
+
 void m2Iface::init_moveit()
 {
 
@@ -78,8 +78,26 @@ void m2Iface::init_moveit()
 void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
     
-    newPoseCmd.pose = msg->pose; 
-    recivCmd = true; 
+    m_currPoseCmd.pose = msg->pose;
+    // Compare with old command
+    if (!comparePositions(m_currPoseCmd, m_oldPoseCmd)) recivCmd = true; 
+}
+
+void m2Iface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
+                              const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res)
+{
+    auto itr = std::find(std::begin(stateNames), std::end(stateNames), req->state); 
+    
+    if ( itr != std::end(stateNames))
+    {
+        int wantedIndex_ = std::distance(stateNames, itr); 
+        robotState  = (state)wantedIndex_; 
+        RCLCPP_INFO_STREAM(this->get_logger(), "Switching state!");
+        res->success = true;  
+    }else{
+        RCLCPP_INFO_STREAM(this->get_logger(), "Failed switching to state " << req->state); 
+        res->success = false; 
+    } 
 }
 
 bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName, std::string moveNs)
@@ -93,9 +111,12 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
             groupName,
             "robot_description",
             moveNs));
+
+    // set move group stuff
     m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME); 
     m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME); 
     m_moveGroupPtr->startStateMonitor(); 
+    // executor
     executor_->add_node(node_); 
     executor_thread_ = std::thread([this]() {executor_->spin();});
     RCLCPP_INFO_STREAM(this->get_logger(), "Move group interface set up!"); 
@@ -106,10 +127,8 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
 /* This is not neccessary*/
 bool m2Iface::setRobotModel(rclcpp::Node::SharedPtr nodePtr)
 {
-  
     robot_model_loader::RobotModelLoader robot_model_loader(nodePtr);
     kinematic_model = robot_model_loader.getModel(); 
-    //m_planningScenePtr = new planning_scene::PlanningScene(kinematic_model);
     RCLCPP_INFO_STREAM(this->get_logger(), "Robot model loaded!");
     RCLCPP_INFO_STREAM(this->get_logger(), "Robot model frame is: " << kinematic_model->getModelFrame().c_str());
     return true;
@@ -121,10 +140,18 @@ bool m2Iface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::stri
     // https://github.com/moveit/moveit2_tutorials/blob/main/doc/examples/planning_scene/src/planning_scene_tutorial.cpp
     m_pSceneMonitorPtr = new planning_scene_monitor::PlanningSceneMonitor(nodePtr, name); 
     m_pSceneMonitorPtr->startSceneMonitor(PLANNING_SCENE); 
-    
     //TODO: Check what's difference between planning_Scene and planning_scene_monitor
     RCLCPP_INFO_STREAM(this->get_logger(), "Created planning scene monitor!");
     return true; 
+}
+
+void m2Iface::executeMove(bool async=false)
+{   
+    m_moveGroupPtr->setPoseTarget(m_currPoseCmd); 
+    executePlan(async); 
+    recivCmd = false; 
+    m_oldPoseCmd = std::move(m_currPoseCmd); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "Executing commanded path!"); 
 }
 
 void m2Iface::executePlan(bool async=false)
@@ -142,40 +169,25 @@ void m2Iface::executePlan(bool async=false)
 
 }
 
-void m2Iface::executeMove()
-{
-    if (comparePositions(newPoseCmd, oldPoseCmd))
-        {   
-            auto steady_clock = rclcpp::Clock();
-            RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), steady_clock, 2000, "Same pose commanded!"); 
-        }else{
-            // this is blocking call I think!
-            m_moveGroupPtr->setPoseTarget(newPoseCmd); 
-            executePlan(true); 
-            recivCmd = false; 
-            oldPoseCmd = std::move(newPoseCmd); 
-            RCLCPP_INFO_STREAM(this->get_logger(), "Executing path!"); 
-    }
-}
-
 void m2Iface::getArmState() 
 {
-    //
-  currPose = m_moveGroupPtr->getCurrentPose(EE_LINK_NAME); 
-  // current_state_monitor
-  // m_robotStatePtr = m_moveGroupPtr->getCurrentState();
-  // by default timeout is 10 secs
+    // get current ee pose
+    m_currPose = m_moveGroupPtr->getCurrentPose(EE_LINK_NAME); 
+    // current_state_monitor
+    m_robotStatePtr = m_moveGroupPtr->getCurrentState();
+    // by default timeout is 10 secs
 }
 
 // TODO: Move to utils
-bool m2Iface::comparePositions(geometry_msgs::msg::PoseStamped pose1, geometry_msgs::msg::PoseStamped pose2)
+bool m2Iface::comparePositions(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2)
 {
+    // Returns false if different positions
     bool x_cond = false;  bool y_cond = false;  bool z_cond = false; 
-    double dist = 0.01; 
+    double d = 0.01; 
 
-    if (std::abs(pose1.pose.position.x - pose2.pose.position.x) < dist) x_cond = true; 
-    if (std::abs(pose1.pose.position.y - pose2.pose.position.y) < dist) y_cond = true; 
-    if (std::abs(pose1.pose.position.z - pose2.pose.position.z) < dist) z_cond = true; 
+    if (std::abs(p1.pose.position.x - p2.pose.position.x) < d) x_cond = true; 
+    if (std::abs(p1.pose.position.y - p2.pose.position.y) < d) y_cond = true; 
+    if (std::abs(p1.pose.position.z - p2.pose.position.z) < d) z_cond = true; 
 
     bool cond = x_cond && y_cond && z_cond;  
 
@@ -188,13 +200,21 @@ bool m2Iface::run()
     if(!moveGroupInit) {RCLCPP_ERROR(this->get_logger(), "MoveIt interface not initialized!"); return false;} 
 
     getArmState(); 
-    pose_state_pub_->publish(currPose); 
+    pose_state_pub_->publish(m_currPose);
+    
 
-    if (recivCmd){
-        // TODO: Wrap it further
-       executeMove(); 
+    if (robotState == IDLE)
+    {   rclcpp::Clock steady_clock; 
+        int LOG_STATE_TIMEOUT=10000; // 10 secs
+        RCLCPP_WARN_STREAM_THROTTLE(this->get_logger(), steady_clock, LOG_STATE_TIMEOUT, "arm_api2 is in IDLE mode."); 
     }
 
-    // Clean execution of run method
+    if (robotState == JOINT_TRAJ_CTL)
+    {
+       if (recivCmd) executeMove(true); 
+    }
+    
+
+    
     return true;     
 }

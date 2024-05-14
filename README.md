@@ -41,14 +41,21 @@ alias cbp="colcon build --symlink-install --packages-select"
 cbp arm_api2
 ``` 
 
-## Aim of the repository
+### Aim of the repository
 
 With `arm_api` as precursor, which was intended to provide simple ROS interfacing with 
 robot manipulators with the help of moveit. 
 
 This repository `arm_api2` is intended to provide interfacing support for robot manipulators for ROS 2 and MoveIt2!. 
 
-## Goals 
+### Change state 
+
+In order to change state call following command: 
+```
+ros2 service call /change_state arm_api2_msgs/srv/ChangeState "{state: JOINT_TRAJ_CTL}
+```
+
+### Goals 
 
 Create API simple to **run** and **maintain** that supports working with different 
 robot manipulators out of the box. 
@@ -63,7 +70,7 @@ Wanted arm functionalities:
 1. `go_to_pose`
 2. `grasp` 
 
-## Launch
+### Launch
 
 Launch ign simulation with following command: 
 ```
@@ -97,16 +104,21 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 - [x] Create first publisher and subscriber 
 - [x] Init MoveGroup
 - [x] Add ign running
-- [ ] Add ctl 
+- [x] Add ctl 
+- [x] Add change state
+- [x] Init planning scene
+- [x] Enable autocomplete with compile_commands
+- [x] Implement first arm_api2 for the franka for ros 2
+- [x] Init planning scene
 
 ### TODO: 
-- [ ] Fix segmentation fault
-- [x] Go through moveit2 tutorials 
 - [ ] Define SW patterns that makes sense to use
 - [ ] Init planning scene 
-- [x] Add for the real robot 
 - [ ] Enable autocomplete with the compile_commands
 - [ ] Implement first arm api for the franka for ros 2
+- [ ] Add joystick 
+- [ ] Add cartesian control
+- [ ] Add servo ctl 
 </details>
 
 

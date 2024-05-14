@@ -11,24 +11,12 @@ find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_ros REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(arm_api2_msgs REQUIRED)
 
 # include headers
 include_directories(include)
-
-add_executable(arm_api2 src/arm_api2.cpp)
-target_include_directories(arm_api2 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
-target_compile_features(arm_api2 PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
-ament_target_dependencies(
-  arm_api2
-  "moveit_ros_planning_interface"
-  "moveit_visual_tools"
-  "rclcpp"
-)
-
-install(TARGETS arm_api2
-  DESTINATION lib/${PROJECT_NAME})
 
 add_executable(moveit2_iface src/moveit2_iface.cpp src/moveit2_iface_node.cpp)
 target_include_directories(moveit2_iface 
@@ -41,11 +29,7 @@ PUBLIC
 # TODO: Build moveit2_iface
 target_compile_features(moveit2_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
-  moveit2_iface
-  "moveit_ros"
-  "moveit_ros_planning_interface"
-  "moveit_visual_tools"
-  "rclcpp"
+  moveit2_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs
 )
 
 # Install launch directory
