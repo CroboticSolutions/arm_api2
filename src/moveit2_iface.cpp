@@ -21,6 +21,7 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     PLANNING_FRAME      = config["robot"]["planning_frame"].as<std::string>(); 
     PLANNING_SCENE      = config["robot"]["planning_scene"].as<std::string>(); 
     MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
+    NUM_CART_PTS        = config["robot"]["num_cart_pts"].as<int>(); 
     
     // Currently not used :) 
     ns_ = this->get_namespace(); 	
@@ -145,16 +146,16 @@ bool m2Iface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::stri
     return true; 
 }
 
-void m2Iface::executeMove(bool async=false)
+void m2Iface::execMove(bool async=false)
 {   
     m_moveGroupPtr->setPoseTarget(m_currPoseCmd); 
-    executePlan(async); 
+    execPlan(async); 
     recivCmd = false; 
     m_oldPoseCmd = std::move(m_currPoseCmd); 
     RCLCPP_INFO_STREAM(this->get_logger(), "Executing commanded path!"); 
 }
 
-void m2Iface::executePlan(bool async=false)
+void m2Iface::execPlan(bool async=false)
 {
 
     moveit::planning_interface::MoveGroupInterface::Plan plan;
@@ -166,13 +167,32 @@ void m2Iface::executePlan(bool async=false)
     }else {
         RCLCPP_ERROR(this->get_logger(), "Planning failed!"); 
     }
+}
 
+void m2Iface::execCartesian(bool async=false)
+{   
+    // TODO: Move this method to utils.cpp
+    std::vector<geometry_msgs::msg::Pose> cartesianWaypoints = createCartesianWaypoints(m_currPoseState.pose, m_currPoseCmd.pose, NUM_CART_PTS); 
+    // TODO: create Cartesian plan, use as first point currentPose 4 now, and as end point use targetPoint 
+    moveit_msgs::msg::RobotTrajectory trajectory;
+    // TODO: Set as params that can be configured in YAML!
+    double jumpThr = 0.0; 
+    double eefStep = 0.02; 
+    // plan Cartesian path
+    m_moveGroupPtr->computeCartesianPath(cartesianWaypoints, eefStep, jumpThr, trajectory);
+    execTrajectory(trajectory, async); 
+}
+
+void m2Iface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async=false)
+{
+    if (async) {m_moveGroupPtr->asyncExecute(trajectory);}
+    else{ m_moveGroupPtr->execute(trajectory);}; 
 }
 
 void m2Iface::getArmState() 
 {
     // get current ee pose
-    m_currPose = m_moveGroupPtr->getCurrentPose(EE_LINK_NAME); 
+    m_currPoseState = m_moveGroupPtr->getCurrentPose(EE_LINK_NAME); 
     // current_state_monitor
     m_robotStatePtr = m_moveGroupPtr->getCurrentState();
     // by default timeout is 10 secs
@@ -194,27 +214,64 @@ bool m2Iface::comparePositions(geometry_msgs::msg::PoseStamped p1, geometry_msgs
     return cond; 
 }
 
+// utils method
+std::vector<geometry_msgs::msg::Pose> m2Iface::createCartesianWaypoints(geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2, int n) 
+{
+    std::vector<geometry_msgs::msg::Pose> result;
+    geometry_msgs::msg::Pose pose_;
+    if (n <= 1) {
+        result.push_back(p1);
+        return result;
+    }
+    double dX = (p2.position.x - p1.position.x) / (n - 1);
+    double dY = (p2.position.y - p1.position.y) / (n - 1); 
+    double dZ = (p2.position.z - p1.position.z) / (n - 1); 
+    // Set i == 1 because start point doesn't have to be included into waypoint list 
+    // https://answers.ros.org/question/253004/moveit-problem-error-trajectory-message-contains-waypoints-that-are-not-strictly-increasing-in-time/
+    for (int i = 1; i < n; ++i) {
+        pose_.position.x = p1.position.x + i * dX; 
+        pose_.position.y = p1.position.y + i * dY; 
+        pose_.position.z = p1.position.z + i * dZ; 
+        pose_.orientation.x = p1.orientation.x; 
+        pose_.orientation.y = p1.orientation.y;
+        pose_.orientation.z = p1.orientation.z;
+        pose_.orientation.w = p1.orientation.w; 
+        result.push_back(pose_);
+    }
+
+    return result;
+}
+
 bool m2Iface::run()
 {
     if(!nodeInit){RCLCPP_ERROR(this->get_logger(), "Node not fully initialized!"); return false;} 
     if(!moveGroupInit) {RCLCPP_ERROR(this->get_logger(), "MoveIt interface not initialized!"); return false;} 
 
     getArmState(); 
-    pose_state_pub_->publish(m_currPose);
-    
+    pose_state_pub_->publish(m_currPoseState);
+
+    rclcpp::Clock steady_clock; 
+    int LOG_STATE_TIMEOUT=10000; 
 
     if (robotState == IDLE)
-    {   rclcpp::Clock steady_clock; 
-        int LOG_STATE_TIMEOUT=10000; // 10 secs
+    {   
         RCLCPP_WARN_STREAM_THROTTLE(this->get_logger(), steady_clock, LOG_STATE_TIMEOUT, "arm_api2 is in IDLE mode."); 
     }
 
     if (robotState == JOINT_TRAJ_CTL)
     {
-       if (recivCmd) executeMove(true); 
+       if (recivCmd) execMove(true); 
     }
-    
 
+    if (robotState == CART_TRAJ_CTL)
+    {
+        if (recivCmd) execCartesian(false); 
+    }
+
+    RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), steady_clock, LOG_STATE_TIMEOUT, "arm_api2 is in " << stateNames[robotState] << " mode."); 
     
     return true;     
 }
+
+
+

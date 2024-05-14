@@ -25,6 +25,7 @@
 
 //* msgs
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/pose.hpp"
 
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
@@ -60,6 +61,7 @@ class m2Iface: public rclcpp::Node
         std::string PLANNING_SCENE; 
         std::string PLANNING_FRAME; 
         std::string MOVE_GROUP_NS; 
+        int NUM_CART_PTS; 
 
         /* timers */
         rclcpp::TimerBase::SharedPtr                                        timer_;
@@ -104,10 +106,13 @@ class m2Iface: public rclcpp::Node
 
         /* utils */
         bool comparePositions(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2);  
+        std::vector<geometry_msgs::msg::Pose> createCartesianWaypoints(geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2, int n); 
 
         /* funcs */
-        void executePlan(bool async); 
-        void executeMove(bool async);  
+        void execPlan(bool async); 
+        void execMove(bool async);  
+        void execCartesian(bool async); 
+        void execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async); 
 
         // Simple state machine 
         enum state{
@@ -129,8 +134,6 @@ class m2Iface: public rclcpp::Node
         // robot state
         enum state robotState = IDLE; 
 
-
-
         /* flags*/
         bool moveGroupInit      = false;
         bool robotModelInit     = false;  
@@ -142,7 +145,7 @@ class m2Iface: public rclcpp::Node
         geometry_msgs::msg::PoseStamped m_currPoseCmd; 
         geometry_msgs::msg::PoseStamped m_pubCurrPoseCmd; 
         geometry_msgs::msg::PoseStamped m_oldPoseCmd; 
-        geometry_msgs::msg::PoseStamped m_currPose; 
+        geometry_msgs::msg::PoseStamped m_currPoseState; 
 
         moveit::planning_interface::MoveGroupInterfacePtr m_moveGroupPtr; 
         //moveit::planning_interface::PlanningSceneInterface *m_planningSceneInterfacePtr; 
