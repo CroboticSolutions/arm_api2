@@ -2,10 +2,11 @@
 
 m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     : Node("moveit2_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_iface_node")), 
-     executor_(std::make_shared<rclcpp::executors::SingleThreadedExecutor>()) 
+     executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()) 
 {   
     this->get_parameter("config_path", config_path);
-    
+    this->get_parameter("enable_servo", enable_servo); 
+
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
 
     // TODO: Add as reconfigurable param 
@@ -30,6 +31,7 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     init_subscribers(); 
     init_services(); 
     init_moveit(); 
+    if (enable_servo) {servoPtr = init_servo();}; 
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized node!"); 
 
@@ -80,6 +82,23 @@ void m2Iface::init_moveit()
     robotModelInit      = setRobotModel(node_);
 }
 
+// TODO: Try to replace with auto
+std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()
+{   
+    auto nodeParameters = node_->get_node_parameters_interface(); 
+    auto servoParams = moveit_servo::ServoParameters::makeServoParameters(node_); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "ee_frame_name: " << servoParams->ee_frame_name);  
+    servoParams->get("moveit_servo", nodeParameters);
+
+
+    //auto servoParamsPtr = std::make_shared<moveit_servo::ServoParameters>(std::move(servoParams));
+    //auto servo_parameters = moveit_servo::ServoParameters::makeServoParameters(node_); 
+    // Servo parameters need to bee constSharedPtr
+    auto servo = std::make_unique<moveit_servo::Servo>(node_, servoParams, m_pSceneMonitorPtr); 
+    RCLCPP_INFO(this->get_logger(), "Servo initialized!"); 
+    return servo;
+}
+
 void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
     
@@ -120,7 +139,7 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
     // set move group stuff
     m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME); 
     m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME); 
-    m_moveGroupPtr->startStateMonitor(JOINT_STATES); 
+    m_moveGroupPtr->startStateMonitor(); 
     // executor
     executor_->add_node(node_); 
     executor_thread_ = std::thread([this]() {executor_->spin();});
@@ -143,8 +162,23 @@ bool m2Iface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::stri
 {
     // https://moveit.picknik.ai/main/doc/examples/planning_scene_ros_api/planning_scene_ros_api_tutorial.html
     // https://github.com/moveit/moveit2_tutorials/blob/main/doc/examples/planning_scene/src/planning_scene_tutorial.cpp
-    m_pSceneMonitorPtr = new planning_scene_monitor::PlanningSceneMonitor(nodePtr, name); 
+    m_pSceneMonitorPtr = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(nodePtr, name); 
     m_pSceneMonitorPtr->startSceneMonitor(PLANNING_SCENE); 
+    if (m_pSceneMonitorPtr->getPlanningScene())
+    {
+        m_pSceneMonitorPtr->startStateMonitor(JOINT_STATES); 
+        m_pSceneMonitorPtr->setPlanningScenePublishingFrequency(25);
+        m_pSceneMonitorPtr->startPublishingPlanningScene(planning_scene_monitor::PlanningSceneMonitor::UPDATE_SCENE,
+                                                         "/moveit_servo/publish_planning_scene");
+        m_pSceneMonitorPtr->startSceneMonitor(); 
+        m_pSceneMonitorPtr->providePlanningSceneService(); 
+    }
+    else 
+    {
+        RCLCPP_ERROR(this->get_logger(), "Planning scene not configured!"); 
+        return EXIT_FAILURE; 
+    }
+    
     //TODO: Check what's difference between planning_Scene and planning_scene_monitor
     RCLCPP_INFO_STREAM(this->get_logger(), "Created planning scene monitor!");
     return true; 
@@ -276,7 +310,8 @@ bool m2Iface::run()
 
     if (robotState == SERVO_CTL)
     {   
-        // Test servo ctl 
+        servoPtr->start(); 
+        
         //https://moveit.picknik.ai/humble/doc/examples/realtime_servo/realtime_servo_tutorial.html
     }
 

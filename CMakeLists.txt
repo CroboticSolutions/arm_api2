@@ -9,6 +9,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_ros REQUIRED)
+find_package(moveit_servo REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
@@ -30,7 +31,7 @@ PUBLIC
 # TODO: Build moveit2_iface
 target_compile_features(moveit2_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
-  moveit2_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs
+  moveit2_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo
 )
 
 # Install launch directory
