@@ -73,6 +73,7 @@ class m2Iface: public rclcpp::Node
         /* parameters */
         std::string                                                         config_path; 
         bool                                                                enable_servo; 
+        float                                                               dt; 
         
         /* config_file */
         YAML::Node config; 
@@ -146,6 +147,7 @@ class m2Iface: public rclcpp::Node
         bool pSceneMonitorInit  = false;
         bool nodeInit           = false; 
         bool recivCmd           = false; 
+        bool servoEntered       = false; 
 
         /* ros vars */
         geometry_msgs::msg::PoseStamped m_currPoseCmd; 

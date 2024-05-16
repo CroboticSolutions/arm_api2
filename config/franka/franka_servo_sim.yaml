@@ -8,8 +8,8 @@
 use_gazebo: true
 
 ## Properties of outgoing commands
-publish_period: 0.01  # 1/Nominal publish rate [seconds]
-max_expected_latency: 0.1  # delay between sending a command and the robot executing it [seconds]
+publish_period: 0.001  # 1/Nominal publish rate [seconds]
+max_expected_latency: 0  # delay between sending a command and the robot executing it [seconds]
 
 command_in_type: "speed_units"  # "unitless"> in the range [-1:1], as if from joystick. "speed_units"> cmds are in m/s and rad/s
 scale:
@@ -25,7 +25,7 @@ command_out_type: trajectory_msgs/JointTrajectory
 
 # What to publish? Can save some bandwidth as most robots only require positions or velocities
 publish_joint_positions: true
-publish_joint_velocities: true
+publish_joint_velocities: false
 publish_joint_accelerations: false
 
 ## Plugins for smoothing outgoing commands
@@ -36,11 +36,14 @@ smoothing_filter_plugin_name: "online_signal_smoothing::ButterworthFilterPlugin"
 # which other nodes can use as a source for information about the planning environment.
 # NOTE: If a different node in your system is responsible for the "primary" planning scene instance (e.g. the MoveGroup node),
 # then is_primary_planning_scene_monitor needs to be set to false.
-is_primary_planning_scene_monitor: true
+is_primary_planning_scene_monitor: false
 check_octomap_collisions: false  # Check collision against the octomap (if a 3D sensor plugin is available)
 
 ## MoveIt properties
 move_group_name:  arm  # Often 'manipulator' or 'arm'
+planning_frame: panda_link0
+ee_frame_name: panda_link8
+robot_link_command_frame: world
 
 ## Configure handling of singularities and joint limits
 lower_singularity_threshold:  17.0  # Start decelerating when the condition number hits this (close to singularity)

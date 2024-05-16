@@ -24,10 +24,13 @@ import os
 
 # https://roboticsbackend.com/ros2-yaml-params/
 # https://roboticsbackend.com/rclcpp-params-tutorial-get-set-ros2-params-with-cpp/
+# TODO: argparse add at some point
 yaml = "franka/franka_sim.yaml"
 servo_yaml = "franka/franka_servo_sim.yaml"
 use_sim_time = True
 enable_servo = True
+joy = True
+dt = 0.001
 
 def generate_launch_description(): 
 
@@ -50,14 +53,35 @@ def generate_launch_description():
 
     node = Node(
         package ='arm_api2', 
-        name ='movei2_iface_node', 
+        name ='moveit2_iface_node', 
         executable ='moveit2_iface', 
         parameters = [{"use_sim_time": use_sim_time}, 
                       {"config_path": config_path}, 
-                      {"enable_servo": enable_servo}, 
+                      {"enable_servo": enable_servo},
+                      {"dt": dt},  
                       servo_params]
         # Stupid naming conventions 
     )
+
+    if joy: 
+
+        # https://index.ros.org/p/joy/ --> joy node as joystick (Create subscriber that takes cmd_vel)
+        joy_node = Node(
+            package='joy', 
+            executable="joy_node", 
+            output="screen", 
+            arguments={'device_name':'js0'}.items()
+        )
+
+        joy_ctl_node = Node(
+            package="arm_api2", 
+            executable="joy_ctl", 
+            output="screen", 
+            parameters = [{"use_sim_time": use_sim_time}]
+        )
+
+        ld.add_action(joy_node)
+        ld.add_action(joy_ctl_node)
 
     ld.add_action(node)
     return ld

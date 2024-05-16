@@ -2,15 +2,16 @@
 
 m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     : Node("moveit2_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_iface_node")), 
-     executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()) 
+     executor_(std::make_shared<rclcpp::executors::SingleThreadedExecutor>()) 
 {   
     this->get_parameter("config_path", config_path);
     this->get_parameter("enable_servo", enable_servo); 
+    this->get_parameter("dt", dt); 
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
 
     // TODO: Add as reconfigurable param 
-    std::chrono::duration<double> SYSTEM_DT(0.05);
+    std::chrono::duration<double> SYSTEM_DT(dt);
     timer_ = this->create_wall_timer(SYSTEM_DT, std::bind(&m2Iface::run, this));
 
     // Load arm basically --> two important params
@@ -226,7 +227,7 @@ void m2Iface::execCartesian(bool async=false)
 void m2Iface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async=false)
 {
     if (async) {m_moveGroupPtr->asyncExecute(trajectory);}
-    else{ m_moveGroupPtr->execute(trajectory);}; 
+    else{m_moveGroupPtr->execute(trajectory);}; 
 }
 
 void m2Iface::getArmState() 
@@ -310,10 +311,18 @@ bool m2Iface::run()
 
     if (robotState == SERVO_CTL)
     {   
-        servoPtr->start(); 
-        
+        if (!servoEntered)
+        {   
+            // Moveit servo status codes: https://github.com/moveit/moveit2/blob/main/moveit_ros/moveit_servo/include/moveit_servo/utils/datatypes.hpp
+            servoPtr->start(); 
+            servoEntered = true; 
+        }
+        //servoPtr->setPaused(); 
         //https://moveit.picknik.ai/humble/doc/examples/realtime_servo/realtime_servo_tutorial.html
     }
+
+    // If changed and servo has entered
+    if (robotState != SERVO_CTL && servoEntered) {servoPtr->setPaused(true); servoEntered=false;} 
 
     RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), steady_clock, LOG_STATE_TIMEOUT, "arm_api2 is in " << stateNames[robotState] << " mode."); 
     

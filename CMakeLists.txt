@@ -9,6 +9,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_ros REQUIRED)
+find_package(joy REQUIRED)
 find_package(moveit_servo REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -41,9 +42,25 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
 )
 
+# joy stuff
 install(TARGETS 
   moveit2_iface
   DESTINATION lib/${PROJECT_NAME})
+
+# Install C++ files
+add_executable(joy_ctl src/arm_joy_node.cpp src/arm_joy.cpp)
+
+target_include_directories(joy_ctl 
+  PRIVATE 
+  include/
+)
+
+ament_target_dependencies(joy_ctl
+  rclcpp std_msgs geometry_msgs std_srvs sensor_msgs)
+
+install(TARGETS 
+joy_ctl
+DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
