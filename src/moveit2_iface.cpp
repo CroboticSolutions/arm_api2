@@ -5,11 +5,13 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
      executor_(std::make_shared<rclcpp::executors::SingleThreadedExecutor>()) 
 {   
     this->get_parameter("config_path", config_path);
-    
+    this->get_parameter("enable_servo", enable_servo); 
+    this->get_parameter("dt", dt); 
+
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
 
     // TODO: Add as reconfigurable param 
-    std::chrono::duration<double> SYSTEM_DT(0.05);
+    std::chrono::duration<double> SYSTEM_DT(dt);
     timer_ = this->create_wall_timer(SYSTEM_DT, std::bind(&m2Iface::run, this));
 
     // Load arm basically --> two important params
@@ -22,6 +24,7 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     PLANNING_SCENE      = config["robot"]["planning_scene"].as<std::string>(); 
     MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
     NUM_CART_PTS        = config["robot"]["num_cart_pts"].as<int>(); 
+    JOINT_STATES        = config["robot"]["joint_states"].as<std::string>(); 
     
     // Currently not used :) 
     ns_ = this->get_namespace(); 	
@@ -29,12 +32,16 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     init_subscribers(); 
     init_services(); 
     init_moveit(); 
+    if (enable_servo) {servoPtr = init_servo();}; 
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized node!"); 
 
     // Init anything for the old pose because it is non existent at the beggining
     m_oldPoseCmd.pose.position.x = 5.0; 
     nodeInit = true; 
+
+    // Add Moveit Servo! 
+    // https://moveit.picknik.ai/humble/doc/examples/realtime_servo/realtime_servo_tutorial.html
 }
 
 YAML::Node m2Iface::init_config(std::string yaml_path)
@@ -74,6 +81,23 @@ void m2Iface::init_moveit()
     moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP, MOVE_GROUP_NS); 
     pSceneMonitorInit   = setPlanningSceneMonitor(node_, ROBOT_DESC);
     robotModelInit      = setRobotModel(node_);
+}
+
+// TODO: Try to replace with auto
+std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()
+{   
+    auto nodeParameters = node_->get_node_parameters_interface(); 
+    auto servoParams = moveit_servo::ServoParameters::makeServoParameters(node_); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "ee_frame_name: " << servoParams->ee_frame_name);  
+    servoParams->get("moveit_servo", nodeParameters);
+
+
+    //auto servoParamsPtr = std::make_shared<moveit_servo::ServoParameters>(std::move(servoParams));
+    //auto servo_parameters = moveit_servo::ServoParameters::makeServoParameters(node_); 
+    // Servo parameters need to bee constSharedPtr
+    auto servo = std::make_unique<moveit_servo::Servo>(node_, servoParams, m_pSceneMonitorPtr); 
+    RCLCPP_INFO(this->get_logger(), "Servo initialized!"); 
+    return servo;
 }
 
 void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
@@ -139,8 +163,23 @@ bool m2Iface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::stri
 {
     // https://moveit.picknik.ai/main/doc/examples/planning_scene_ros_api/planning_scene_ros_api_tutorial.html
     // https://github.com/moveit/moveit2_tutorials/blob/main/doc/examples/planning_scene/src/planning_scene_tutorial.cpp
-    m_pSceneMonitorPtr = new planning_scene_monitor::PlanningSceneMonitor(nodePtr, name); 
+    m_pSceneMonitorPtr = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(nodePtr, name); 
     m_pSceneMonitorPtr->startSceneMonitor(PLANNING_SCENE); 
+    if (m_pSceneMonitorPtr->getPlanningScene())
+    {
+        m_pSceneMonitorPtr->startStateMonitor(JOINT_STATES); 
+        m_pSceneMonitorPtr->setPlanningScenePublishingFrequency(25);
+        m_pSceneMonitorPtr->startPublishingPlanningScene(planning_scene_monitor::PlanningSceneMonitor::UPDATE_SCENE,
+                                                         "/moveit_servo/publish_planning_scene");
+        m_pSceneMonitorPtr->startSceneMonitor(); 
+        m_pSceneMonitorPtr->providePlanningSceneService(); 
+    }
+    else 
+    {
+        RCLCPP_ERROR(this->get_logger(), "Planning scene not configured!"); 
+        return EXIT_FAILURE; 
+    }
+    
     //TODO: Check what's difference between planning_Scene and planning_scene_monitor
     RCLCPP_INFO_STREAM(this->get_logger(), "Created planning scene monitor!");
     return true; 
@@ -181,12 +220,14 @@ void m2Iface::execCartesian(bool async=false)
     // plan Cartesian path
     m_moveGroupPtr->computeCartesianPath(cartesianWaypoints, eefStep, jumpThr, trajectory);
     execTrajectory(trajectory, async); 
+    recivCmd = false; 
+    m_oldPoseCmd = std::move(m_currPoseCmd); 
 }
 
 void m2Iface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async=false)
 {
     if (async) {m_moveGroupPtr->asyncExecute(trajectory);}
-    else{ m_moveGroupPtr->execute(trajectory);}; 
+    else{m_moveGroupPtr->execute(trajectory);}; 
 }
 
 void m2Iface::getArmState() 
@@ -200,7 +241,7 @@ void m2Iface::getArmState()
 
 // TODO: Move to utils
 bool m2Iface::comparePositions(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2)
-{
+{   
     // Returns false if different positions
     bool x_cond = false;  bool y_cond = false;  bool z_cond = false; 
     double d = 0.01; 
@@ -214,7 +255,7 @@ bool m2Iface::comparePositions(geometry_msgs::msg::PoseStamped p1, geometry_msgs
     return cond; 
 }
 
-// utils method
+// TODO: move to utils
 std::vector<geometry_msgs::msg::Pose> m2Iface::createCartesianWaypoints(geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2, int n) 
 {
     std::vector<geometry_msgs::msg::Pose> result;
@@ -265,8 +306,23 @@ bool m2Iface::run()
 
     if (robotState == CART_TRAJ_CTL)
     {
-        if (recivCmd) execCartesian(false); 
+        if (recivCmd) execCartesian(true); 
     }
+
+    if (robotState == SERVO_CTL)
+    {   
+        if (!servoEntered)
+        {   
+            // Moveit servo status codes: https://github.com/moveit/moveit2/blob/main/moveit_ros/moveit_servo/include/moveit_servo/utils/datatypes.hpp
+            servoPtr->start(); 
+            servoEntered = true; 
+        }
+        //servoPtr->setPaused(); 
+        //https://moveit.picknik.ai/humble/doc/examples/realtime_servo/realtime_servo_tutorial.html
+    }
+
+    // If changed and servo has entered
+    if (robotState != SERVO_CTL && servoEntered) {servoPtr->setPaused(true); servoEntered=false;} 
 
     RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), steady_clock, LOG_STATE_TIMEOUT, "arm_api2 is in " << stateNames[robotState] << " mode."); 
     

@@ -15,6 +15,8 @@
 #include <rclcpp/rclcpp.hpp>
 
 //* moveit
+#include <moveit_servo/servo.h>
+#include <moveit_servo/servo_parameters.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <moveit/planning_scene/planning_scene.h>
@@ -61,13 +63,17 @@ class m2Iface: public rclcpp::Node
         std::string PLANNING_SCENE; 
         std::string PLANNING_FRAME; 
         std::string MOVE_GROUP_NS; 
+        std::string JOINT_STATES; 
         int NUM_CART_PTS; 
+        bool ENABLE_SERVO; 
 
         /* timers */
         rclcpp::TimerBase::SharedPtr                                        timer_;
 
         /* parameters */
         std::string                                                         config_path; 
+        bool                                                                enable_servo; 
+        float                                                               dt; 
         
         /* config_file */
         YAML::Node config; 
@@ -80,7 +86,8 @@ class m2Iface: public rclcpp::Node
         void init_publishers(); 
         void init_services(); 
         void init_moveit(); 
-
+        std::unique_ptr<moveit_servo::Servo> init_servo(); 
+        
         /* subs */
         rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr    pose_cmd_sub_;
 
@@ -140,6 +147,7 @@ class m2Iface: public rclcpp::Node
         bool pSceneMonitorInit  = false;
         bool nodeInit           = false; 
         bool recivCmd           = false; 
+        bool servoEntered       = false; 
 
         /* ros vars */
         geometry_msgs::msg::PoseStamped m_currPoseCmd; 
@@ -149,9 +157,10 @@ class m2Iface: public rclcpp::Node
 
         moveit::planning_interface::MoveGroupInterfacePtr m_moveGroupPtr; 
         //moveit::planning_interface::PlanningSceneInterface *m_planningSceneInterfacePtr; 
-        planning_scene_monitor::PlanningSceneMonitor *m_pSceneMonitorPtr; 
         moveit::core::RobotStatePtr m_robotStatePtr;  
         moveit::core::RobotModelPtr kinematic_model; 
+        std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> m_pSceneMonitorPtr; 
+        std::unique_ptr<moveit_servo::Servo> servoPtr; 
 
 }; 
 

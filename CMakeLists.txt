@@ -9,6 +9,8 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_ros REQUIRED)
+find_package(joy REQUIRED)
+find_package(moveit_servo REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
@@ -30,7 +32,7 @@ PUBLIC
 # TODO: Build moveit2_iface
 target_compile_features(moveit2_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
-  moveit2_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs
+  moveit2_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo
 )
 
 # Install launch directory
@@ -40,9 +42,25 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
 )
 
+# joy stuff
 install(TARGETS 
   moveit2_iface
   DESTINATION lib/${PROJECT_NAME})
+
+# Install C++ files
+add_executable(joy_ctl src/arm_joy_node.cpp src/arm_joy.cpp)
+
+target_include_directories(joy_ctl 
+  PRIVATE 
+  include/
+)
+
+ament_target_dependencies(joy_ctl
+  rclcpp std_msgs geometry_msgs std_srvs sensor_msgs)
+
+install(TARGETS 
+joy_ctl
+DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

@@ -6,6 +6,7 @@ robot:
   planning_scene: planning_scene
   planning_frame: world
   num_cart_pts: 20
+  joint_states: joint_states
 topic:
   sub:
     cmd_pose:
