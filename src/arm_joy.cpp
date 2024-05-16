@@ -15,7 +15,7 @@ void JoyCtl::init()
 {
 
     // publishers
-    cmdVelPub_ 		    = this->create_publisher<geometry_msgs::msg::TwistStamped>("/delta_twist_cmds", 1); 
+    cmdVelPub_ 		    = this->create_publisher<geometry_msgs::msg::TwistStamped>("/moveit2_iface_node/delta_twist_cmds", 1); 
 
     // subscribers
     joySub_ 		    = this->create_subscription<sensor_msgs::msg::Joy>("/joy", 10, std::bind(&JoyCtl::joy_callback, this, _1)); 

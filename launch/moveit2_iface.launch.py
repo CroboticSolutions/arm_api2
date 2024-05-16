@@ -30,7 +30,7 @@ servo_yaml = "franka/franka_servo_sim.yaml"
 use_sim_time = True
 enable_servo = True
 joy = True
-dt = 0.001
+dt = 0.1
 
 def generate_launch_description(): 
 

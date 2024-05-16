@@ -317,6 +317,7 @@ bool m2Iface::run()
             servoPtr->start(); 
             servoEntered = true; 
         }
+
         //servoPtr->setPaused(); 
         //https://moveit.picknik.ai/humble/doc/examples/realtime_servo/realtime_servo_tutorial.html
     }
