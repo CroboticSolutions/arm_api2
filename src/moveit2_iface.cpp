@@ -294,6 +294,7 @@ bool m2Iface::run()
     rclcpp::Clock steady_clock; 
     int LOG_STATE_TIMEOUT=10000; 
 
+    // STATE MACHINE
     if (robotState == IDLE)
     {   
         RCLCPP_WARN_STREAM_THROTTLE(this->get_logger(), steady_clock, LOG_STATE_TIMEOUT, "arm_api2 is in IDLE mode."); 
