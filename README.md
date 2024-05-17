@@ -35,12 +35,28 @@ Copy to `~/.bashrc` and source it.
 
 ```
 alias cbp="colcon build --symlink-install --packages-select" 
+alias panda_sim="ros2 launch panda gz.launch.py"
+alias kinova_sim="ros2 launch kortex_bringup kortex_sim_control.launch.py dof:=7 use_sim_time:=true launch_rviz:=false" 
+
 ```
+
+Build `arm_api2` package as: 
 
 ```
 cbp arm_api2
 ``` 
 
+Start franka with: 
+
+```
+franka_sim
+```
+
+Start kinova with: 
+
+```
+kinova_sim
+```
 ### Aim of the repository
 
 With `arm_api` as precursor, which was intended to provide simple ROS interfacing with 
@@ -110,15 +126,19 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 - [x] Enable autocomplete with compile_commands
 - [x] Implement first arm_api2 for the franka for ros 2
 - [x] Init planning scene
+- [x] Added kinova_sim
+- [x] Added franka_sim
+- [x] Added init cartesian control 
+- [x] Added init servo control 
+- [x] Added init joystick but add teleop one
+- [x] Init planning scene
+- [x] Autocomplete with compile commands
+- [x] First arm api for for franka_ros
 
 ### TODO: 
 - [ ] Define SW patterns that makes sense to use
 - [ ] Init planning scene 
-- [ ] Enable autocomplete with the compile_commands
-- [ ] Implement first arm api for the franka for ros 2
 - [ ] Add joystick 
-- [ ] Add cartesian control
-- [ ] Add servo ctl 
 </details>
 
 
