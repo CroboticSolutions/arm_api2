@@ -25,8 +25,8 @@ import os
 # https://roboticsbackend.com/ros2-yaml-params/
 # https://roboticsbackend.com/rclcpp-params-tutorial-get-set-ros2-params-with-cpp/
 # TODO: argparse add at some point
-yaml = "franka/franka_sim.yaml"
-servo_yaml = "franka/franka_servo_sim.yaml"
+yaml = "kinova/kinova_sim.yaml"
+servo_yaml = "kinova/kinova_servo_sim.yaml"
 use_sim_time = True
 enable_servo = True
 joy = True
