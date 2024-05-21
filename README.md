@@ -123,7 +123,7 @@ You can set robot state by calling `/change_state` service.
 Command pose by calling `/arm/command/cmd_pose`. 
 Get pose by reading `/arm/state/current_pose`. 
 
-<details>
+</details>
 
 <details>
 <summary><h3> Dev help </summary>
