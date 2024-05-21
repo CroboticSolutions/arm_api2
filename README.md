@@ -94,6 +94,36 @@ ros2 launch panda ign.launch.py
 ```
 
 
+<details>
+<summary><h3>How to?</summary>
+
+You can run kinova in simulation by executing following commands: 
+```
+ros2 launch kortex_bringup kortex_sim_control.launch.py dof:=7 use_sim_time:=true launch_rviz:=false
+```
+or 
+```
+kinova_sim
+```
+if alias has been added. 
+
+After that run `move_group` node as follows: 
+```
+ros2 launch kinova_gen3_7dof_robotiq_2f_85_moveit_config sim.launch.py
+```
+
+After that run `arm_api2` `moveit2_iface` node as follows: 
+```
+ros2 launch arm_api2 moveit2_iface.launch.py 
+```
+
+#### Interface: 
+
+You can set robot state by calling `/change_state` service. 
+Command pose by calling `/arm/command/cmd_pose`. 
+Get pose by reading `/arm/state/current_pose`. 
+
+<details>
 
 <details>
 <summary><h3> Dev help </summary>
