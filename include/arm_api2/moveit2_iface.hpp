@@ -13,6 +13,8 @@
 
 //* ros
 #include <rclcpp/rclcpp.hpp>
+#include "tf2/LinearMath/Quaternion.h"
+#include "tf2/LinearMath/Matrix3x3.h"
 
 //* moveit
 #include <moveit_servo/servo.h>
@@ -31,6 +33,7 @@
 
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
+
 
 #define stringify( name ) #name
 
@@ -112,7 +115,9 @@ class m2Iface: public rclcpp::Node
         void getArmState();  
 
         /* utils */
-        bool comparePositions(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2);  
+        bool comparePosition(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2);
+        bool compareOrientation(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2);   
+        bool comparePose(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2); 
         std::vector<geometry_msgs::msg::Pose> createCartesianWaypoints(geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2, int n); 
 
         /* funcs */
@@ -148,6 +153,7 @@ class m2Iface: public rclcpp::Node
         bool nodeInit           = false; 
         bool recivCmd           = false; 
         bool servoEntered       = false; 
+        bool async              = false; 
 
         /* ros vars */
         geometry_msgs::msg::PoseStamped m_currPoseCmd; 
