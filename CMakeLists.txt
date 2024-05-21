@@ -17,6 +17,7 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(arm_api2_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
+find_package(tf2 REQUIRED)
 
 # include headers
 include_directories(include)

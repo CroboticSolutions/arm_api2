@@ -25,8 +25,9 @@ import os
 # https://roboticsbackend.com/ros2-yaml-params/
 # https://roboticsbackend.com/rclcpp-params-tutorial-get-set-ros2-params-with-cpp/
 # TODO: argparse add at some point
-yaml = "kinova/kinova_sim.yaml"
-servo_yaml = "kinova/kinova_servo_sim.yaml"
+robot = "kinova"
+yaml = "{0}/{1}_sim.yaml".format(robot, robot)
+servo_yaml = "{0}/{1}_servo_sim.yaml".format(robot, robot)
 use_sim_time = True
 enable_servo = True
 joy = True
@@ -66,6 +67,7 @@ def generate_launch_description():
     if joy: 
 
         # https://index.ros.org/p/joy/ --> joy node as joystick (Create subscriber that takes cmd_vel)
+        # Example of demo joint_jog
         joy_node = Node(
             package='joy', 
             executable="joy_node", 
