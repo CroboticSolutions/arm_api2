@@ -56,7 +56,9 @@ void m2Iface::init_publishers()
 void m2Iface::init_subscribers()
 {
     auto pose_cmd_name = config["topic"]["sub"]["cmd_pose"]["name"].as<std::string>(); 
+    auto cart_traj_cmd_name = config["topic"]["sub"]["cmd_traj"]["name"].as<std::string>(); 
     pose_cmd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(ns_ + pose_cmd_name, 1, std::bind(&m2Iface::pose_cmd_cb, this, _1));
+    ctraj_cmd_sub_ = this->create_subscription<arm_api2_msgs::msg::CartesianWaypoints>(ns_ + cart_traj_cmd_name, 1, std::bind(&m2Iface::cart_poses_cb, this, _1));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
 }
 
@@ -99,13 +101,18 @@ std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()
 
 void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
-    
     m_currPoseCmd.pose = msg->pose;
     // Compare with old command
     RCLCPP_INFO_STREAM(this->get_logger(), "Test1");
     if (!comparePose(m_currPoseCmd, m_oldPoseCmd)) recivCmd = true;
     RCLCPP_INFO_STREAM(this->get_logger(), "recivCmd: " << recivCmd); 
     RCLCPP_INFO_STREAM(this->get_logger(), "Test2"); 
+}
+
+void m2Iface::cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::SharedPtr msg)
+{
+    m_cartesianWaypoints = msg->poses; 
+    recivTraj = true; 
 }
 
 void m2Iface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
@@ -208,7 +215,7 @@ void m2Iface::execPlan(bool async=false)
     }
 }
 
-void m2Iface::execCartesian(bool async=false)
+void m2Iface::planExecCartesian(bool async=false)
 {   
     // TODO: Move this method to utils.cpp
     std::vector<geometry_msgs::msg::Pose> cartesianWaypoints = createCartesianWaypoints(m_currPoseState.pose, m_currPoseCmd.pose, NUM_CART_PTS); 
@@ -219,6 +226,20 @@ void m2Iface::execCartesian(bool async=false)
     double eefStep = 0.02; 
     // plan Cartesian path
     m_moveGroupPtr->computeCartesianPath(cartesianWaypoints, eefStep, jumpThr, trajectory);
+    execTrajectory(trajectory, async); 
+    m_oldPoseCmd = m_currPoseCmd; 
+}
+
+void m2Iface::execCartesian(bool async=false)
+{   
+     
+    // TODO: create Cartesian plan, use as first point currentPose 4 now, and as end point use targetPoint 
+    moveit_msgs::msg::RobotTrajectory trajectory;
+    // TODO: Set as params that can be configured in YAML!
+    double jumpThr = 0.0; 
+    double eefStep = 0.02; 
+    // plan Cartesian path
+    m_moveGroupPtr->computeCartesianPath(m_cartesianWaypoints, eefStep, jumpThr, trajectory);
     execTrajectory(trajectory, async); 
     m_oldPoseCmd = m_currPoseCmd; 
 }
@@ -353,11 +374,17 @@ bool m2Iface::run()
     }
 
     if (robotState == CART_TRAJ_CTL)
-    {
+    {   
+        // TODO: Beware if both are true at the same time, shouldn't occur, 
         if (recivCmd) {
-            execCartesian(async);
+            planExecCartesian(async);
             recivCmd = false; 
         } 
+
+        if (recivTraj){
+            execCartesian(async);
+            recivTraj = false; 
+        }
     }
 
     if (robotState == SERVO_CTL)

@@ -30,6 +30,7 @@
 //* msgs
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include "arm_api2_msgs/msg/cartesian_waypoints.hpp"
 
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
@@ -92,7 +93,8 @@ class m2Iface: public rclcpp::Node
         std::unique_ptr<moveit_servo::Servo> init_servo(); 
         
         /* subs */
-        rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr    pose_cmd_sub_;
+        rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr        pose_cmd_sub_;
+        rclcpp::Subscription<arm_api2_msgs::msg::CartesianWaypoints>::SharedPtr ctraj_cmd_sub_; 
 
         /* pubs */
         rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr       pose_state_pub_;
@@ -102,6 +104,7 @@ class m2Iface: public rclcpp::Node
 
         /* callbacks */
         void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
+        void cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::SharedPtr msg); 
         void change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
                              const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res); 
         bool run(); 
@@ -124,6 +127,7 @@ class m2Iface: public rclcpp::Node
         void execPlan(bool async); 
         void execMove(bool async);  
         void execCartesian(bool async); 
+        void planExecCartesian(bool async); 
         void execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async); 
 
         // Simple state machine 
@@ -152,6 +156,7 @@ class m2Iface: public rclcpp::Node
         bool pSceneMonitorInit  = false;
         bool nodeInit           = false; 
         bool recivCmd           = false; 
+        bool recivTraj          = false; 
         bool servoEntered       = false; 
         bool async              = false; 
 
@@ -160,6 +165,7 @@ class m2Iface: public rclcpp::Node
         geometry_msgs::msg::PoseStamped m_pubCurrPoseCmd; 
         geometry_msgs::msg::PoseStamped m_oldPoseCmd; 
         geometry_msgs::msg::PoseStamped m_currPoseState; 
+        std::vector<geometry_msgs::msg::Pose> m_cartesianWaypoints; 
 
         moveit::planning_interface::MoveGroupInterfacePtr m_moveGroupPtr; 
         //moveit::planning_interface::PlanningSceneInterface *m_planningSceneInterfacePtr; 

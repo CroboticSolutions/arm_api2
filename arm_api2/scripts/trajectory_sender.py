@@ -39,7 +39,7 @@ class CreateAndPublishTrajectory(Node):
         #self.trigger_sub.register_callback(self.trig_cb)
 
         # Create publishers
-        self.traj_pub       = self.create_publisher(JointTrajectory, 'joint_trajectory', 10)
+        self.traj_pub       = self.create_publisher(CartesianWaypoints, '/arm/cmd/traj', 1)
         
         # Create timer
         self.timer          = self.create_timer(timer_period, self.run)
@@ -95,6 +95,7 @@ class CreateAndPublishTrajectory(Node):
         self.T = np.vstack((T_, np.array([0, 0, 0, 1])))
         self.get_logger().debug(f"Reciv T matrix is: {self.T}")
 
+
     def create_trajectory(self): 
         self.get_logger().info("Create trajectory!")
         ct = CartesianWaypoints()
@@ -109,16 +110,17 @@ class CreateAndPublishTrajectory(Node):
             rosp.position.x = p_[0]; rosp.position.y = p_[1]; rosp.position.z = p_[2]
             rosp.orientation.x = quat[0]; rosp.orientation.y = quat[1]; rosp.orientation.z = quat[2]; rosp.orientation.w = quat[3]
             ct.poses.append(rosp)
-        print(ct)
+        return ct
 
-    def publish_trajectory(self): 
+    def publish_trajectory(self, msg):
+        self.traj_pub.publish(msg) 
         self.get_logger().info("Publish trajectory!")
 
     def run(self):
         if self.reciv_trig and self.reciv_p:
             self.get_logger().info("Sending trajectory!") 
-            self.create_trajectory()
-            self.publish_trajectory()
+            ct = self.create_trajectory()
+            self.publish_trajectory(ct)
             self.reciv_trig = False
         
         else: 
