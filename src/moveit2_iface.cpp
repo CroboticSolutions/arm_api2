@@ -25,11 +25,6 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
     NUM_CART_PTS        = config["robot"]["num_cart_pts"].as<int>(); 
     JOINT_STATES        = config["robot"]["joint_states"].as<std::string>(); 
-
-    // Change queue_size parameter
-    /*rclcpp::SensorDataQoS qos;
-    int queueSize = 2;
-    qos.keep_last(queueSize);*/
     
     // Currently not used :) 
     ns_ = this->get_namespace(); 	

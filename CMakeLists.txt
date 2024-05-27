@@ -18,6 +18,7 @@ find_package(std_msgs REQUIRED)
 find_package(arm_api2_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(tf2 REQUIRED)
+find_package(rclpy REQUIRED)
 
 # include headers
 include_directories(include)
@@ -56,12 +57,21 @@ target_include_directories(joy_ctl
   include/
 )
 
+# python dependencies 
 ament_target_dependencies(joy_ctl
   rclcpp std_msgs geometry_msgs std_srvs sensor_msgs)
 
 install(TARGETS 
 joy_ctl
 DESTINATION lib/${PROJECT_NAME})
+
+# Install Python modules
+ament_python_install_package(${PROJECT_NAME})
+
+install(PROGRAMS 
+  arm_api2/scripts/trajectory_sender.py
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
