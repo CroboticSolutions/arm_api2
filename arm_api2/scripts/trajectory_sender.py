@@ -95,7 +95,6 @@ class CreateAndPublishTrajectory(Node):
         self.T = np.vstack((T_, np.array([0, 0, 0, 1])))
         self.get_logger().debug(f"Reciv T matrix is: {self.T}")
 
-
     def create_trajectory(self): 
         self.get_logger().info("Create trajectory!")
         ct = CartesianWaypoints()
