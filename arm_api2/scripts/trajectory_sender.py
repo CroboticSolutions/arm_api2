@@ -6,11 +6,8 @@ import os
 import numpy as np
 import rclpy.duration
 from rclpy.node import Node
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from geometry_msgs.msg import PoseStamped, Pose
 from std_msgs.msg import Bool
-from ament_index_python.packages import get_package_share_directory
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from scipy.spatial.transform import Rotation as R 
 from builtin_interfaces.msg import Duration
 from arm_api2_msgs.msg import CartesianWaypoints
@@ -22,31 +19,18 @@ from arm_api2_msgs.msg import CartesianWaypoints
 class CreateAndPublishTrajectory(Node):
 
     def __init__(self):
-
-        # Create QoS profile --> not used currently
-        #qp = QoSProfile(
-        #    reliability=QoSReliabilityPolicy.BEST_EFFORT,
-        #    history=QoSHistoryPolicy.KEEP_LAST,
-        #    depth=1
-        #)
         super().__init__('create_publish_trajectory')
-        timer_period        = 1.0  # seconds
 
         # Create subscribers
         self.curr_p_sub     = self.create_subscription(PoseStamped, "/arm/state/current_pose", self.curr_p_cb, 1)
-        #self.curr_p_sub.register_callback(self.curr_p_cb)
         self.trigger_sub    = self.create_subscription(Bool, "/traj_trigger", self.trig_cb, 1)
-        #self.trigger_sub.register_callback(self.trig_cb)
 
         # Create publishers
         self.traj_pub       = self.create_publisher(CartesianWaypoints, '/arm/cmd/traj', 1)
         
         # Create timer
+        timer_period        = 1.0  # seconds
         self.timer          = self.create_timer(timer_period, self.run)
-
-        #pkg_pth             = get_package_share_directory("arm_api2")
-        #c_csv_pth           = os.path.join(pkg_pth, 'utils', 'CS_C.csv')
-        #s_csv_pth           = os.path.join(pkg_pth, 'utils', 'CS_S.csv')
         c_csv_pth = "/root/ws_moveit2/src/arm_api2/utils/CS_C.csv"
         s_csv_pth = "/root/ws_moveit2/src/arm_api2/utils/CS_S.csv"
 
@@ -60,6 +44,7 @@ class CreateAndPublishTrajectory(Node):
         # Flags
         self.reciv_trig = False
         self.reciv_p = False
+        self.i = 0
     
     def load_positions(self, csv_pth):
         p_data = []
@@ -70,10 +55,10 @@ class CreateAndPublishTrajectory(Node):
                 x = row['x']; y = row['y']; z = row['z']
                 p_data.append(np.array([float(x), float(y), float(z), 1]).T)
         return p_data
-                
     
     def trig_cb(self, msg): 
         self.reciv_trig = True
+        self.i+=1
 
     def curr_p_cb(self, msg): 
         self.reciv_p = True
@@ -95,11 +80,14 @@ class CreateAndPublishTrajectory(Node):
         self.T = np.vstack((T_, np.array([0, 0, 0, 1])))
         self.get_logger().debug(f"Reciv T matrix is: {self.T}")
 
-    def create_trajectory(self): 
+    def create_trajectory(self, letter): 
         self.get_logger().info("Create trajectory!")
+
+        if letter == 'S': data = self.s_data
+        if letter == 'C': data = self.c_data
         ct = CartesianWaypoints()
         # TODO: remove c_data as hardcoding 
-        for i, p in enumerate(self.c_data):
+        for i, p in enumerate(data):
             dt = 0.05
             self.get_logger().info(f"p is: {p}")
             self.get_logger().info(f"R is: {self.T}")
@@ -118,9 +106,13 @@ class CreateAndPublishTrajectory(Node):
     def run(self):
         if self.reciv_trig and self.reciv_p:
             self.get_logger().info("Sending trajectory!") 
-            ct = self.create_trajectory()
-            self.publish_trajectory(ct)
+            if self.i == 0: 
+                traj = self.create_trajectory('C')
+            if self.i == 1: 
+                traj = self.create_trajectory('S')
+            self.publish_trajectory(traj)
             self.reciv_trig = False
+            self.i = 0
         
         else: 
             if self.reciv_p: 
