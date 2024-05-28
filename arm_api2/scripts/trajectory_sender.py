@@ -2,14 +2,12 @@
 
 import rclpy
 import csv
-import os
 import numpy as np
 import rclpy.duration
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, Pose
 from std_msgs.msg import Bool
 from scipy.spatial.transform import Rotation as R 
-from builtin_interfaces.msg import Duration
 from arm_api2_msgs.msg import CartesianWaypoints
 
 # NOTE: Requirement transformations 

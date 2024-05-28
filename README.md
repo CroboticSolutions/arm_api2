@@ -123,6 +123,18 @@ You can set robot state by calling `/change_state` service.
 Command pose by calling `/arm/command/cmd_pose`. 
 Get pose by reading `/arm/state/current_pose`. 
 
+#### Gazebo 
+
+Error with gazebo that turns up a lot and solution: 
+```
+https://github.com/gazebosim/gazebo-classic/issues/3277
+```
+
+#### Kinova
+
+How to setup kinova [here](https://git.initrobots.ca/amercader/kinova-kortex-installation). 
+
+
 </details>
 
 <details>
