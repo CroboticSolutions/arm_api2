@@ -14,7 +14,7 @@ For building ROS 2 packages and moveit, it is neccessary to use [colcon](https:/
 ### Build:
 
 Build in ROS 2 workspace. 
-Build just one packaga with: 
+Build just one package with: 
 ```
 colcon build --packages-select arm_api2
 ```
