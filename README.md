@@ -4,7 +4,7 @@ API for robotic manipulators based on:
 * [Moveit2](https://moveit.picknik.ai/main/index.html)
 * [ROS 2](https://docs.ros.org/en/humble/index.html)
 
-Docker for building required environment can be found [here](https://github.com/larics/docker_files/tree/master/ros2-humble/moveit2). 
+Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/kinova). 
 
 For building ROS 2 packages and moveit, it is neccessary to use [colcon](https://colcon.readthedocs.io/en/released/user/quick-start.html). 
 
@@ -124,17 +124,17 @@ ros2 launch arm_api2 moveit2_iface.launch.py
 
 ### ROS 2 robot interface: 
 
-Change robot state: 
+**Change robot state**: 
 - srv: `/arm_api2_msgs/srv/ChangeState.srv`
 - values `JOINT_TRAJ_CTL || CART_TRAJ_CTL || SERVO_CTL`
 
-Command robot pose: 
+**Command robot pose**: 
 - msg: `geometry_msgs/msg/PoseStamped.msg`
 
-Command cartesian path:   
+**Command cartesian path**:   
 - msg: `arm_api2_msgs/msg/CartesianWaypoints.msg`
 
-Get current end effector pose: 
+**Get current end effector pose**: 
 - msg: `geometry_msgs/msg/PoseStamped.msg`
 
 #### Available robot states
