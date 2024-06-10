@@ -96,7 +96,7 @@ Wanted arm functionalities:
 2. `grasp` 
 3. `release` 
 4. `push`
-5. `<something_else?>
+5. `<something_else?>`
 
 ### Launch
 
