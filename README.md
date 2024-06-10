@@ -15,6 +15,54 @@ Aditional dependencies are:
 - [kinova](https://github.com/CroboticSolutions/ros2_kortex)
 - [panda](https://github.com/AndrejOrsula/panda_ign_moveit2)
 
+### Aim of the repository
+
+With `arm_api` as precursor, which was intended to provide simple ROS interfacing with 
+robot manipulators with the help of MoveIt! and ROS. 
+
+This repository `arm_api2` is intended to provide interfacing support for robot manipulators for ROS 2 and MoveIt2!. 
+
+### Goals 
+
+Create API simple to **run** and **maintain** that supports working with different 
+robot manipulators out of the box. 
+
+Robot manipulators of interest are: 
+* Franka Emika
+* UR 
+* Kinova 
+* Kuka 
+
+Wanted arm functionalities: 
+1. `go_to_pose`
+2. `grasp` 
+3. `release` 
+4. `push`
+5. `<something_else?>`
+
+### ROS 2 robot interface: 
+
+**Change robot state**: 
+- srv: `/arm_api2_msgs/srv/ChangeState.srv`
+- values `JOINT_TRAJ_CTL || CART_TRAJ_CTL || SERVO_CTL`
+
+**Command robot pose**: 
+- msg: `geometry_msgs/msg/PoseStamped.msg`
+
+**Command cartesian path**:   
+- msg: `arm_api2_msgs/msg/CartesianWaypoints.msg`
+
+**Get current end effector pose**: 
+- msg: `geometry_msgs/msg/PoseStamped.msg`
+
+#### Available robot states
+
+Currently implemented and available robot states are: 
+- `JOINT_TRAJ_CTL`, which is used for joint control 
+- `CART_TRAJ_CTL`, which is used for cartesian control 
+- `SERVO_CTL`, which is used for the end effector servoing
+
+
 ### Build:
 
 Build in ROS 2 workspace. 
@@ -66,12 +114,7 @@ Start kinova with:
 ```
 kinova_sim
 ```
-### Aim of the repository
 
-With `arm_api` as precursor, which was intended to provide simple ROS interfacing with 
-robot manipulators with the help of moveit. 
-
-This repository `arm_api2` is intended to provide interfacing support for robot manipulators for ROS 2 and MoveIt2!. 
 
 ### Change state 
 
@@ -80,23 +123,6 @@ In order to change state call following command:
 ros2 service call /change_state arm_api2_msgs/srv/ChangeState "{state: JOINT_TRAJ_CTL}
 ```
 
-### Goals 
-
-Create API simple to **run** and **maintain** that supports working with different 
-robot manipulators out of the box. 
-
-Robot manipulators of interest are: 
-* Franka Emika
-* UR 
-* Kinova 
-* Kuka 
-
-Wanted arm functionalities: 
-1. `go_to_pose`
-2. `grasp` 
-3. `release` 
-4. `push`
-5. `<something_else?>`
 
 ### Launch
 
@@ -106,7 +132,7 @@ ros2 launch panda ign.launch.py
 ```
 
 <details>
-<summary><h3>How to?</summary>
+<summary><h3>How to use?</summary>
 
 You can run kinova in simulation by executing following commands: 
 ```
@@ -127,29 +153,6 @@ After that run `arm_api2` `moveit2_iface` node as follows:
 ```
 ros2 launch arm_api2 moveit2_iface.launch.py 
 ```
-
-### ROS 2 robot interface: 
-
-**Change robot state**: 
-- srv: `/arm_api2_msgs/srv/ChangeState.srv`
-- values `JOINT_TRAJ_CTL || CART_TRAJ_CTL || SERVO_CTL`
-
-**Command robot pose**: 
-- msg: `geometry_msgs/msg/PoseStamped.msg`
-
-**Command cartesian path**:   
-- msg: `arm_api2_msgs/msg/CartesianWaypoints.msg`
-
-**Get current end effector pose**: 
-- msg: `geometry_msgs/msg/PoseStamped.msg`
-
-#### Available robot states
-
-Currently implemented and available robot states are: 
-- `JOINT_TRAJ_CTL`, which is used for joint control 
-- `CART_TRAJ_CTL`, which is used for cartesian control 
-- `SERVO_CTL`, which is used for the end effector servoing
-
 
 #### Kinova
 
