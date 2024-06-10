@@ -94,6 +94,9 @@ Robot manipulators of interest are:
 Wanted arm functionalities: 
 1. `go_to_pose`
 2. `grasp` 
+3. `release` 
+4. `push`
+5. `<something_else?>
 
 ### Launch
 
@@ -101,7 +104,6 @@ Launch ign simulation with following command:
 ```
 ros2 launch panda ign.launch.py
 ```
-
 
 <details>
 <summary><h3>How to?</summary>
