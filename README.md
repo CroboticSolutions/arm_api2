@@ -11,6 +11,10 @@ For building ROS 2 packages and moveit, it is neccessary to use [colcon](https:/
 ### Depends on: 
 - [arm_api2_msgs](https://github.com/CroboticSolutions/arm_api2_msgs)
 
+Aditional dependencies are: 
+- [kinova](https://github.com/CroboticSolutions/ros2_kortex)
+- [panda](https://github.com/AndrejOrsula/panda_ign_moveit2)
+
 ### Build:
 
 Build in ROS 2 workspace. 
@@ -172,7 +176,7 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 
 ### TODO: 
 - [ ] Test with real robot manipulators
-- [ ] Create standardized joystick class (full)
+- [ ] Create standardized joystick class [full]
 - [ ] Discuss potential SW patterns that can be used
 - [ ] Update and fix documentation
 </details>
