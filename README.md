@@ -1,6 +1,6 @@
 # arm_api2
 
-API for the robotic manipulators realying on: 
+API for robotic manipulators based on: 
 * [Moveit2](https://moveit.picknik.ai/main/index.html)
 * [ROS 2](https://docs.ros.org/en/humble/index.html)
 
@@ -8,18 +8,23 @@ Docker for building required environment can be found [here](https://github.com/
 
 For building ROS 2 packages and moveit, it is neccessary to use [colcon](https://colcon.readthedocs.io/en/released/user/quick-start.html). 
 
-#### Build just one package: 
+### Depends on: 
+- [arm_api2_msgs](https://github.com/CroboticSolutions/arm_api2_msgs)
 
+### Build:
+
+Build in ROS 2 workspace. 
+Build just one packaga with: 
 ```
 colcon build --packages-select arm_api2
 ```
 
-Build with the compile commands: 
+Build with the compile commands (enable autocomplete): 
 ```
 colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 ```
 
-Building with `--symlink-install` causes it to fail often, you can run: 
+Building with `--symlink-install` causes it to fail often because of already built ROS 2 packages, you can run: 
 ```
 colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON --continue-on-error
 ```
@@ -117,18 +122,28 @@ After that run `arm_api2` `moveit2_iface` node as follows:
 ros2 launch arm_api2 moveit2_iface.launch.py 
 ```
 
-#### Interface: 
+### ROS 2 robot interface: 
 
-You can set robot state by calling `/change_state` service. 
-Command pose by calling `/arm/command/cmd_pose`. 
-Get pose by reading `/arm/state/current_pose`. 
+Change robot state: 
+- srv: `/arm_api2_msgs/srv/ChangeState.srv`
+- values `JOINT_TRAJ_CTL || CART_TRAJ_CTL || SERVO_CTL`
 
-#### Gazebo 
+Command robot pose: 
+- msg: `geometry_msgs/msg/PoseStamped.msg`
 
-Error with gazebo that turns up a lot and solution: 
-```
-https://github.com/gazebosim/gazebo-classic/issues/3277
-```
+Command cartesian path:   
+- msg: `arm_api2_msgs/msg/CartesianWaypoints.msg`
+
+Get current end effector pose: 
+- msg: `geometry_msgs/msg/PoseStamped.msg`
+
+#### Available robot states
+
+Currently implemented and available robot states are: 
+- `JOINT_TRAJ_CTL`, which is used for joint control 
+- `CART_TRAJ_CTL`, which is used for cartesian control 
+- `SERVO_CTL`, which is used for the end effector servoing
+
 
 #### Kinova
 
@@ -155,32 +170,11 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 <details>
 <summary><h2>Status</h2></summary>
 
-### DONE: 
-- [x] Create pkg skeleton 
-- [x] Build moveit2 and ros 2 Docker 
-- [x] Decouple header and source
-- [x] Create first publisher and subscriber 
-- [x] Init MoveGroup
-- [x] Add ign running
-- [x] Add ctl 
-- [x] Add change state
-- [x] Init planning scene
-- [x] Enable autocomplete with compile_commands
-- [x] Implement first arm_api2 for the franka for ros 2
-- [x] Init planning scene
-- [x] Added kinova_sim
-- [x] Added franka_sim
-- [x] Added init cartesian control 
-- [x] Added init servo control 
-- [x] Added init joystick but add teleop one
-- [x] Init planning scene
-- [x] Autocomplete with compile commands
-- [x] First arm api for for franka_ros
-
 ### TODO: 
-- [ ] Define SW patterns that makes sense to use
-- [ ] Init planning scene 
-- [ ] Add joystick 
+- [ ] Test with real robot manipulators
+- [ ] Create standardized joystick class (full)
+- [ ] Discuss potential SW patterns that can be used
+- [ ] Update and fix documentation
 </details>
 
 

@@ -1,6 +1,47 @@
+
+/*******************************************************************************
+*
+ * Copyright (c) 2024, Crobotic Solutions d.o.o. (www.crobotics.tech)
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * * Redistributions of source code must retain the above copyright notice, this
+ *   list of conditions and the following disclaimer.
+ *
+ * * Redistributions in binary form must reproduce the above copyright notice,
+ *   this list of conditions and the following disclaimer in the documentation
+ *   and/or other materials provided with the distribution.
+ *
+ * * Neither the name of the copyright holder nor the names of its
+ *   contributors may be used to endorse or promote products derived from
+ *   this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *******************************************************************************/
+
+/*      Title       : moveit2_iface.hpp
+ *      Project     : arm_api2
+ *      Created     : 05/10/2024
+ *      Author      : Filip Zoric
+ *
+ *      Description : The core robot manipulator and MoveIt2! ROS 2 interfacing header class.
+ */
+
+
 #ifndef MOVEIT2_IFACE_HPP
 #define MOVEIT2_IFACE_HPP
-// Used instead of #pragma once because of the diff PC support
 
 #include <chrono>
 #include <cmath>
@@ -168,7 +209,6 @@ class m2Iface: public rclcpp::Node
         std::vector<geometry_msgs::msg::Pose> m_cartesianWaypoints; 
 
         moveit::planning_interface::MoveGroupInterfacePtr m_moveGroupPtr; 
-        //moveit::planning_interface::PlanningSceneInterface *m_planningSceneInterfacePtr; 
         moveit::core::RobotStatePtr m_robotStatePtr;  
         moveit::core::RobotModelPtr kinematic_model; 
         std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> m_pSceneMonitorPtr; 
@@ -177,20 +217,3 @@ class m2Iface: public rclcpp::Node
 }; 
 
 #endif
-
-// MoveIt2 ROS wrappers for cpp
-// https://moveit.picknik.ai/main/doc/examples/examples.html#movegroup-ros-wrappers-in-c
-// TODO: 
-// - [x] Class init (constructor)
-// - [ ] Class destrcutor -- 
-// - [x] private vs public variables --> everything node related (private) 
-// - [x] Init move_group 
-// - [x] Add planning scene monitor
-// - [ ] Add all func from arm_api
-// - [x] MoveIt cpp iface https://moveit.picknik.ai/main/doc/examples/move_group_interface/move_group_interface_tutorial.html
-// - [x] Init robot model 
-// - [x] Init planning scene monitor 
-// - [ ] Add arm modes 
-// - [ ] Add Cartesian planning 
-// - [ ] Test with a real robot arm
-// - [ ] Add servoing 
