@@ -55,13 +55,22 @@ Wanted arm functionalities:
 **Get current end effector pose**: 
 - msg: `geometry_msgs/msg/PoseStamped.msg`
 
-#### Available robot states
+#### Robot states
 
 Currently implemented and available robot states are: 
 - `JOINT_TRAJ_CTL`, which is used for joint control 
 - `CART_TRAJ_CTL`, which is used for cartesian control 
 - `SERVO_CTL`, which is used for the end effector servoing
 
+Change robot state by calling: 
+
+```
+ros2 service call /change_state arm_api2_msgs/srv/ChangeState "{state: JOINT_TRAJ_CTL}
+```
+
+
+<details>
+<summary><h3>How to build package?</h3></summary>
 
 ### Build:
 
@@ -85,9 +94,11 @@ Full verbose build command:
 ```
 colcon build --symlink-install --packages-select moveit2_tutorials --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_VERBOSE_MAKEFILE=ON
 ```
+</details>
 
-### Aliases
+### Simplify your life
 
+#### Aliases
 Copy to `~/.bashrc` and source it. 
 
 ```
@@ -103,36 +114,35 @@ Build `arm_api2` package as:
 cbp arm_api2
 ``` 
 
-Start franka with: 
+Start franka sim with: 
 
 ```
 franka_sim
 ```
 
-Start kinova with: 
+Start kinova sim with: 
 
 ```
 kinova_sim
 ```
 
+#### Tmunxinator 
 
-### Change state 
-
-In order to change state call following command: 
+Start kinova with: 
 ```
-ros2 service call /change_state arm_api2_msgs/srv/ChangeState "{state: JOINT_TRAJ_CTL}
+tmuxinator start kinova_api2
 ```
 
-
-### Launch
-
-Launch ign simulation with following command: 
+after calling 
 ```
-ros2 launch panda ign.launch.py
+./copy_tmuxinator_config.sh kinova_api2.yml
 ```
+located in `utils/tmux_configs`. Navigate between 
+panes with `Ctrl+B`+(arrows). 
+
 
 <details>
-<summary><h3>How to use?</summary>
+<summary><h3>How to use? Complete steps</summary>
 
 You can run kinova in simulation by executing following commands: 
 ```
@@ -156,7 +166,7 @@ ros2 launch arm_api2 moveit2_iface.launch.py
 
 #### Kinova
 
-How to setup kinova [here](https://git.initrobots.ca/amercader/kinova-kortex-installation). 
+How to setup real kinova [here](https://git.initrobots.ca/amercader/kinova-kortex-installation). 
 
 
 </details>
