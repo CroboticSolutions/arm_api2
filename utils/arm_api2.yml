@@ -1,0 +1,19 @@
+# /root/.config/tmuxinator/arm_api2.yml
+
+name: arm_api2
+root: ~/
+
+windows:
+  - editor:
+      layout: tiled
+      # Synchronize all panes of this window, can be enabled before or after the pane commands run.
+      # 'before' represents legacy functionality and will be deprecated in a future release, in favour of 'after'
+      # synchronize: after
+      panes:
+        - kinova_sim
+        - ros2 launch kinova_gen3_7dof_robotiq_2f_85_moveit_config sim.launch.py
+        - sleep 10; ros2 launch arm_api2 moveit2_iface.launch.py
+        - sleep 15; ros2 launch ros2_dash_gui bridge.launch.py
+        - echo "YOU CAN START GUI NOW!"
+  - server: bundle exec rails s
+  - logs: tail -f log/development.log
