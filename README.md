@@ -185,18 +185,6 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 * [UR_ros2](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver)
 </details>
 
-
-<details>
-<summary><h2>Status</h2></summary>
-
-### TODO: 
-- [ ] Test with real robot manipulators
-- [ ] Create standardized joystick class [full]
-- [ ] Discuss potential SW patterns that can be used
-- [ ] Update and fix documentation
-</details>
-
-
 <details> 
 <summary><h3> Useful learning links</h3></summary>
 
@@ -215,3 +203,17 @@ You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2.
 
 </details>
 
+
+<details>
+<summary><h2>Status</h2></summary>
+
+### TODO: 
+- [ ] Test with real robot manipulator
+- [ ] Create standardized joystick class [full]
+- [ ] Discuss potential SW patterns that can be used
+- [ ] Update and fix documentation
+- [ ] Add full cartesian following 
+- [ ] Add roll, pitch, yaw and quaternion conversion 
+- [ ] Decouple moveit2_iface.cpp and utils.cpp (contains all utils scripts)
+- [ ] Create table of supported robot manipulators 
+</details>
