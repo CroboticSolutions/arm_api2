@@ -144,7 +144,7 @@ panes with `Ctrl+B`+(arrows).
 
 
 <details>
-<summary><h3>How to use? Complete steps</summary>
+<summary><h3>How to use Kinova?</summary>
 
 You can run kinova in simulation by executing following commands: 
 ```
@@ -172,6 +172,46 @@ How to setup real kinova [here](https://git.initrobots.ca/amercader/kinova-korte
 
 
 </details>
+
+
+summary><h3>How to use Kinova?</summary>
+
+You can run kinova in simulation by executing following commands: 
+```
+ros2 launch ur_simulation_gz ur_sim_control.launch.py ur_type:="ur10"
+```
+or 
+```
+ur_sim
+```
+if alias has been added. 
+
+After that run `move_group` node as follows: 
+```
+ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:="ur10" use_sim_time:=true
+```
+
+After that run `arm_api2` `moveit2_iface` node as follows: 
+```
+ros2 launch arm_api2 moveit2_iface.launch.py
+```
+
+but make sure to setup `robot` parameter to `ur`. 
+
+#### How to build UR sim? 
+
+First run: 
+```
+sudo apt-get install ros-humble-ur
+```
+
+After that, in your ROS 2 workspace clone: 
+* [ur_gz_sim](https://github.com/CroboticSolutions/Universal_Robots_ROS2_GZ_Simulation/tree/humble)  
+* [ur_ros2_driver](https://github.com/CroboticSolutions/Universal_Robots_ROS2_Driver/tree/humble)  
+and build your workspace. Source it, and you're good to go. 
+
+Note, those are forks of the official UR repositories on the `humble` branch, 
+with [slight changes](https://github.com/CroboticSolutions/Universal_Robots_ROS2_Driver/commit/3ad47d7afaf99eeb1f69c6bb23bbdcccce12c4f5) to the `launch` files. 
 
 <details>
 <summary><h3> Dev help </summary>

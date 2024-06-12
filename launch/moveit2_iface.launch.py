@@ -25,7 +25,7 @@ import os
 # https://roboticsbackend.com/ros2-yaml-params/
 # https://roboticsbackend.com/rclcpp-params-tutorial-get-set-ros2-params-with-cpp/
 # TODO: argparse add at some point
-robot = "kinova"
+robot = "ur"
 yaml = "{0}/{1}_sim.yaml".format(robot, robot)
 servo_yaml = "{0}/{1}_servo_sim.yaml".format(robot, robot)
 use_sim_time = True
