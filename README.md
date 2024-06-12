@@ -13,7 +13,9 @@ For building ROS 2 packages and moveit, it is neccessary to use [colcon](https:/
 
 Aditional dependencies are: 
 - [kinova](https://github.com/CroboticSolutions/ros2_kortex)
-- [panda](https://github.com/AndrejOrsula/panda_ign_moveit2)
+- [panda_sim](https://github.com/AndrejOrsula/panda_ign_moveit2)
+- [ur](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver) 
+- [ur_sim](https://github.com/CroboticSolutions/Universal_Robots_ROS2_GZ_Simulation) 
 
 ### Aim of the repository
 
