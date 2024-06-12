@@ -8,7 +8,7 @@ Docker for building required environment can be found [here](https://github.com/
 
 For building ROS 2 packages and moveit, it is neccessary to use [colcon](https://colcon.readthedocs.io/en/released/user/quick-start.html). 
 
-#### Tell us anonymously what arms we should support [here](https://forms.gle/d1fdfAbwZunDUcSi9)
+## Tell us anonymously what arms we should support [here](https://forms.gle/d1fdfAbwZunDUcSi9)
 
 ### Depends on: 
 - [arm_api2_msgs](https://github.com/CroboticSolutions/arm_api2_msgs)
