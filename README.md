@@ -11,7 +11,7 @@ For building ROS 2 packages and moveit, it is neccessary to use [colcon](https:/
 ### Depends on: 
 - [arm_api2_msgs](https://github.com/CroboticSolutions/arm_api2_msgs)
 
-Aditional dependencies are: 
+Aditional dependencies are (depending on the arm you use): 
 - [kinova](https://github.com/CroboticSolutions/ros2_kortex)
 - [panda_sim](https://github.com/AndrejOrsula/panda_ign_moveit2)
 - [ur](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver) 
@@ -174,8 +174,9 @@ How to setup real kinova [here](https://git.initrobots.ca/amercader/kinova-korte
 </details>
 
 
-summary><h3>How to use Kinova?</summary>
+<summary><h3>How to use UR?</summary>
 
+### How to use? 
 You can run kinova in simulation by executing following commands: 
 ```
 ros2 launch ur_simulation_gz ur_sim_control.launch.py ur_type:="ur10"
@@ -198,7 +199,7 @@ ros2 launch arm_api2 moveit2_iface.launch.py
 
 but make sure to setup `robot` parameter to `ur`. 
 
-#### How to build UR sim? 
+#### How to setup? 
 
 First run: 
 ```
@@ -212,6 +213,7 @@ and build your workspace. Source it, and you're good to go.
 
 Note, those are forks of the official UR repositories on the `humble` branch, 
 with [slight changes](https://github.com/CroboticSolutions/Universal_Robots_ROS2_Driver/commit/3ad47d7afaf99eeb1f69c6bb23bbdcccce12c4f5) to the `launch` files. 
+</details>
 
 <details>
 <summary><h3> Dev help </summary>
