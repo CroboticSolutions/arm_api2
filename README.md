@@ -250,11 +250,6 @@ a) Launch your robot (see examples on kinova, UR or Franka) - `move_group` node
 b) Launch `moveit2_iface.launch.py` with correct `robot` param. 
 </details>
 
-<summary><h3> Dev help </summary>
-
-You can add `RvizVisualToolsGui` with `Add New Panel` in the RVIZ2. 
-</details>
-
 <details>
 <summary><h2> Arm interfaces </h2></summary>
 
