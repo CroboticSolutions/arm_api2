@@ -217,11 +217,9 @@ Note, those are forks of the official UR repositories on the `humble` branch,
 with [slight changes](https://github.com/CroboticSolutions/Universal_Robots_ROS2_Driver/commit/3ad47d7afaf99eeb1f69c6bb23bbdcccce12c4f5) to the `launch` files. 
 </details>
 
-<details>
 
 <details>
-
-<summary><h3>How to use with custom arm? </summary>
+<summary><h3>How to use with custom arm?</summary>
 
 In order to use this package with custom arm, you need to do following: 
 
@@ -250,8 +248,6 @@ as shown [here](https://github.com/CroboticSolutions/ros2_kortex/blob/main/korte
 
 a) Launch your robot (see examples on kinova, UR or Franka) - `move_group` node
 b) Launch `moveit2_iface.launch.py` with correct `robot` param. 
-
-
 </details>
 
 <summary><h3> Dev help </summary>
