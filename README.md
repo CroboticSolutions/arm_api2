@@ -290,10 +290,11 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 <summary><h2>Status</h2></summary>
 
 ### TODO: 
-- [ ] Test with real robot manipulator
+- [x] Test with real robot manipulator [tested on Kinova, basic functionality tested]
+- [x] Add basic documentation
+- [ ] Add roadmap
 - [ ] Create standardized joystick class [full]
 - [ ] Discuss potential SW patterns that can be used
-- [ ] Update and fix documentation
 - [ ] Add full cartesian following 
 - [ ] Add roll, pitch, yaw and quaternion conversion 
 - [ ] Decouple moveit2_iface.cpp and utils.cpp (contains all utils scripts)
