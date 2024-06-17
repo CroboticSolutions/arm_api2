@@ -49,51 +49,47 @@ from launch.substitutions import LaunchConfiguration
 
 import os
 
-# https://roboticsbackend.com/ros2-yaml-params/
-# https://roboticsbackend.com/rclcpp-params-tutorial-get-set-ros2-params-with-cpp/
-# TODO: Move all of this as launch arguments 
-robot = "ur"
-yaml = "{0}/{1}_sim.yaml".format(robot, robot)
-servo_yaml = "{0}/{1}_servo_sim.yaml".format(robot, robot)
+# TODO: Make this changeable without ERROR for wrong param type
 use_sim_time = True
-enable_servo = True
-joy = True
+use_servo = True
 dt = 0.1
 
-#TODO: Convert robot name to the part of the launch argument to be able to dynamically change the robot type
-#https://answers.ros.org/question/396345/ros2-launch-file-how-to-convert-launchargument-to-string/
-def generate_launch_description(): 
+def launch_setup(context, *args, **kwargs):
 
-    ld = LaunchDescription()
-    # TODO: How to add robot type as default name for the argument?
-    # Get config params for the robot 
+    launch_nodes_ = []
+    arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
+    arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))   
+
+    # TODO: Swap between sim and real arg depending on the robot type
+    arg_robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
+    arg_servo_yaml = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
+    
+    # Arm params (ctl, servo)
     config_path = os.path.join(
-         get_package_share_directory('arm_api2'), 
-        "config", 
-        yaml
+        get_package_share_directory('arm_api2'),
+        "config",
+        arg_robot_yaml
     )
 
-    # Get parameters for the Servo node
     servo_params = {
         "moveit_servo": ParameterBuilder("arm_api2") 
-        .yaml(f"config/{servo_yaml}")
+        .yaml(f"config/{arg_servo_yaml}")
         .to_dict()
-        # moveit_servo.use_gazebo
     }
 
-    node = Node(
-        package ='arm_api2', 
-        name ='moveit2_iface_node', 
-        executable ='moveit2_iface', 
-        parameters = [{"use_sim_time": use_sim_time}, 
-                      {"config_path": config_path}, 
-                      {"enable_servo": enable_servo},
-                      {"dt": dt},  
-                      servo_params]
-        # Stupid naming conventions 
+    launch_move_group = Node(
+        package='arm_api2',
+        executable='moveit2_iface',
+        parameters=[{"use_sim_time": use_sim_time},
+                    {"enable_servo": use_servo},
+                    {"dt": dt},
+                    {"config_path": config_path},
+                    servo_params]
     )
 
-    if joy: 
+    launch_nodes_.append(launch_move_group)
+
+    if arg_launch_joy: 
 
         # https://index.ros.org/p/joy/ --> joy node as joystick (Create subscriber that takes cmd_vel)
         # Example of demo joint_jog
@@ -103,6 +99,7 @@ def generate_launch_description():
             output="screen", 
             arguments={'device_name':'js0'}.items()
         )
+        launch_nodes_.append(joy_node)
 
         joy_ctl_node = Node(
             package="arm_api2", 
@@ -111,8 +108,31 @@ def generate_launch_description():
             parameters = [{"use_sim_time": use_sim_time}]
         )
 
-        ld.add_action(joy_node)
-        ld.add_action(joy_ctl_node)
+        launch_nodes_.append(joy_ctl_node)
 
-    ld.add_action(node)
-    return ld
+    return launch_nodes_
+
+#https://answers.ros.org/question/396345/ros2-launch-file-how-to-convert-launchargument-to-string/
+def generate_launch_description(): 
+
+    declared_arguments = []
+
+    declared_arguments.append(
+        DeclareLaunchArgument(name='robot_name',
+                              default_value='kinova',
+                              description='robot name')
+    )
+    # TODO: THIS IS NOT CONVERTED TO FALSE WHEN SETUP! FIX IT!
+    declared_arguments.append(
+        DeclareLaunchArgument(name='launch_joy', 
+                              default_value='true', 
+                              description='launch joystick')
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(name='dt', 
+                              default_value='0.1', 
+                              description='time step')
+    )
+
+    return LaunchDescription(declared_arguments + [OpaqueFunction(function=launch_setup)])

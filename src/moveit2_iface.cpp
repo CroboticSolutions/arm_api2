@@ -85,6 +85,7 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
 
 YAML::Node m2Iface::init_config(std::string yaml_path)
 {   
+    RCLCPP_INFO_STREAM(this->get_logger(), "Config yaml path is: " << yaml_path); 
     return YAML::LoadFile(yaml_path);
 }
 

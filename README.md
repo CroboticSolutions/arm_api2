@@ -109,7 +109,7 @@ Copy to `~/.bashrc` and source it.
 alias cbp="colcon build --symlink-install --packages-select" 
 alias panda_sim="ros2 launch panda gz.launch.py"
 alias kinova_sim="ros2 launch kortex_bringup kortex_sim_control.launch.py dof:=7 use_sim_time:=true launch_rviz:=false" 
-
+alias ur_sim="ros2 launch ur_simulation_gz ur_sim_control.launch.py ur_type:=\"ur10\""
 ```
 
 Build `arm_api2` package as: 
@@ -128,6 +128,16 @@ Start kinova sim with:
 
 ```
 kinova_sim
+```
+
+Start ur sim with: 
+```
+ur_sim
+```
+
+Start iface by changing `robot_name` argument to `kinova`, `ur` or `franka`. Depending which arm you want to use, when running: 
+```
+ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=<robot_name>
 ```
 
 #### Tmunxinator 
@@ -165,7 +175,7 @@ ros2 launch kinova_gen3_7dof_robotiq_2f_85_moveit_config sim.launch.py
 
 After that run `arm_api2` `moveit2_iface` node as follows: 
 ```
-ros2 launch arm_api2 moveit2_iface.launch.py 
+ros2 launch arm_api2 moveit2_iface.launch.py robot_name:="kinova"
 ```
 
 #### Kinova
@@ -196,10 +206,9 @@ ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:="ur10" use_sim_time:=t
 
 After that run `arm_api2` `moveit2_iface` node as follows: 
 ```
-ros2 launch arm_api2 moveit2_iface.launch.py
+ros2 launch arm_api2 moveit2_iface.launch.py robot_name:="ur"
 ```
 
-but make sure to setup `robot` parameter to `ur`. 
 
 #### How to setup? 
 
