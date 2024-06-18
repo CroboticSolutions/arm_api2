@@ -164,8 +164,8 @@ void m2Iface::cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::Shared
 void m2Iface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg)
 {   
     std::vector<std::string> jointNames = msg->name;
-    std::vector<double> jointPositions = msg->position;  
-    //m_robotStatePtr->setJointPositions(jointNames, jointPositions);
+    std::vector<double> jointPositions = msg->position;
+    if(robotModelInit) {m_robotStatePtr->setVariablePositions(jointNames, jointPositions);}; 
 
 }
 
@@ -202,6 +202,7 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
     // set move group stuff
     m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME); 
     m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME); 
+
     m_moveGroupPtr->setGoalPositionTolerance(POS_TOL);
     m_moveGroupPtr->startStateMonitor(); 
     // executor
@@ -255,7 +256,8 @@ void m2Iface::execMove(bool async=false)
 {   
 
     m_currPoseCmd = normalizeOrientation(m_currPoseCmd); 
-    m_moveGroupPtr->setPoseTarget(m_currPoseCmd, EE_LINK_NAME); 
+    m_moveGroupPtr->clearPoseTargets(); 
+    m_moveGroupPtr->setPoseTarget(m_currPoseCmd.pose, EE_LINK_NAME); 
     geometry_msgs::msg::PoseStamped poseTarget; 
     poseTarget = m_moveGroupPtr->getPoseTarget(); 
     RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << poseTarget.pose.position.x << " " << poseTarget.pose.position.y << " " << poseTarget.pose.position.z); 
@@ -314,12 +316,30 @@ void m2Iface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool 
 }
 
 void m2Iface::getArmState() 
-{
+{   
+
+    const moveit::core::JointModelGroup* joint_model_group = m_robotStatePtr->getJointModelGroup(PLANNING_GROUP);
+    const std::vector<std::string>& joint_names = m_robotStatePtr->getVariableNames();
+    std::vector<double> joint_values;
+    m_robotStatePtr->copyJointGroupPositions(joint_model_group, joint_values);
+
     // get current ee pose
     m_currPoseState = m_moveGroupPtr->getCurrentPose(EE_LINK_NAME); 
     // current_state_monitor
-    // m_robotStatePtr = m_moveGroupPtr->getCurrentState();
+    m_robotStatePtr = m_moveGroupPtr->getCurrentState();
     // by default timeout is 10 secs
+    m_robotStatePtr->update();
+
+    // also exists in tf2_eigen.hpp but couldn't include it [less deps better]
+    Eigen::Isometry3d currentPose_ = m_moveGroupPtr->getCurrentState()->getFrameTransform(EE_LINK_NAME);
+    m_currPoseState.pose.position.x = currentPose_.translation().x();
+    m_currPoseState.pose.position.y = currentPose_.translation().y(); 
+    m_currPoseState.pose.position.z = currentPose_.translation().z(); 
+    Eigen::Quaterniond q(currentPose_.linear());
+    m_currPoseState.pose.orientation.x = q.x();
+    m_currPoseState.pose.orientation.y = q.y(); 
+    m_currPoseState.pose.orientation.z = q.z(); 
+    m_currPoseState.pose.orientation.w = q.w(); 
 }
 
 // TODO: Move to utils
@@ -468,29 +488,7 @@ bool m2Iface::run()
             servoPtr->start(); 
             servoEntered = true; 
         }
-
-
     }
-
-    /* Test kinematics */
-    /* https://github.com/moveit/moveit/issues/2511 */
-    /* TODO: Move this to method! */
-    /*
-    RCLCPP_INFO_STREAM(this->get_logger(), "planning group is: " << PLANNING_GROUP); 
-    const moveit::core::JointModelGroup* joint_model_group = m_robotStatePtr->getJointModelGroup(PLANNING_GROUP);
-    const std::vector<std::string>& joint_names = m_robotStatePtr->getVariableNames();
-    std::vector<double> joint_values;
-    m_robotStatePtr->copyJointGroupPositions(joint_model_group, joint_values);
-    for (std::size_t i = 0; i < joint_names.size(); ++i)
-    {
-        RCLCPP_INFO(this->get_logger(), "Joint %s: %f", joint_names[i].c_str(), joint_values[i]);
-    }
-    */
-    // This works! 
-    double position_tol = m_moveGroupPtr->getGoalPositionTolerance(); 
-    geometry_msgs::msg::PoseStamped targetPose = m_moveGroupPtr->getPoseTarget();
-    /*RCLCPP_INFO_STREAM(this->get_logger(), "position tol is: " << position_tol); */
-    /*RCLCPP_INFO_STREAM(this->get_logger(), "target pose is: " << targetPose.pose.position.x << " " << targetPose.pose.position.y << " " << targetPose.pose.position.z);*/
 
     return true;     
 }
