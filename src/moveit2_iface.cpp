@@ -99,8 +99,10 @@ void m2Iface::init_subscribers()
 {
     auto pose_cmd_name = config["topic"]["sub"]["cmd_pose"]["name"].as<std::string>(); 
     auto cart_traj_cmd_name = config["topic"]["sub"]["cmd_traj"]["name"].as<std::string>(); 
+    auto joint_states_name = config["topic"]["sub"]["joint_states"]["name"].as<std::string>();
     pose_cmd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(ns_ + pose_cmd_name, 1, std::bind(&m2Iface::pose_cmd_cb, this, _1));
     ctraj_cmd_sub_ = this->create_subscription<arm_api2_msgs::msg::CartesianWaypoints>(ns_ + cart_traj_cmd_name, 1, std::bind(&m2Iface::cart_poses_cb, this, _1));
+    joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(ns_ + joint_states_name, 1, std::bind(&m2Iface::joint_state_cb, this, _1));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
 }
 
@@ -159,6 +161,14 @@ void m2Iface::cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::Shared
     recivTraj = true; 
 }
 
+void m2Iface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg)
+{   
+    std::vector<std::string> jointNames = msg->name;
+    std::vector<double> jointPositions = msg->position;  
+    //m_robotStatePtr->setJointPositions(jointNames, jointPositions);
+
+}
+
 void m2Iface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
                               const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res)
 {
@@ -188,9 +198,11 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
             "robot_description",
             moveNs));
 
+    double POS_TOL = 0.0000001; 
     // set move group stuff
     m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME); 
     m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME); 
+    m_moveGroupPtr->setGoalPositionTolerance(POS_TOL);
     m_moveGroupPtr->startStateMonitor(); 
     // executor
     executor_->add_node(node_); 
@@ -204,6 +216,10 @@ bool m2Iface::setRobotModel(rclcpp::Node::SharedPtr nodePtr)
 {
     robot_model_loader::RobotModelLoader robot_model_loader(nodePtr);
     kinematic_model = robot_model_loader.getModel(); 
+    // Find nicer way to do this
+    moveit::core::RobotStatePtr kinematic_state(new moveit::core::RobotState(kinematic_model));
+    m_robotStatePtr = kinematic_state;
+    m_robotStatePtr->setToDefaultValues();
     RCLCPP_INFO_STREAM(this->get_logger(), "Robot model loaded!");
     RCLCPP_INFO_STREAM(this->get_logger(), "Robot model frame is: " << kinematic_model->getModelFrame().c_str());
     return true;
@@ -242,7 +258,7 @@ void m2Iface::execMove(bool async=false)
     m_moveGroupPtr->setPoseTarget(m_currPoseCmd, EE_LINK_NAME); 
     geometry_msgs::msg::PoseStamped poseTarget; 
     poseTarget = m_moveGroupPtr->getPoseTarget(); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << poseTarget.pose.position.x << " " << poseTarget.pose.position.y << " " << No kinematics plugins defined. Fill and load kinematics.yaml!poseTarget.pose.position.z); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << poseTarget.pose.position.x << " " << poseTarget.pose.position.y << " " << poseTarget.pose.position.z); 
     execPlan(async); 
     m_oldPoseCmd = m_currPoseCmd; 
     RCLCPP_INFO_STREAM(this->get_logger(), "Executing commanded path!"); 
@@ -302,7 +318,7 @@ void m2Iface::getArmState()
     // get current ee pose
     m_currPoseState = m_moveGroupPtr->getCurrentPose(EE_LINK_NAME); 
     // current_state_monitor
-    m_robotStatePtr = m_moveGroupPtr->getCurrentState();
+    // m_robotStatePtr = m_moveGroupPtr->getCurrentState();
     // by default timeout is 10 secs
 }
 
@@ -456,7 +472,26 @@ bool m2Iface::run()
 
     }
 
-    
+    /* Test kinematics */
+    /* https://github.com/moveit/moveit/issues/2511 */
+    /* TODO: Move this to method! */
+    /*
+    RCLCPP_INFO_STREAM(this->get_logger(), "planning group is: " << PLANNING_GROUP); 
+    const moveit::core::JointModelGroup* joint_model_group = m_robotStatePtr->getJointModelGroup(PLANNING_GROUP);
+    const std::vector<std::string>& joint_names = m_robotStatePtr->getVariableNames();
+    std::vector<double> joint_values;
+    m_robotStatePtr->copyJointGroupPositions(joint_model_group, joint_values);
+    for (std::size_t i = 0; i < joint_names.size(); ++i)
+    {
+        RCLCPP_INFO(this->get_logger(), "Joint %s: %f", joint_names[i].c_str(), joint_values[i]);
+    }
+    */
+    // This works! 
+    double position_tol = m_moveGroupPtr->getGoalPositionTolerance(); 
+    geometry_msgs::msg::PoseStamped targetPose = m_moveGroupPtr->getPoseTarget();
+    /*RCLCPP_INFO_STREAM(this->get_logger(), "position tol is: " << position_tol); */
+    /*RCLCPP_INFO_STREAM(this->get_logger(), "target pose is: " << targetPose.pose.position.x << " " << targetPose.pose.position.y << " " << targetPose.pose.position.z);*/
+
     return true;     
 }
 

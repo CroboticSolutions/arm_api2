@@ -71,6 +71,7 @@
 //* msgs
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
 #include "arm_api2_msgs/msg/cartesian_waypoints.hpp"
 
 //* srvs
@@ -135,6 +136,7 @@ class m2Iface: public rclcpp::Node
         
         /* subs */
         rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr        pose_cmd_sub_;
+        rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr           joint_state_sub_;
         rclcpp::Subscription<arm_api2_msgs::msg::CartesianWaypoints>::SharedPtr ctraj_cmd_sub_; 
 
         /* pubs */
@@ -146,6 +148,7 @@ class m2Iface: public rclcpp::Node
         /* callbacks */
         void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
         void cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::SharedPtr msg); 
+        void joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg);
         void change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
                              const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res); 
         bool run(); 
@@ -206,8 +209,10 @@ class m2Iface: public rclcpp::Node
         geometry_msgs::msg::PoseStamped m_currPoseCmd; 
         geometry_msgs::msg::PoseStamped m_pubCurrPoseCmd; 
         geometry_msgs::msg::PoseStamped m_oldPoseCmd; 
-        geometry_msgs::msg::PoseStamped m_currPoseState; 
+        geometry_msgs::msg::PoseStamped m_currPoseState;
+        sensor_msgs::msg::JointState    m_currJointState;  
         std::vector<geometry_msgs::msg::Pose> m_cartesianWaypoints; 
+        
 
         moveit::planning_interface::MoveGroupInterfacePtr m_moveGroupPtr; 
         moveit::core::RobotStatePtr m_robotStatePtr;  

@@ -19,6 +19,8 @@
   <depend>moveit_visual_tools</depend>
   <depend>arm_api2_msgs</depend>
   <depend>moveit_servo</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
   <depend>tf</depend>
 
   <test_depend>ament_lint_auto</test_depend>

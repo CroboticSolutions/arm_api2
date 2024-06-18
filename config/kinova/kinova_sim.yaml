@@ -21,6 +21,9 @@ topic:
     cmd_delta_pose: 
       name: arm/cmd/deta_pose
       queue: 1  
+    joint_states:
+      name: joint_states
+      queue: 1
   pub:
     display_trajectory:
       name: arm/display_path
