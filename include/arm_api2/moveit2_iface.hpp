@@ -39,7 +39,6 @@
  *      Description : The core robot manipulator and MoveIt2! ROS 2 interfacing header class.
  */
 
-
 #ifndef MOVEIT2_IFACE_HPP
 #define MOVEIT2_IFACE_HPP
 
@@ -102,7 +101,7 @@ class m2Iface: public rclcpp::Node
         rclcpp::Executor::SharedPtr executor_;
         std::thread executor_thread_;
 
-        /* arm_definition */
+        /* arm_definition */ 
         std::string PLANNING_GROUP; 
         std::string EE_LINK_NAME;  
         std::string ROBOT_DESC; 
@@ -161,7 +160,8 @@ class m2Iface: public rclcpp::Node
         /* getters */
         void getArmState();  
 
-        /* utils */
+        /* TODO: Move to utils */
+        /* utils */ 
         bool comparePosition(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2);
         bool compareOrientation(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2);   
         bool comparePose(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2); 

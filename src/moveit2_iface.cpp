@@ -254,7 +254,6 @@ bool m2Iface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::stri
 
 void m2Iface::execMove(bool async=false)
 {   
-
     m_currPoseCmd = normalizeOrientation(m_currPoseCmd); 
     m_moveGroupPtr->clearPoseTargets(); 
     m_moveGroupPtr->setPoseTarget(m_currPoseCmd.pose, EE_LINK_NAME); 
@@ -269,7 +268,6 @@ void m2Iface::execMove(bool async=false)
 
 void m2Iface::execPlan(bool async=false)
 {
-
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     bool success = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
     
@@ -317,20 +315,17 @@ void m2Iface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool 
 
 void m2Iface::getArmState() 
 {   
-
     const moveit::core::JointModelGroup* joint_model_group = m_robotStatePtr->getJointModelGroup(PLANNING_GROUP);
     const std::vector<std::string>& joint_names = m_robotStatePtr->getVariableNames();
     std::vector<double> joint_values;
     m_robotStatePtr->copyJointGroupPositions(joint_model_group, joint_values);
-
     // get current ee pose
     m_currPoseState = m_moveGroupPtr->getCurrentPose(EE_LINK_NAME); 
     // current_state_monitor
     m_robotStatePtr = m_moveGroupPtr->getCurrentState();
     // by default timeout is 10 secs
     m_robotStatePtr->update();
-
-    // also exists in tf2_eigen.hpp but couldn't include it [less deps better]
+    // TODO: move to utils
     Eigen::Isometry3d currentPose_ = m_moveGroupPtr->getCurrentState()->getFrameTransform(EE_LINK_NAME);
     m_currPoseState.pose.position.x = currentPose_.translation().x();
     m_currPoseState.pose.position.y = currentPose_.translation().y(); 
@@ -387,6 +382,7 @@ bool m2Iface::compareOrientation(geometry_msgs::msg::PoseStamped p1, geometry_ms
     return cond; 
 }
 
+// TODO: move to utils
 bool m2Iface::comparePose(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2)
 {
     bool position, orientation; 
@@ -395,6 +391,7 @@ bool m2Iface::comparePose(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg
     return position && orientation; 
 }
 
+//TODO: move to utils
 geometry_msgs::msg::PoseStamped m2Iface::normalizeOrientation(geometry_msgs::msg::PoseStamped p)
 {
     geometry_msgs::msg::PoseStamped p_; 
