@@ -39,7 +39,6 @@
  *      Description : The core robot manipulator and MoveIt2! ROS 2 interfacing header class.
  */
 
-
 #include "arm_api2/moveit2_iface.hpp"
 
 m2Iface::m2Iface(const rclcpp::NodeOptions &options)
@@ -108,8 +107,7 @@ void m2Iface::init_subscribers()
 void m2Iface::init_services()
 {
     auto change_state_name = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
-    change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, 
-                                                                              std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
+    change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name,                                                                       std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
@@ -118,6 +116,7 @@ void m2Iface::init_moveit()
 
     RCLCPP_INFO_STREAM(this->get_logger(), "robot_description: " << ROBOT_DESC); 
     RCLCPP_INFO_STREAM(this->get_logger(), "planning_group: " << PLANNING_GROUP);
+    RCLCPP_INFO_STREAM(this->get_logger(), "planning_frame: " << PLANNING_FRAME); 
     RCLCPP_INFO_STREAM(this->get_logger(), "move_group_ns: " << MOVE_GROUP_NS);  
     // MoveIt related things!
     moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP, MOVE_GROUP_NS); 
@@ -144,6 +143,8 @@ std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()
 
 void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
+    // hardcode this to planning frame to check if it works like that? 
+    m_currPoseCmd.header.frame_id = PLANNING_FRAME; 
     m_currPoseCmd.pose = msg->pose;
     // Compare with old command
     RCLCPP_INFO_STREAM(this->get_logger(), "Test1");
@@ -195,7 +196,6 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
     executor_->add_node(node_); 
     executor_thread_ = std::thread([this]() {executor_->spin();});
     RCLCPP_INFO_STREAM(this->get_logger(), "Move group interface set up!"); 
-    
     return true; 
 }
 
@@ -237,7 +237,12 @@ bool m2Iface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::stri
 
 void m2Iface::execMove(bool async=false)
 {   
-    m_moveGroupPtr->setPoseTarget(m_currPoseCmd); 
+
+    m_currPoseCmd = normalizeOrientation(m_currPoseCmd); 
+    m_moveGroupPtr->setPoseTarget(m_currPoseCmd, EE_LINK_NAME); 
+    geometry_msgs::msg::PoseStamped poseTarget; 
+    poseTarget = m_moveGroupPtr->getPoseTarget(); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << poseTarget.pose.position.x << " " << poseTarget.pose.position.y << " " << No kinematics plugins defined. Fill and load kinematics.yaml!poseTarget.pose.position.z); 
     execPlan(async); 
     m_oldPoseCmd = m_currPoseCmd; 
     RCLCPP_INFO_STREAM(this->get_logger(), "Executing commanded path!"); 
@@ -275,7 +280,6 @@ void m2Iface::planExecCartesian(bool async=false)
 
 void m2Iface::execCartesian(bool async=false)
 {   
-     
     // TODO: create Cartesian plan, use as first point currentPose 4 now, and as end point use targetPoint 
     moveit_msgs::msg::RobotTrajectory trajectory;
     // TODO: Set as params that can be configured in YAML!
@@ -314,7 +318,6 @@ bool m2Iface::comparePosition(geometry_msgs::msg::PoseStamped p1, geometry_msgs:
     if (std::abs(p1.pose.position.z - p2.pose.position.z) < d) z_cond = true; 
 
     bool cond = x_cond && y_cond && z_cond;  
-
     return cond; 
 }
 
@@ -345,7 +348,6 @@ bool m2Iface::compareOrientation(geometry_msgs::msg::PoseStamped p1, geometry_ms
 
     //TODO: Convert quat1 to roll & pitch & yaw 
     bool cond = p_cond && r_cond && y_cond; 
-
     return cond; 
 }
 
@@ -355,6 +357,19 @@ bool m2Iface::comparePose(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg
     position = comparePosition(p1, p2); 
     orientation = compareOrientation(p1, p2); 
     return position && orientation; 
+}
+
+geometry_msgs::msg::PoseStamped m2Iface::normalizeOrientation(geometry_msgs::msg::PoseStamped p)
+{
+    geometry_msgs::msg::PoseStamped p_; 
+    tf2::Quaternion q(p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w); 
+    q.normalize(); 
+    p_.pose.orientation.x = q.x(); 
+    p_.pose.orientation.y = q.y(); 
+    p_.pose.orientation.z = q.z(); 
+    p_.pose.orientation.w = q.w(); 
+    p_.pose.position = p.pose.position; 
+    return p_; 
 }
 
 // TODO: move to utils
@@ -381,7 +396,6 @@ std::vector<geometry_msgs::msg::Pose> m2Iface::createCartesianWaypoints(geometry
         pose_.orientation.w = p1.orientation.w; 
         result.push_back(pose_);
     }
-
     return result;
 }
 

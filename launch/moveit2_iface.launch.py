@@ -47,6 +47,7 @@ from launch_ros.actions import Node
 from launch_param_builder import ParameterBuilder
 from launch.substitutions import LaunchConfiguration
 
+import yaml
 import os
 
 # TODO: Make this changeable without ERROR for wrong param type
@@ -61,21 +62,27 @@ def launch_setup(context, *args, **kwargs):
     arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))   
 
     # TODO: Swap between sim and real arg depending on the robot type
-    arg_robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
-    arg_servo_yaml = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
+    robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
+    servo_yaml = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
+    kinematics_yaml = "config/{0}/{1}_kinematics.yaml".format(arg_robot_name, arg_robot_name)
     
-    # Arm params (ctl, servo)
+    # Arm params (ctl, servo) --> sent just as path
+    # 3 different ways of loading and using yaml files, DISGUSTING [FIX ASAP]
     config_path = os.path.join(
         get_package_share_directory('arm_api2'),
         "config",
-        arg_robot_yaml
+        robot_yaml
     )
 
+    # Servo params created with the help of ParameterBuilder
     servo_params = {
         "moveit_servo": ParameterBuilder("arm_api2") 
-        .yaml(f"config/{arg_servo_yaml}")
+        .yaml(f"config/{servo_yaml}")
         .to_dict()
     }
+    
+    # Load kinematic params
+    kinematic_params = load_yaml("arm_api2", kinematics_yaml)
 
     launch_move_group = Node(
         package='arm_api2',
@@ -84,7 +91,8 @@ def launch_setup(context, *args, **kwargs):
                     {"enable_servo": use_servo},
                     {"dt": dt},
                     {"config_path": config_path},
-                    servo_params]
+                    kinematic_params,
+                    servo_params,]
     )
 
     launch_nodes_.append(launch_move_group)
@@ -136,3 +144,24 @@ def generate_launch_description():
     )
 
     return LaunchDescription(declared_arguments + [OpaqueFunction(function=launch_setup)])
+
+
+def load_yaml(package_name: str, file_path: str):
+    """
+    Load yaml configuration based on package name and file path relative to its share.
+    """
+
+    package_path = get_package_share_directory(package_name)
+    absolute_file_path = os.path.join(package_path, file_path)
+    return parse_yaml(absolute_file_path)
+
+def parse_yaml(absolute_file_path: str):
+    """
+    Parse yaml from file, given its absolute file path.
+    """
+
+    try:
+        with open(absolute_file_path, "r") as file:
+            return yaml.safe_load(file)
+    except EnvironmentError:
+        return None

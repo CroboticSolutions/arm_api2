@@ -289,7 +289,14 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 <details>
 <summary><h2>Status</h2></summary>
 
-### TODO: 
+### TODO [High priority]:
+
+- [ ] Fix command/reached pose mismatch!
+- [ ] Add orientation normalization
+- [ ] Test on real arm
+- [ ] Create universal launch file
+
+### TODO [Low priority]: 
 - [x] Test with real robot manipulator [tested on Kinova, basic functionality tested]
 - [x] Add basic documentation
 - [ ] Add roadmap

@@ -162,7 +162,8 @@ class m2Iface: public rclcpp::Node
         bool comparePosition(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2);
         bool compareOrientation(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2);   
         bool comparePose(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2); 
-        std::vector<geometry_msgs::msg::Pose> createCartesianWaypoints(geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2, int n); 
+        std::vector<geometry_msgs::msg::Pose> createCartesianWaypoints(geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2, int n);
+        geometry_msgs::msg::PoseStamped normalizeOrientation(geometry_msgs::msg::PoseStamped p);  
 
         /* funcs */
         void execPlan(bool async); 
