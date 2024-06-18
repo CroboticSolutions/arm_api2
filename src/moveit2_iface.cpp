@@ -99,8 +99,10 @@ void m2Iface::init_subscribers()
 {
     auto pose_cmd_name = config["topic"]["sub"]["cmd_pose"]["name"].as<std::string>(); 
     auto cart_traj_cmd_name = config["topic"]["sub"]["cmd_traj"]["name"].as<std::string>(); 
+    auto joint_states_name = config["topic"]["sub"]["joint_states"]["name"].as<std::string>();
     pose_cmd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(ns_ + pose_cmd_name, 1, std::bind(&m2Iface::pose_cmd_cb, this, _1));
     ctraj_cmd_sub_ = this->create_subscription<arm_api2_msgs::msg::CartesianWaypoints>(ns_ + cart_traj_cmd_name, 1, std::bind(&m2Iface::cart_poses_cb, this, _1));
+    joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(ns_ + joint_states_name, 1, std::bind(&m2Iface::joint_state_cb, this, _1));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
 }
 
@@ -159,6 +161,14 @@ void m2Iface::cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::Shared
     recivTraj = true; 
 }
 
+void m2Iface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg)
+{   
+    std::vector<std::string> jointNames = msg->name;
+    std::vector<double> jointPositions = msg->position;
+    if(robotModelInit) {m_robotStatePtr->setVariablePositions(jointNames, jointPositions);}; 
+
+}
+
 void m2Iface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
                               const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res)
 {
@@ -188,9 +198,12 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
             "robot_description",
             moveNs));
 
+    double POS_TOL = 0.0000001; 
     // set move group stuff
     m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME); 
     m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME); 
+
+    m_moveGroupPtr->setGoalPositionTolerance(POS_TOL);
     m_moveGroupPtr->startStateMonitor(); 
     // executor
     executor_->add_node(node_); 
@@ -204,6 +217,10 @@ bool m2Iface::setRobotModel(rclcpp::Node::SharedPtr nodePtr)
 {
     robot_model_loader::RobotModelLoader robot_model_loader(nodePtr);
     kinematic_model = robot_model_loader.getModel(); 
+    // Find nicer way to do this
+    moveit::core::RobotStatePtr kinematic_state(new moveit::core::RobotState(kinematic_model));
+    m_robotStatePtr = kinematic_state;
+    m_robotStatePtr->setToDefaultValues();
     RCLCPP_INFO_STREAM(this->get_logger(), "Robot model loaded!");
     RCLCPP_INFO_STREAM(this->get_logger(), "Robot model frame is: " << kinematic_model->getModelFrame().c_str());
     return true;
@@ -239,10 +256,11 @@ void m2Iface::execMove(bool async=false)
 {   
 
     m_currPoseCmd = normalizeOrientation(m_currPoseCmd); 
-    m_moveGroupPtr->setPoseTarget(m_currPoseCmd, EE_LINK_NAME); 
+    m_moveGroupPtr->clearPoseTargets(); 
+    m_moveGroupPtr->setPoseTarget(m_currPoseCmd.pose, EE_LINK_NAME); 
     geometry_msgs::msg::PoseStamped poseTarget; 
     poseTarget = m_moveGroupPtr->getPoseTarget(); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << poseTarget.pose.position.x << " " << poseTarget.pose.position.y << " " << No kinematics plugins defined. Fill and load kinematics.yaml!poseTarget.pose.position.z); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << poseTarget.pose.position.x << " " << poseTarget.pose.position.y << " " << poseTarget.pose.position.z); 
     execPlan(async); 
     m_oldPoseCmd = m_currPoseCmd; 
     RCLCPP_INFO_STREAM(this->get_logger(), "Executing commanded path!"); 
@@ -298,12 +316,30 @@ void m2Iface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool 
 }
 
 void m2Iface::getArmState() 
-{
+{   
+
+    const moveit::core::JointModelGroup* joint_model_group = m_robotStatePtr->getJointModelGroup(PLANNING_GROUP);
+    const std::vector<std::string>& joint_names = m_robotStatePtr->getVariableNames();
+    std::vector<double> joint_values;
+    m_robotStatePtr->copyJointGroupPositions(joint_model_group, joint_values);
+
     // get current ee pose
     m_currPoseState = m_moveGroupPtr->getCurrentPose(EE_LINK_NAME); 
     // current_state_monitor
     m_robotStatePtr = m_moveGroupPtr->getCurrentState();
     // by default timeout is 10 secs
+    m_robotStatePtr->update();
+
+    // also exists in tf2_eigen.hpp but couldn't include it [less deps better]
+    Eigen::Isometry3d currentPose_ = m_moveGroupPtr->getCurrentState()->getFrameTransform(EE_LINK_NAME);
+    m_currPoseState.pose.position.x = currentPose_.translation().x();
+    m_currPoseState.pose.position.y = currentPose_.translation().y(); 
+    m_currPoseState.pose.position.z = currentPose_.translation().z(); 
+    Eigen::Quaterniond q(currentPose_.linear());
+    m_currPoseState.pose.orientation.x = q.x();
+    m_currPoseState.pose.orientation.y = q.y(); 
+    m_currPoseState.pose.orientation.z = q.z(); 
+    m_currPoseState.pose.orientation.w = q.w(); 
 }
 
 // TODO: Move to utils
@@ -452,11 +488,8 @@ bool m2Iface::run()
             servoPtr->start(); 
             servoEntered = true; 
         }
-
-
     }
 
-    
     return true;     
 }
 
