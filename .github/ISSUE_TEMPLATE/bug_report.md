@@ -7,15 +7,6 @@ assignees: ''
 
 ---
 
----
-name: Bug report
-about: Create a report to help us improve
-title: ''
-labels: ''
-assignees: mkrizmancic
-
----
-
 ## Environment
 * OS Version: <!-- e.g, Ubuntu 20.04 -->
 * OS Installation: <!-- Standalone, dual-boot, virtual machine, WSL, etc. -->
