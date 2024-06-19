@@ -148,11 +148,8 @@ void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
     // hardcode this to planning frame to check if it works like that? 
     m_currPoseCmd.header.frame_id = PLANNING_FRAME; 
     m_currPoseCmd.pose = msg->pose;
-    // Compare with old command
-    RCLCPP_INFO_STREAM(this->get_logger(), "Test1");
-    if (!comparePose(m_currPoseCmd, m_oldPoseCmd)) recivCmd = true;
+    if (!utils::comparePose(m_currPoseCmd, m_oldPoseCmd)) recivCmd = true;
     RCLCPP_INFO_STREAM(this->get_logger(), "recivCmd: " << recivCmd); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "Test2"); 
 }
 
 void m2Iface::cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::SharedPtr msg)
@@ -254,7 +251,7 @@ bool m2Iface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::stri
 
 void m2Iface::execMove(bool async=false)
 {   
-    m_currPoseCmd = normalizeOrientation(m_currPoseCmd); 
+    m_currPoseCmd = utils::normalizeOrientation(m_currPoseCmd); 
     m_moveGroupPtr->clearPoseTargets(); 
     m_moveGroupPtr->setPoseTarget(m_currPoseCmd.pose, EE_LINK_NAME); 
     geometry_msgs::msg::PoseStamped poseTarget; 
@@ -282,7 +279,7 @@ void m2Iface::execPlan(bool async=false)
 void m2Iface::planExecCartesian(bool async=false)
 {   
     // TODO: Move this method to utils.cpp
-    std::vector<geometry_msgs::msg::Pose> cartesianWaypoints = createCartesianWaypoints(m_currPoseState.pose, m_currPoseCmd.pose, NUM_CART_PTS); 
+    std::vector<geometry_msgs::msg::Pose> cartesianWaypoints = utils::createCartesianWaypoints(m_currPoseState.pose, m_currPoseCmd.pose, NUM_CART_PTS); 
     // TODO: create Cartesian plan, use as first point currentPose 4 now, and as end point use targetPoint 
     moveit_msgs::msg::RobotTrajectory trajectory;
     // TODO: Set as params that can be configured in YAML!
@@ -337,100 +334,9 @@ void m2Iface::getArmState()
     m_currPoseState.pose.orientation.w = q.w(); 
 }
 
-// TODO: Move to utils
-bool m2Iface::comparePosition(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2)
-{   
-    // Returns false if different positions
-    bool x_cond = false;  bool y_cond = false;  bool z_cond = false; 
-    double d = 0.01; 
 
-    if (std::abs(p1.pose.position.x - p2.pose.position.x) < d) x_cond = true; 
-    if (std::abs(p1.pose.position.y - p2.pose.position.y) < d) y_cond = true; 
-    if (std::abs(p1.pose.position.z - p2.pose.position.z) < d) z_cond = true; 
 
-    bool cond = x_cond && y_cond && z_cond;  
-    return cond; 
-}
 
-// TODO: Move to utils
-bool m2Iface::compareOrientation(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2)
-{   
-    // Returns false if different positions
-    bool p_cond = false;  bool r_cond = false;  bool y_cond = false; 
-    double d = 0.01; 
-
-    geometry_msgs::msg::Quaternion q1c, q2c; 
-    q1c.x = p1.pose.orientation.x; q2c.x = p2.pose.orientation.x; 
-    q1c.y = p1.pose.orientation.y; q2c.y = p2.pose.orientation.y; 
-    q1c.z = p1.pose.orientation.z; q2c.z = p2.pose.orientation.z; 
-    q1c.w = p1.pose.orientation.w; q2c.w = p2.pose.orientation.w; 
-
-    tf2::Quaternion q1(q1c.x, q1c.y, q1c.z, q1c.w); 
-    tf2::Quaternion q2(q2c.x, q2c.y, q2c.z, q2c.w); 
-    
-    double r1, r2, pi1, pi2, y1, y2; 
-    tf2::Matrix3x3(q1).getEulerYPR(y1, pi1, r1); 
-    tf2::Matrix3x3(q2).getEulerYPR(y2, pi2, r2);
-
-    d = 0.01; 
-    if (std::abs(pi1 - pi2) < d) p_cond = true; 
-    if (std::abs(r1 - r2) < d) r_cond = true; 
-    if (std::abs(y1 - y2) < d) y_cond = true; 
-
-    //TODO: Convert quat1 to roll & pitch & yaw 
-    bool cond = p_cond && r_cond && y_cond; 
-    return cond; 
-}
-
-// TODO: move to utils
-bool m2Iface::comparePose(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2)
-{
-    bool position, orientation; 
-    position = comparePosition(p1, p2); 
-    orientation = compareOrientation(p1, p2); 
-    return position && orientation; 
-}
-
-//TODO: move to utils
-geometry_msgs::msg::PoseStamped m2Iface::normalizeOrientation(geometry_msgs::msg::PoseStamped p)
-{
-    geometry_msgs::msg::PoseStamped p_; 
-    tf2::Quaternion q(p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w); 
-    q.normalize(); 
-    p_.pose.orientation.x = q.x(); 
-    p_.pose.orientation.y = q.y(); 
-    p_.pose.orientation.z = q.z(); 
-    p_.pose.orientation.w = q.w(); 
-    p_.pose.position = p.pose.position; 
-    return p_; 
-}
-
-// TODO: move to utils
-std::vector<geometry_msgs::msg::Pose> m2Iface::createCartesianWaypoints(geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2, int n) 
-{
-    std::vector<geometry_msgs::msg::Pose> result;
-    geometry_msgs::msg::Pose pose_;
-    if (n <= 1) {
-        result.push_back(p1);
-        return result;
-    }
-    double dX = (p2.position.x - p1.position.x) / (n - 1);
-    double dY = (p2.position.y - p1.position.y) / (n - 1); 
-    double dZ = (p2.position.z - p1.position.z) / (n - 1); 
-    // Set i == 1 because start point doesn't have to be included into waypoint list 
-    // https://answers.ros.org/question/253004/moveit-problem-error-trajectory-message-contains-waypoints-that-are-not-strictly-increasing-in-time/
-    for (int i = 1; i < n; ++i) {
-        pose_.position.x = p1.position.x + i * dX; 
-        pose_.position.y = p1.position.y + i * dY; 
-        pose_.position.z = p1.position.z + i * dZ; 
-        pose_.orientation.x = p1.orientation.x; 
-        pose_.orientation.y = p1.orientation.y;
-        pose_.orientation.z = p1.orientation.z;
-        pose_.orientation.w = p1.orientation.w; 
-        result.push_back(pose_);
-    }
-    return result;
-}
 
 bool m2Iface::run()
 {

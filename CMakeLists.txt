@@ -25,7 +25,7 @@ find_package(sensor_msgs REQUIRED)
 # include headers
 include_directories(include)
 
-add_executable(moveit2_iface src/moveit2_iface.cpp src/moveit2_iface_node.cpp)
+add_executable(moveit2_iface src/moveit2_iface.cpp src/moveit2_iface_node.cpp src/utils.cpp)
 target_include_directories(moveit2_iface 
 PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

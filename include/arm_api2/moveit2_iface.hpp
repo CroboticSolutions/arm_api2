@@ -76,6 +76,8 @@
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
 
+// utils
+#include "arm_api2/utils.hpp"
 
 #define stringify( name ) #name
 
@@ -159,14 +161,6 @@ class m2Iface: public rclcpp::Node
 
         /* getters */
         void getArmState();  
-
-        /* TODO: Move to utils */
-        /* utils */ 
-        bool comparePosition(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2);
-        bool compareOrientation(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2);   
-        bool comparePose(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2); 
-        std::vector<geometry_msgs::msg::Pose> createCartesianWaypoints(geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2, int n);
-        geometry_msgs::msg::PoseStamped normalizeOrientation(geometry_msgs::msg::PoseStamped p);  
 
         /* funcs */
         void execPlan(bool async); 
