@@ -7,12 +7,12 @@ assignees: ''
 
 ---
 
-## Feature motivation
+## Motivation
 
 Please describe what would be the main purpose of introducing such feature, and how do you envision it. 
-What is the motivation behin introducing such feature. 
+What is the motivation behind introducing such feature. 
 
-## Feature use-case
+## Use-case
 
 Describe practical use-case or example where new feature would be used. 
 
