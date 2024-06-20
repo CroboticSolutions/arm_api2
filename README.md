@@ -299,8 +299,11 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 
 - [x] Fix command/reached pose mismatch!
 - [x] Add orientation normalization
+- [x] Add contributing
+- [x] Add gripper abstract class 
 - [ ] Create universal launch file
-- [ ] Add contributing 
+- [ ] Create standardized joystick class
+- [ ] Test/Test/Test
 
 ### TODO [Low priority]: 
 - [x] Test with real robot manipulator [tested on Kinova, basic functionality tested]
@@ -310,6 +313,20 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 - [ ] Discuss potential SW patterns that can be used
 - [ ] Add full cartesian following 
 - [ ] Add roll, pitch, yaw and quaternion conversion 
-- [ ] Decouple moveit2_iface.cpp and utils.cpp (contains all utils scripts)
+- [x] Decouple moveit2_iface.cpp and utils.cpp (contains all utils scripts)
 - [ ] Create table of supported robot manipulators 
 </details>
+
+<details>
+
+<summary><h2>Supported arms table<h2></summary>
+
+|     Arms     | CART_TRAJ_CTL | JOINT_TRAJ_CTL | SERVO_CTL | SIM | REAL | EXT_TEST |
+|:------------:|---------------|----------------|-----------|-----|------|----------|
+| Franka Emika | +             | +              | +         | +   | -    | -        |
+| Kinova       | +             | +              | +         | +   | -    | -        |
+| UR           | +             | +              | +         | +   | -    | -        |
+| IIWA         | -             | -              | -         | -   | -    | -        |
+
+</details>
+
