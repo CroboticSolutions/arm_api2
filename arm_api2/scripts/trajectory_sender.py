@@ -50,9 +50,9 @@ class CreateAndPublishTrajectory(Node):
             reader = csv.DictReader(file)
             # TODO: Use this 
             for row in reader:
-                print(row)
                 x = row['x']; y = row['y']; z = row['z']
                 p_data.append(np.array([float(x), float(y), float(z), 1]).T)
+        self.get_logger().info("Loaded positions.")
         return p_data
     
     def trig_cb(self, msg): 
@@ -68,7 +68,7 @@ class CreateAndPublishTrajectory(Node):
         p, q = msg.pose.position, msg.pose.orientation
         x, y, z = p.x, p.y, p.z 
         qx, qy, qz, qw = q.x, q.y, q.z, q.w
-        self.get_logger().info(f"x: {x}\t {y}\t {z}\t")
+        #self.get_logger().info(f"x: {x}\t {y}\t {z}\t")
         # x, y, z, w
         R_ = R.from_quat([qx, qy, qz, qw])
         r = R_.as_matrix()

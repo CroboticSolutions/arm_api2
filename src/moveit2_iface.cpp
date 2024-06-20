@@ -341,21 +341,10 @@ void m2Iface::getArmState()
     m_robotStatePtr = m_moveGroupPtr->getCurrentState();
     // by default timeout is 10 secs
     m_robotStatePtr->update();
-    // TODO: move to utils
+    
     Eigen::Isometry3d currentPose_ = m_moveGroupPtr->getCurrentState()->getFrameTransform(EE_LINK_NAME);
-    m_currPoseState.pose.position.x = currentPose_.translation().x();
-    m_currPoseState.pose.position.y = currentPose_.translation().y(); 
-    m_currPoseState.pose.position.z = currentPose_.translation().z(); 
-    Eigen::Quaterniond q(currentPose_.linear());
-    m_currPoseState.pose.orientation.x = q.x();
-    m_currPoseState.pose.orientation.y = q.y(); 
-    m_currPoseState.pose.orientation.z = q.z(); 
-    m_currPoseState.pose.orientation.w = q.w(); 
+    m_currPoseState = utils::convertIsometryToMsg(currentPose_);
 }
-
-
-
-
 
 bool m2Iface::run()
 {

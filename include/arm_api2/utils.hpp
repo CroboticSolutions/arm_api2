@@ -45,6 +45,7 @@
 
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2/LinearMath/Matrix3x3.h"
+#include "Eigen/Dense"
 
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
@@ -57,6 +58,7 @@ namespace utils {
     bool                                            comparePose                 (geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2);
     std::vector<geometry_msgs::msg::Pose>           createCartesianWaypoints    (geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2, int n); 
     geometry_msgs::msg::PoseStamped                 normalizeOrientation        (geometry_msgs::msg::PoseStamped p);
+    geometry_msgs::msg::PoseStamped                 convertIsometryToMsg       (Eigen::Isometry3d pose);
 
 } // namespace utils
 

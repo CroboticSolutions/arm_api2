@@ -136,3 +136,18 @@ geometry_msgs::msg::PoseStamped utils::normalizeOrientation(geometry_msgs::msg::
     p_.pose.position = p.pose.position; 
     return p_; 
 }
+
+// There's also built-in method in tf2 however, didn't manage to get it to work
+geometry_msgs::msg::PoseStamped utils::convertIsometryToMsg(Eigen::Isometry3d pose)
+{
+    geometry_msgs::msg::PoseStamped p; 
+    p.pose.position.x = pose.translation().x(); 
+    p.pose.position.y = pose.translation().y(); 
+    p.pose.position.z = pose.translation().z(); 
+    Eigen::Quaterniond q(pose.rotation()); 
+    p.pose.orientation.x = q.x(); 
+    p.pose.orientation.y = q.y(); 
+    p.pose.orientation.z = q.z(); 
+    p.pose.orientation.w = q.w(); 
+    return p; 
+}
