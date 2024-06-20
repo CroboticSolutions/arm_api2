@@ -77,9 +77,12 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized node!"); 
 
-    // Init anything for the old pose because it is non existent at the beggining
+    // Init anything for the old pose because it is non-existent at the beggining
     m_oldPoseCmd.pose.position.x = 5.0; 
     nodeInit = true; 
+
+    // TODO: Change gripper based on the config file and the gripper types
+    gripper = RobotiqGripper();
 }
 
 YAML::Node m2Iface::init_config(std::string yaml_path)
@@ -109,7 +112,11 @@ void m2Iface::init_subscribers()
 void m2Iface::init_services()
 {
     auto change_state_name = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
-    change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name,                                                                       std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
+    auto open_gripper_name = config["srv"]["open_gripper"]["name"].as<std::string>(); 
+    auto close_gripper_name= config["srv"]["close_gripper"]["name"].as<std::string>();
+    change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
+    open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + open_gripper_name, std::bind(&m2Iface::open_gripper_cb, this, _1, _2));
+    close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + close_gripper_name, std::bind(&m2Iface::close_gripper_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
@@ -164,6 +171,18 @@ void m2Iface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg)
     std::vector<double> jointPositions = msg->position;
     if(robotModelInit) {m_robotStatePtr->setVariablePositions(jointNames, jointPositions);}; 
 
+}
+
+void m2Iface::open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
+                              const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+{
+    gripper.open();
+}
+
+void m2Iface::close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
+                               const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+{
+    gripper.close(); 
 }
 
 void m2Iface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 

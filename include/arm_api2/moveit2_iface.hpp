@@ -75,9 +75,15 @@
 
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
+#include "std_srvs/srv/trigger.hpp"
 
 // utils
 #include "arm_api2/utils.hpp"
+
+// For starters just include robotiq_gripper
+// TODO: Think of a way to include different gripper based on the gripper type
+#include "arm_api2/grippers/gripper.hpp"
+#include "arm_api2/grippers/robotiq_gripper.hpp"
 
 #define stringify( name ) #name
 
@@ -99,9 +105,13 @@ class m2Iface: public rclcpp::Node
 
     private: 
 
+        /* node related stuff */
         rclcpp::Node::SharedPtr node_;
         rclcpp::Executor::SharedPtr executor_;
         std::thread executor_thread_;
+
+        /* gripper */
+        RobotiqGripper gripper; 
 
         /* arm_definition */ 
         std::string PLANNING_GROUP; 
@@ -144,14 +154,23 @@ class m2Iface: public rclcpp::Node
         rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr       pose_state_pub_;
 
         /* srvs */
-        rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_; 
+        rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
+        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       open_gripper_srv_; 
+        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       close_gripper_srv_; 
 
-        /* callbacks */
+        /* topic callbacks */
         void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
         void cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::SharedPtr msg); 
         void joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg);
+        
+        /* srv callbacks*/
         void change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
-                             const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res); 
+                             const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res);
+        void open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
+                             const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
+        void close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
+                             const std::shared_ptr<std_srvs::srv::Trigger::Response> res); 
+
         bool run(); 
 
         /* setters */
@@ -193,6 +212,7 @@ class m2Iface: public rclcpp::Node
         bool moveGroupInit      = false;
         bool robotModelInit     = false;  
         bool pSceneMonitorInit  = false;
+        bool gripperInit        = false; 
         bool nodeInit           = false; 
         bool recivCmd           = false; 
         bool recivTraj          = false; 

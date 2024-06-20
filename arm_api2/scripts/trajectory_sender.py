@@ -29,8 +29,8 @@ class CreateAndPublishTrajectory(Node):
         # Create timer
         timer_period        = 1.0  # seconds
         self.timer          = self.create_timer(timer_period, self.run)
-        c_csv_pth = "/root/ws_moveit2/src/arm_api2/utils/CS_C.csv"
-        s_csv_pth = "/root/ws_moveit2/src/arm_api2/utils/CS_S.csv"
+        c_csv_pth = "/root/kortex2_ws/src/arm_api2/utils/CS_C.csv"
+        s_csv_pth = "/root/kortex2_ws/src/arm_api2/utils/CS_S.csv"
 
         self.get_logger().info(f"C trajectory path is: {c_csv_pth}")
         self.get_logger().info(f"S trajectory path is: {s_csv_pth}")
@@ -50,6 +50,7 @@ class CreateAndPublishTrajectory(Node):
             reader = csv.DictReader(file)
             # TODO: Use this 
             for row in reader:
+                print(row)
                 x = row['x']; y = row['y']; z = row['z']
                 p_data.append(np.array([float(x), float(y), float(z), 1]).T)
         return p_data

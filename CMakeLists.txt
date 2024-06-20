@@ -21,6 +21,7 @@ find_package(tf2 REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 
 # include headers
 include_directories(include)
