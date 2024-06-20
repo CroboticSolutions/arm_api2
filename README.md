@@ -56,6 +56,12 @@ Wanted arm functionalities:
 **Command cartesian path**:   
 - msg: `arm_api2_msgs/msg/CartesianWaypoints.msg`
 
+**Command gripper closing**:
+- srv: `std_srvs/srv/Trigger.srv`
+
+**Command gripper opening**: 
+- srv: `std_srvs/srv/Trigger.srv`
+
 **Get current end effector pose**: 
 - msg: `geometry_msgs/msg/PoseStamped.msg`
 
