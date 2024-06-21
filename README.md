@@ -330,3 +330,22 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 
 </details>
 
+
+<summary><h3>Roadmap</h3></summary>
+
+[How to create roadmap graphs with mermaid?](https://mermaid.js.org/syntax/timeline.html). 
+
+<roadmap>
+
+timeline
+    Development timeline
+    4/2024 : Start of the development
+    6/2024 : Open-sourced version
+    9/2024 : Tested on one manipulator
+    10/2024: Integrated with GUI 
+    11/2024: Integrated with perception capabilities
+    12/2024 : Tested on 5 manipulators
+    .../2025 : TBA
+
+
+</roadmap>
