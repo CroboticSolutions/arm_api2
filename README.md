@@ -301,6 +301,7 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 - [x] Add orientation normalization
 - [x] Add contributing
 - [x] Add gripper abstract class 
+- [ ] Add correct inheritance for the gripper abstract class
 - [ ] Create universal launch file
 - [ ] Create standardized joystick class
 - [ ] Test/Test/Test
@@ -308,13 +309,12 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 ### TODO [Low priority]: 
 - [x] Test with real robot manipulator [tested on Kinova, basic functionality tested]
 - [x] Add basic documentation
-- [ ] Add roadmap
-- [ ] Create standardized joystick class [full]
+- [x] Add roadmap
 - [ ] Discuss potential SW patterns that can be used
 - [ ] Add full cartesian following 
 - [ ] Add roll, pitch, yaw and quaternion conversion 
 - [x] Decouple moveit2_iface.cpp and utils.cpp (contains all utils scripts)
-- [ ] Create table of supported robot manipulators 
+- [x] Create table of supported robot manipulators 
 </details>
 
 <details>
@@ -331,10 +331,8 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 </details>
 
 
-<details>
-<summary><h3>Roadmap</h3></summary>
+## Roadmap
 
-[How to create roadmap graphs with mermaid?](https://mermaid.js.org/syntax/timeline.html). 
 
 ```mermaid
 timeline
@@ -347,4 +345,5 @@ timeline
     .../2025 : TBA
 ```
 
-</details>
+If you want to contribute, please check **Status** section and check [CONTRIBUTE](./CONTRIBUTE.md).  
+
