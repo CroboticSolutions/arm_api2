@@ -266,7 +266,7 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 </details>
 
 <details>
-<summary><h2> Arm interfaces </h2></summary>
+<summary><h3> Arm interfaces </h3></summary>
 
 * [franka_ros2](https://support.franka.de/docs/franka_ros2.html)
 * [kinova_ros2](https://github.com/Kinovarobotics/ros2_kortex)
@@ -293,7 +293,7 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 
 
 <details>
-<summary><h2>Status</h2></summary>
+<summary><h3>Status</h3></summary>
 
 ### TODO [High priority]:
 
@@ -319,7 +319,7 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 
 <details>
 
-<summary><h2>Supported arms table<h2></summary>
+<summary><h3>Supported arms table<h3></summary>
 
 |     Arms     | CART_TRAJ_CTL | JOINT_TRAJ_CTL | SERVO_CTL | SIM | REAL | EXT_TEST |
 |:------------:|---------------|----------------|-----------|-----|------|----------|
@@ -338,7 +338,6 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 
 ```mermaid
 timeline
-    Development timeline
     4/2024 : Start of the development
     6/2024 : Open-sourced version
     9/2024 : Tested on one manipulator
