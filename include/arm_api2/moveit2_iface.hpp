@@ -111,7 +111,8 @@ class m2Iface: public rclcpp::Node
         std::thread executor_thread_;
 
         /* gripper */
-        RobotiqGripper gripper; 
+        //RobotiqGripper* gripperPtr;
+        std::shared_ptr<RobotiqGripper> gripperPtr;  
 
         /* arm_definition */ 
         std::string PLANNING_GROUP; 

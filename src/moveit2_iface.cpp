@@ -82,7 +82,7 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     nodeInit = true; 
 
     // TODO: Change gripper based on the config file and the gripper types
-    gripper = RobotiqGripper();
+    gripperPtr = std::make_shared<RobotiqGripper>(node_);
 }
 
 YAML::Node m2Iface::init_config(std::string yaml_path)
@@ -176,13 +176,13 @@ void m2Iface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg)
 void m2Iface::open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
                               const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
 {
-    gripper.open();
+    gripperPtr->open();
 }
 
 void m2Iface::close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
                                const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
 {
-    gripper.close(); 
+    gripperPtr->close(); 
 }
 
 void m2Iface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 

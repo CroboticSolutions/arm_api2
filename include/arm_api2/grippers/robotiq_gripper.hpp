@@ -38,38 +38,26 @@
  *      Description : Implementation of the gripper class for the Robotiq gripper
  */
 
-#ifndef ROBOTIQ_GRIPPER_H
-#define ROBOTIQ_GRIPPER_H
+#ifndef ROBOTIQ_GRIPPER_HPP
+#define ROBOTIQ_GRIPPER_HPP
 
-#include <iostream>
 #include <rclcpp/rclcpp.hpp>
-#include "gripper.hpp"
 
-class RobotiqGripper: public Gripper {
-
+// TODO: Make it derived from Gripper class
+class RobotiqGripper
+{
 public:
-    // Constructor
-    RobotiqGripper(){
-        isOpen = false;
-    };
-    ~RobotiqGripper(){};
+    explicit RobotiqGripper(rclcpp::Node::SharedPtr NodePtr);
+    ~RobotiqGripper();
 
-    // Method to open the gripper
-    void open(){
-        //TODO: Implement correct topic/action call for starters
-        RCLCPP_INFO_STREAM(rclcpp::get_logger("rclcpp"), "Gripper opened.");
-        isOpen = true;
-    }; 
+    void open();
+    void close();
 
-    // Method to close the gripper
-    void close(){
-        RCLCPP_INFO_STREAM(rclcpp::get_logger("rclcpp"), "Gripper closed.");
-        isOpen = false; 
-    };
+    bool isOpen() const;
 
 private:
-    bool isOpen;
-    // TODO: Add ROS2 action client or topic publisher which is going to be used
+    bool is_open_;
+    rclcpp::Node::SharedPtr node_ptr_;
 };
 
-#endif // ROBOTIQ_GRIPPER_H
+#endif // ROBOTIQ_GRIPPER_HPP
