@@ -299,6 +299,11 @@ void m2Iface::execPlan(bool async=false)
 void m2Iface::planExecCartesian(bool async=false)
 {   
     // TODO: Move this method to utils.cpp
+    RCLCPP_INFO_STREAM(this->get_logger(), "Planning Cartesian path!");
+    RCLCPP_INFO_STREAM(this->get_logger(), "Current pose is: " << m_currPoseState.pose.position.x << " " << m_currPoseState.pose.position.y << " " << m_currPoseState.pose.position.z);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Target pose is: " << m_currPoseCmd.pose.position.x << " " << m_currPoseCmd.pose.position.y << " " << m_currPoseCmd.pose.position.z);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Creating Cartesian waypoints!");
+    RCLCPP_INFO_STREAM(this->get_logger(), "Number of waypoints: " << NUM_CART_PTS);
     std::vector<geometry_msgs::msg::Pose> cartesianWaypoints = utils::createCartesianWaypoints(m_currPoseState.pose, m_currPoseCmd.pose, NUM_CART_PTS); 
     // TODO: create Cartesian plan, use as first point currentPose 4 now, and as end point use targetPoint 
     moveit_msgs::msg::RobotTrajectory trajectory;
@@ -345,6 +350,8 @@ void m2Iface::getArmState()
     
     Eigen::Isometry3d currentPose_ = m_moveGroupPtr->getCurrentState()->getFrameTransform(EE_LINK_NAME);
     m_currPoseState = utils::convertIsometryToMsg(currentPose_);
+    auto frame_id = m_moveGroupPtr->getPlanningFrame().c_str();
+    m_currPoseState.header.frame_id = frame_id;
 }
 
 bool m2Iface::run()
