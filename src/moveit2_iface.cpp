@@ -154,7 +154,11 @@ std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()
 
 void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
-    // hardcode this to planning frame to check if it works like that? 
+    // hardcode this to planning frame to check if it works like that?
+    if(msg.get()->header.frame_id != PLANNING_FRAME) {
+        RCLCPP_ERROR(this->get_logger(), "Pose frame_id is not planning frame! Should be " << PLANNING_FRAME);
+        return;
+    }
     m_currPoseCmd.header.frame_id = PLANNING_FRAME; 
     m_currPoseCmd.pose = msg->pose;
     if (!utils::comparePose(m_currPoseCmd, m_oldPoseCmd)) recivCmd = true;
