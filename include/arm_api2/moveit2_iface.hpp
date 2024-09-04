@@ -66,6 +66,7 @@
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
+#include <moveit/trajectory_processing/iterative_time_parameterization.h>
 
 //* msgs
 #include "geometry_msgs/msg/pose_stamped.hpp"
