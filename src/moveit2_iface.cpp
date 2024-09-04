@@ -154,7 +154,7 @@ void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
     // hardcode this to planning frame to check if it works like that?
     if(msg.get()->header.frame_id != PLANNING_FRAME) {
-        RCLCPP_ERROR(this->get_logger(), "Pose frame_id is not planning frame! Should be " << PLANNING_FRAME);
+        RCLCPP_INFO_STREAM(this->get_logger(), "Pose frame_id is not planning frame! Should be " << PLANNING_FRAME);
         return;
     }
     m_currPoseCmd.header.frame_id = PLANNING_FRAME; 
@@ -225,6 +225,10 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
 
     m_moveGroupPtr->setGoalPositionTolerance(POS_TOL);
     m_moveGroupPtr->startStateMonitor(); 
+
+    // velocity scaling
+    m_moveGroupPtr->setMaxVelocityScalingFactor(0.05);
+    m_moveGroupPtr->setMaxAccelerationScalingFactor(0.05);
     // executor
     executor_->add_node(node_); 
     executor_thread_ = std::thread([this]() {executor_->spin();});
@@ -315,6 +319,25 @@ void m2Iface::planExecCartesian(bool async=false)
     double eefStep = 0.02; 
     // plan Cartesian path
     m_moveGroupPtr->computeCartesianPath(cartesianWaypoints, eefStep, jumpThr, trajectory);
+
+    // -----------------------------------------------------
+    // The trajectory needs to be modified so it will include velocities as well.
+    // reference: https://groups.google.com/g/moveit-users/c/MOoFxy2exT4
+    // First to create a RobotTrajectory object
+    robot_trajectory::RobotTrajectory rt(m_moveGroupPtr->getCurrentState()->getRobotModel(), PLANNING_GROUP);
+    // Second get a RobotTrajectory from trajectory
+    rt.setRobotTrajectoryMsg(*m_moveGroupPtr->getCurrentState(), trajectory);
+    // Thrid create a IterativeParabolicTimeParameterization object
+    trajectory_processing::IterativeParabolicTimeParameterization iptp;
+    // Fourth compute computeTimeStamps
+    float maxVelScaling = 0.05;
+    float maxAccScaling = 0.05;
+    bool success = iptp.computeTimeStamps(rt, maxVelScaling, maxAccScaling);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Computed time stamp " << (success ? "SUCCEEDED" : "FAILED"));
+    // Get RobotTrajectory_msg from RobotTrajectory
+    rt.getRobotTrajectoryMsg(trajectory);
+    // -----------------------------------------------------
+
     execTrajectory(trajectory, async); 
     m_oldPoseCmd = m_currPoseCmd; 
 }
