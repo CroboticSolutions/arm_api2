@@ -59,7 +59,7 @@ def launch_setup(context, *args, **kwargs):
 
     launch_nodes_ = []
     arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
-    arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))   
+    arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=False))   
 
     # TODO: Swap between sim and real arg depending on the robot type
     robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
