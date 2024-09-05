@@ -53,6 +53,8 @@
 
 //* ros
 #include <rclcpp/rclcpp.hpp>
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "rclcpp_components/register_node_macro.hpp"
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2/LinearMath/Matrix3x3.h"
 
@@ -77,6 +79,10 @@
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
 #include "arm_api2_msgs/srv/set_vel_acc.hpp"
+#include "arm_api2_msgs/action/gripper_control.hpp"
+#include "arm_api2_msgs/action/move_cartesian.hpp"
+#include "arm_api2_msgs/action/move_joint.hpp"
+#include "arm_api2_msgs/action/move_cartesian_path.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
 // utils
@@ -145,14 +151,13 @@ class m2Iface: public rclcpp::Node
         /* init methods */
         void init_subscribers();
         void init_publishers(); 
-        void init_services(); 
+        void init_services();
+        void init_actionservers();
         void init_moveit(); 
         std::unique_ptr<moveit_servo::Servo> init_servo(); 
         
         /* subs */
-        rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr        pose_cmd_sub_;
         rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr           joint_state_sub_;
-        rclcpp::Subscription<arm_api2_msgs::msg::CartesianWaypoints>::SharedPtr ctraj_cmd_sub_; 
 
         /* pubs */
         rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr       pose_state_pub_;
@@ -163,9 +168,13 @@ class m2Iface: public rclcpp::Node
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       close_gripper_srv_;
         rclcpp::Service<arm_api2_msgs::srv::SetVelAcc>::SharedPtr                set_vel_acc_srv_;
 
+        /* actions */
+        rclcpp_action::Server<arm_api2_msgs::action::MoveJoint>::SharedPtr              move_to_joint_as_;
+        rclcpp_action::Server<arm_api2_msgs::action::MoveCartesian>::SharedPtr          move_to_pose_as_;
+        rclcpp_action::Server<arm_api2_msgs::action::MoveCartesianPath>::SharedPtr      move_to_pose_path_as_;
+        rclcpp_action::Server<arm_api2_msgs::action::GripperControl>::SharedPtr         gripper_control_as_;
+
         /* topic callbacks */
-        void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
-        void cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::SharedPtr msg); 
         void joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg);
         
         /* srv callbacks*/
@@ -178,6 +187,39 @@ class m2Iface: public rclcpp::Node
         void set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req,
                              const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res);
 
+        /* action callbacks */
+        rclcpp_action::GoalResponse move_to_joint_goal_cb(
+            const rclcpp_action::GoalUUID &uuid, 
+            std::shared_ptr<const arm_api2_msgs::action::MoveJoint::Goal> goal);
+        rclcpp_action::CancelResponse move_to_joint_cancel_cb(
+            const std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveJoint>> goal_handle);
+        void move_to_joint_accepted_cb(
+            std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveJoint>> goal_handle);
+        
+        rclcpp_action::GoalResponse move_to_pose_goal_cb(
+            const rclcpp_action::GoalUUID &uuid, 
+            std::shared_ptr<const arm_api2_msgs::action::MoveCartesian::Goal> goal);
+        rclcpp_action::CancelResponse move_to_pose_cancel_cb(
+            const std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesian>> goal_handle);
+        void move_to_pose_accepted_cb(
+            std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesian>> goal_handle);
+        
+        rclcpp_action::GoalResponse move_to_pose_path_goal_cb(
+            const rclcpp_action::GoalUUID &uuid, 
+            std::shared_ptr<const arm_api2_msgs::action::MoveCartesianPath::Goal> goal);
+        rclcpp_action::CancelResponse move_to_pose_path_cancel_cb(
+            const std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesianPath>> goal_handle);
+        void move_to_pose_path_accepted_cb(
+            std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesianPath>> goal_handle);
+
+        rclcpp_action::GoalResponse gripper_control_goal_cb(
+            const rclcpp_action::GoalUUID &uuid, 
+            std::shared_ptr<const arm_api2_msgs::action::GripperControl::Goal> goal);
+        rclcpp_action::CancelResponse gripper_control_cancel_cb(
+            const std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::GripperControl>> goal_handle);
+        void gripper_control_accepted_cb(
+            std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::GripperControl>> goal_handle);
+
         bool run(); 
 
         /* setters */
@@ -189,11 +231,10 @@ class m2Iface: public rclcpp::Node
         void getArmState();  
 
         /* funcs */
-        void execPlan(bool async); 
-        void execMove(bool async);  
-        void execCartesian(bool async); 
-        void planExecCartesian(bool async); 
-        void execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async); 
+        void planAndExecJoint();
+        void planAndExecPose();
+        void planAndExecPosePath();
+        void addTimestempsToTrajectory(moveit_msgs::msg::RobotTrajectory &trajectory);
 
         // Simple state machine 
         enum state{
@@ -226,12 +267,15 @@ class m2Iface: public rclcpp::Node
         bool servoEntered       = false; 
         bool async              = false; 
 
+        /* goal handles */
+        std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveJoint>> m_moveToJointGoalHandle_;
+        std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesian>> m_moveToPoseGoalHandle_;
+        std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesianPath>> m_moveToPosePathGoalHandle_;
+        std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::GripperControl>> m_gripperControlGoalHandle_;
+        
         /* ros vars */
-        geometry_msgs::msg::PoseStamped m_currPoseCmd; 
-        geometry_msgs::msg::PoseStamped m_pubCurrPoseCmd; 
-        geometry_msgs::msg::PoseStamped m_oldPoseCmd; 
-        geometry_msgs::msg::PoseStamped m_currPoseState;
-        sensor_msgs::msg::JointState    m_currJointState;  
+        std::vector<double> m_currJointPosition;
+        geometry_msgs::msg::PoseStamped m_currPoseState; 
         std::vector<geometry_msgs::msg::Pose> m_cartesianWaypoints; 
         
 
