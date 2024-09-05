@@ -1,8 +1,8 @@
-robot: 
-  arm_name: manipulator  
+robot:
+  arm_name: manipulator
   ee_link_name: tool0
   robot_desc: robot_description
-  move_group_ns: 
+  move_group_ns:
   planning_scene: planning_scene
   planning_frame: world #or base
   num_cart_pts: 20
@@ -11,21 +11,15 @@ robot:
   max_acc_scaling_factor: 0.1
 topic:
   sub:
-    cmd_pose:
-      name: arm/cmd/pose
-      queue: 1
-    cmd_traj: 
-      name: arm/cmd/traj
-      queue: 1
     cmd_tool_orientation:
       name: tool/cmd/orient
       queue: 1
-    cmd_delta_pose: 
+    cmd_delta_pose:
       name: arm/cmd/deta_pose
       queue: 1
     joint_states:
       name: joint_states
-      queue: 1  
+      queue: 1
   pub:
     display_trajectory:
       name: arm/display_path
@@ -33,16 +27,26 @@ topic:
     current_pose:
       name: arm/state/current_pose
       queue: 1
-srv: 
-  disable_collision: 
+srv:
+  disable_collision:
     name: /move_group/disable_collision
-  add_collision: 
+  add_collision:
     name: /move_group/add_collision
   change_robot_state:
     name: arm/change_state
   set_vel_acc:
     name: arm/set_vel_acc
-  open_gripper: 
+  open_gripper:
     name: arm/gripper/open
-  close_gripper: 
-    name: arm/gripper/close 
+  close_gripper:
+    name: arm/gripper/close
+
+action:
+  move_to_pose:
+    name: arm/move_to_pose
+  move_to_joint:
+    name: arm/move_to_joint
+  move_to_pose_path:
+    name: arm/move_to_pose_path
+  gripper_control:
+    name: arm/gripper_control
