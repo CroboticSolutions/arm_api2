@@ -76,6 +76,7 @@
 
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
+#include "arm_api2_msgs/srv/set_vel_acc.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
 // utils
@@ -131,7 +132,9 @@ class m2Iface: public rclcpp::Node
         /* parameters */
         std::string                                                         config_path; 
         bool                                                                enable_servo; 
-        float                                                               dt; 
+        float                                                               dt;
+        float                                                               max_vel_scaling_factor;
+        float                                                               max_acc_scaling_factor;
         
         /* config_file */
         YAML::Node config; 
@@ -157,7 +160,8 @@ class m2Iface: public rclcpp::Node
         /* srvs */
         rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       open_gripper_srv_; 
-        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       close_gripper_srv_; 
+        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       close_gripper_srv_;
+        rclcpp::Service<arm_api2_msgs::srv::SetVelAcc>::SharedPtr                set_vel_acc_srv_;
 
         /* topic callbacks */
         void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
@@ -170,7 +174,9 @@ class m2Iface: public rclcpp::Node
         void open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
                              const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
         void close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
-                             const std::shared_ptr<std_srvs::srv::Trigger::Response> res); 
+                             const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
+        void set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req,
+                             const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res);
 
         bool run(); 
 

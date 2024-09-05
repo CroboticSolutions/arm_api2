@@ -65,7 +65,9 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     PLANNING_SCENE      = config["robot"]["planning_scene"].as<std::string>(); 
     MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
     NUM_CART_PTS        = config["robot"]["num_cart_pts"].as<int>(); 
-    JOINT_STATES        = config["robot"]["joint_states"].as<std::string>(); 
+    JOINT_STATES        = config["robot"]["joint_states"].as<std::string>();
+    max_vel_scaling_factor = config["robot"]["max_vel_scaling_factor"].as<float>();
+    max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
     
     // Currently not used :) 
     ns_ = this->get_namespace(); 	
@@ -114,9 +116,11 @@ void m2Iface::init_services()
     auto change_state_name = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
     auto open_gripper_name = config["srv"]["open_gripper"]["name"].as<std::string>(); 
     auto close_gripper_name= config["srv"]["close_gripper"]["name"].as<std::string>();
+    auto set_vel_acc_name = config["srv"]["set_vel_acc"]["name"].as<std::string>();
     change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
     open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + open_gripper_name, std::bind(&m2Iface::open_gripper_cb, this, _1, _2));
     close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + close_gripper_name, std::bind(&m2Iface::close_gripper_cb, this, _1, _2));
+    set_vel_acc_srv_ = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2Iface::set_vel_acc_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
@@ -187,6 +191,21 @@ void m2Iface::close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Req
                                const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
 {
     gripper.close(); 
+}
+
+void m2Iface::set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req, const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res)
+{
+    if(req->max_vel < 0 || req->max_acc < 0 || req->max_vel > 1 || req->max_acc > 1)
+    {
+        res->success = false;
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Velocity and acceleration must be in the range [0, 1]!");
+        return;
+    }
+    max_vel_scaling_factor = float(req->max_vel);
+    max_acc_scaling_factor = float(req->max_acc);
+    res->success = true;
+    RCLCPP_INFO_STREAM(this->get_logger(), "Set velocity and acceleration to " << max_vel_scaling_factor << " " << max_acc_scaling_factor);
+
 }
 
 void m2Iface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
@@ -330,9 +349,7 @@ void m2Iface::planExecCartesian(bool async=false)
     // Thrid create a IterativeParabolicTimeParameterization object
     trajectory_processing::IterativeParabolicTimeParameterization iptp;
     // Fourth compute computeTimeStamps
-    float maxVelScaling = 0.05;
-    float maxAccScaling = 0.05;
-    bool success = iptp.computeTimeStamps(rt, maxVelScaling, maxAccScaling);
+    bool success = iptp.computeTimeStamps(rt, max_vel_scaling_factor, max_acc_scaling_factor);
     RCLCPP_INFO_STREAM(this->get_logger(), "Computed time stamp " << (success ? "SUCCEEDED" : "FAILED"));
     // Get RobotTrajectory_msg from RobotTrajectory
     rt.getRobotTrajectoryMsg(trajectory);
