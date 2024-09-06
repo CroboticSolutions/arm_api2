@@ -96,7 +96,7 @@ Currently implemented and available robot states are:
 Change robot state by calling: 
 
 ```
-ros2 service call /change_state arm_api2_msgs/srv/ChangeState "{state: JOINT_TRAJ_CTL}
+ros2 service call arm/change_state arm_api2_msgs/srv/ChangeState "{state: JOINT_TRAJ_CTL}"
 ```
 
 
