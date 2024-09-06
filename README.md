@@ -1,276 +1,313 @@
 # arm_api2
 
-:mechanical_arm: API for robotic manipulators based on: 
-* [Moveit2](https://moveit.picknik.ai/main/index.html)
-* [ROS 2](https://docs.ros.org/en/humble/index.html)
+:mechanical_arm: API for robotic manipulators based on:
 
-Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/kinova). 
+- [Moveit2](https://moveit.picknik.ai/main/index.html)
+- [ROS 2](https://docs.ros.org/en/humble/index.html)
 
-For building ROS 2 packages and moveit, it is neccessary to use [colcon](https://colcon.readthedocs.io/en/released/user/quick-start.html). 
+Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/kinova).
+
+For building ROS 2 packages and moveit, it is neccessary to use [colcon](https://colcon.readthedocs.io/en/released/user/quick-start.html).
 
 ## Tell us anonymously what arms we should support [here](https://forms.gle/d1fdfAbwZunDUcSi9). :smile:
 
-### Depends on: 
+### Depends on:
+
 - [arm_api2_msgs](https://github.com/CroboticSolutions/arm_api2_msgs)
 
-Aditional dependencies are (depending on the arm you use): 
+Aditional dependencies are (depending on the arm you use):
+
 - [kinova](https://github.com/CroboticSolutions/ros2_kortex)
 - [panda_sim](https://github.com/AndrejOrsula/panda_ign_moveit2)
-- [ur](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver) 
-- [ur_sim](https://github.com/CroboticSolutions/Universal_Robots_ROS2_GZ_Simulation) 
+- [ur](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver)
+- [ur_sim](https://github.com/CroboticSolutions/Universal_Robots_ROS2_GZ_Simulation)
 
 ### Aim of the repository
 
-With `arm_api` as precursor, which was intended to provide simple ROS interfacing with 
-robot manipulators with the help of MoveIt! and ROS. 
+With `arm_api` as precursor, which was intended to provide simple ROS interfacing with
+robot manipulators with the help of MoveIt! and ROS.
 
-This repository `arm_api2` is intended to provide interfacing support for robot manipulators for ROS 2 and MoveIt2!. 
+This repository `arm_api2` is intended to provide interfacing support for robot manipulators for ROS 2 and MoveIt2!.
 
-### Goals 
+### Goals
 
-Create API simple to **run** and **maintain** that supports working with different 
-robot manipulators out of the box. 
+Create API simple to **run** and **maintain** that supports working with different
+robot manipulators out of the box.
 
-Robot manipulators of interest are: 
-* Franka Emika
-* UR 
-* Kinova 
-* Kuka 
+Robot manipulators of interest are:
 
-Wanted arm functionalities: 
+- Franka Emikarobotic
+- UR
+- Kinova
+- Kuka
+
+Wanted arm functionalities:
+
 1. `go_to_pose`
-2. `grasp` 
-3. `release` 
+2. `grasp`
+3. `release`
 4. `push`
 5. `<something_else?>`
 
-### ROS 2 robot interface: 
+### ROS 2 robot interface:
 
-**Change robot state**: 
+**Change robot state**:
+
 - srv: `/arm_api2_msgs/srv/ChangeState.srv`
 - values `JOINT_TRAJ_CTL || CART_TRAJ_CTL || SERVO_CTL`
 
-**Command robot pose**: 
+**Command robot pose**:
+
 - msg: `geometry_msgs/msg/PoseStamped.msg`
 
-**Command cartesian path**:   
+**Command cartesian path**:
+
 - msg: `arm_api2_msgs/msg/CartesianWaypoints.msg`
 
 **Command gripper closing**:
+
 - srv: `std_srvs/srv/Trigger.srv`
 
-**Command gripper opening**: 
+**Command gripper opening**:
+
 - srv: `std_srvs/srv/Trigger.srv`
 
-**Get current end effector pose**: 
+**Get current end effector pose**:
+
 - msg: `geometry_msgs/msg/PoseStamped.msg`
 
 #### Robot states
 
-Currently implemented and available robot states are: 
-- `JOINT_TRAJ_CTL`, which is used for joint control 
-- `CART_TRAJ_CTL`, which is used for cartesian control 
+Currently implemented and available robot states are:
+
+- `JOINT_TRAJ_CTL`, which is used for joint control
+- `CART_TRAJ_CTL`, which is used for cartesian control
 - `SERVO_CTL`, which is used for the end effector servoing
 
-Change robot state by calling: 
+Change robot state by calling:
 
-```
+```bash
 ros2 service call arm/change_state arm_api2_msgs/srv/ChangeState "{state: JOINT_TRAJ_CTL}"
 ```
-
 
 <details>
 <summary><h3>How to build package?</h3></summary>
 
-### Build:
+### Build
 
-Build in ROS 2 workspace. 
-Build just one package with: 
-```
+Build in ROS 2 workspace.
+Build just one package with:
+
+```bash
 colcon build --packages-select arm_api2
 ```
 
-Build with the compile commands (enable autocomplete): 
-```
+Build with the compile commands (enable autocomplete):
+
+```bash
 colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 ```
 
-Building with `--symlink-install` causes it to fail often because of already built ROS 2 packages, you can run: 
+Building with `--symlink-install` causes it to fail often because of already built ROS 2 packages, you can run:
+
 ```
 colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON --continue-on-error
 ```
 
-Full verbose build command: 
+Full verbose build command:
+
 ```
 colcon build --symlink-install --packages-select moveit2_tutorials --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_VERBOSE_MAKEFILE=ON
 ```
+
 </details>
 
 ### Simplify your life
 
 #### Aliases
-Copy to `~/.bashrc` and source it. 
 
-```
-alias cbp="colcon build --symlink-install --packages-select" 
+Copy to `~/.bashrc` and source it.
+
+```bash
+alias cbp="colcon build --symlink-install --packages-select"
 alias panda_sim="ros2 launch panda gz.launch.py"
-alias kinova_sim="ros2 launch kortex_bringup kortex_sim_control.launch.py dof:=7 use_sim_time:=true launch_rviz:=false" 
+alias kinova_sim="ros2 launch kortex_bringup kortex_sim_control.launch.py dof:=7 use_sim_time:=true launch_rviz:=false"
 alias ur_sim="ros2 launch ur_simulation_gz ur_sim_control.launch.py ur_type:=\"ur10\""
 ```
 
-Build `arm_api2` package as: 
+Build `arm_api2` package as:
 
-```
+```bash
 cbp arm_api2
-``` 
-
-Start franka sim with: 
-
 ```
+
+Start franka sim with:
+
+```bash
 franka_sim
 ```
 
-Start kinova sim with: 
+Start kinova sim with:
 
-```
+```bash
 kinova_sim
 ```
 
-Start ur sim with: 
-```
+Start ur sim with:
+
+```bash
 ur_sim
 ```
 
-Start iface by changing `robot_name` argument to `kinova`, `ur` or `franka`. Depending which arm you want to use, when running: 
-```
+Start iface by changing `robot_name` argument to `kinova`, `ur` or `franka`. Depending which arm you want to use, when running:
+
+```bash
 ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=<robot_name>
 ```
 
-#### Tmunxinator 
+#### Tmunxinator
 
-Start kinova with: 
-```
+Start kinova with:
+
+```bash
 tmuxinator start kinova_api2
 ```
 
-after calling 
-```
+after calling
+
+```bash
 ./copy_tmuxinator_config.sh kinova_api2.yml
 ```
-located in `utils/tmux_configs`. Navigate between 
-panes with `Ctrl+B`+(arrows). 
 
+located in `utils/tmux_configs`. Navigate between
+panes with `Ctrl+B`+(arrows).
 
 <details>
 <summary><h3>How to use Kinova?</summary>
 
-You can run kinova in simulation by executing following commands: 
-```
+You can run kinova in simulation by executing following commands:
+
+```bash
 ros2 launch kortex_bringup kortex_sim_control.launch.py dof:=7 use_sim_time:=true launch_rviz:=false
 ```
-or 
-```
+
+or
+
+```bash
 kinova_sim
 ```
-if alias has been added. 
 
-After that run `move_group` node as follows: 
-```
+if alias has been added.
+
+After that run `move_group` node as follows:
+
+```bash
 ros2 launch kinova_gen3_7dof_robotiq_2f_85_moveit_config sim.launch.py
 ```
 
-After that run `arm_api2` `moveit2_iface` node as follows: 
-```
+After that run `arm_api2` `moveit2_iface` node as follows:
+
+```bash
 ros2 launch arm_api2 moveit2_iface.launch.py robot_name:="kinova"
 ```
 
 #### Kinova
 
-How to setup real kinova [here](https://git.initrobots.ca/amercader/kinova-kortex-installation). 
-
+How to setup real kinova [here](https://git.initrobots.ca/amercader/kinova-kortex-installation).
 
 </details>
 
 <details>
 <summary><h3>How to use UR?</summary>
 
-### How to use? 
-You can run UR in simulation by executing following commands: 
+### How to use?
+
+You can run UR in simulation by executing following commands:
+
 ```
 ros2 launch ur_simulation_gz ur_sim_control.launch.py ur_type:="ur10"
 ```
-or 
+
+or
+
 ```
 ur_sim
 ```
-if alias has been added. 
 
-After that run `move_group` node as follows: 
+if alias has been added.
+
+After that run `move_group` node as follows:
+
 ```
 ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:="ur10" use_sim_time:=true
 ```
 
-After that run `arm_api2` `moveit2_iface` node as follows: 
+After that run `arm_api2` `moveit2_iface` node as follows:
+
 ```
 ros2 launch arm_api2 moveit2_iface.launch.py robot_name:="ur"
 ```
 
+#### How to setup?
 
-#### How to setup? 
+First run:
 
-First run: 
 ```
 sudo apt-get install ros-humble-ur
 ```
 
-After that, in your ROS 2 workspace clone: 
-* [ur_gz_sim](https://github.com/CroboticSolutions/Universal_Robots_ROS2_GZ_Simulation/tree/humble)  
-* [ur_ros2_driver](https://github.com/CroboticSolutions/Universal_Robots_ROS2_Driver/tree/humble)  
-and build your workspace. Source it, and you're good to go. 
+After that, in your ROS 2 workspace clone:
 
-Note, those are forks of the official UR repositories on the `humble` branch, 
-with [slight changes](https://github.com/CroboticSolutions/Universal_Robots_ROS2_Driver/commit/3ad47d7afaf99eeb1f69c6bb23bbdcccce12c4f5) to the `launch` files. 
+- [ur_gz_sim](https://github.com/CroboticSolutions/Universal_Robots_ROS2_GZ_Simulation/tree/humble)
+- [ur_ros2_driver](https://github.com/CroboticSolutions/Universal_Robots_ROS2_Driver/tree/humble)  
+  and build your workspace. Source it, and you're good to go.
+
+Note, those are forks of the official UR repositories on the `humble` branch,
+with [slight changes](https://github.com/CroboticSolutions/Universal_Robots_ROS2_Driver/commit/3ad47d7afaf99eeb1f69c6bb23bbdcccce12c4f5) to the `launch` files.
+
 </details>
-
 
 <details>
 <summary><h3>How to use with custom arm?</summary>
 
-In order to use this package with custom arm, you need to do following: 
+In order to use this package with custom arm, you need to do following:
 
-1.  Create moveit_package for your arm using `moveit_setup_assistant`. 
-Tutorial on how to use it can be be found [here](https://moveit.picknik.ai/main/doc/examples/setup_assistant/setup_assistant_tutorial.html). 
-Output of the `moveit_setup_assistant` is `<custom_arm>_moveit_config` package. 
+1.  Create moveit_package for your arm using `moveit_setup_assistant`.
+    Tutorial on how to use it can be be found [here](https://moveit.picknik.ai/main/doc/examples/setup_assistant/setup_assistant_tutorial.html).
+    Output of the `moveit_setup_assistant` is `<custom_arm>_moveit_config` package.
 
-2. Create config files: 
+2.  Create config files:
 
-a) Create `<custom_arm>_config.yaml` and `<custom_arm>_servo_config.yaml` in the config folder. 
-b) Modify `moveit2_iface.launch.py` script by setting correct `robot` argument to the `<custom_arm>` value. 
+a) Create `<custom_arm>_config.yaml` and `<custom_arm>_servo_config.yaml` in the config folder.
+b) Modify `moveit2_iface.launch.py` script by setting correct `robot` argument to the `<custom_arm>` value.
 
-3. Setup robot launch file: 
+3. Setup robot launch file:
 
-In order to be able to use `<custom_arm>` please make sure that you set following parameters to true when launching 
-`moveit_group` node (generated by moveit_setup_assistant): 
+In order to be able to use `<custom_arm>` please make sure that you set following parameters to true when launching
+`moveit_group` node (generated by moveit_setup_assistant):
+
 ```
     publish_robot_description_semantic = {"publish_robot_description_semantic": True}
     publish_robot_description = {"publish_robot_description": True}
-    publish_robot_description_kinematics = {"publish_robot_description_kinematics": True} 
+    publish_robot_description_kinematics = {"publish_robot_description_kinematics": True}
 
 ```
-as shown [here](https://github.com/CroboticSolutions/ros2_kortex/blob/main/kortex_moveit_config/kinova_gen3_7dof_robotiq_2f_85_moveit_config/launch/sim.launch.py). 
 
-4. Launch: 
+as shown [here](https://github.com/CroboticSolutions/ros2_kortex/blob/main/kortex_moveit_config/kinova_gen3_7dof_robotiq_2f_85_moveit_config/launch/sim.launch.py).
+
+4. Launch:
 
 a) Launch your robot (see examples on kinova, UR or Franka) - `move_group` node
-b) Launch `moveit2_iface.launch.py` with correct `robot` param. 
+b) Launch `moveit2_iface.launch.py` with correct `robot` param.
+
 </details>
 
 <details>
 <summary><h3> Arm interfaces </h3></summary>
 
-* [franka_ros2](https://support.franka.de/docs/franka_ros2.html)
-* [kinova_ros2](https://github.com/Kinovarobotics/ros2_kortex)
-* [UR_ros2](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver)
+- [franka_ros2](https://support.franka.de/docs/franka_ros2.html)
+- [kinova_ros2](https://github.com/Kinovarobotics/ros2_kortex)
+- [UR_ros2](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver)
 </details>
 
 <details> 
@@ -281,7 +318,7 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 - [C++ good practices](https://ctu-mrs.github.io/docs/introduction/c_to_cpp.html)
 - [MoveIt2! C++ iface](https://moveit.picknik.ai/main/doc/examples/move_group_interface/move_group_interface_tutorial.html)
 - [How to setup VSCode](https://picknik.ai/vscode/docker/ros2/2024/01/23/ROS2-and-VSCode.html)
-- [First Cpp node for ROS 2](https://turtlebot.github.io/turtlebot4-user-manual/tutorials/first_node_cpp.html) 
+- [First Cpp node for ROS 2](https://turtlebot.github.io/turtlebot4-user-manual/tutorials/first_node_cpp.html)
 - [Composition of ROS nodes](https://answers.ros.org/question/316870/ros2-composition-and-node-names-with-launch-files/)
 - [planning_scene](https://github.com/moveit/moveit2_tutorials/blob/main/doc/examples/planning_scene/src/planning_scene_tutorial.cpp)
 - [custom moveit ns](https://github.com/moveit/moveit2/issues/2415)
@@ -291,7 +328,6 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 
 </details>
 
-
 <details>
 <summary><h3>Status</h3></summary>
 
@@ -300,21 +336,22 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 - [x] Fix command/reached pose mismatch!
 - [x] Add orientation normalization
 - [x] Add contributing
-- [x] Add gripper abstract class 
+- [x] Add gripper abstract class
 - [ ] Add correct inheritance for the gripper abstract class
 - [ ] Create universal launch file
 - [ ] Create standardized joystick class
 - [ ] Test/Test/Test
 
-### TODO [Low priority]: 
+### TODO [Low priority]:
+
 - [x] Test with real robot manipulator [tested on Kinova, basic functionality tested]
 - [x] Add basic documentation
 - [x] Add roadmap
 - [ ] Discuss potential SW patterns that can be used
-- [ ] Add full cartesian following 
-- [ ] Add roll, pitch, yaw and quaternion conversion 
+- [ ] Add full cartesian following
+- [ ] Add roll, pitch, yaw and quaternion conversion
 - [x] Decouple moveit2_iface.cpp and utils.cpp (contains all utils scripts)
-- [x] Create table of supported robot manipulators 
+- [x] Create table of supported robot manipulators
 </details>
 
 <details>
@@ -322,28 +359,25 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 <summary><h3>Supported arms table<h3></summary>
 
 |     Arms     | CART_TRAJ_CTL | JOINT_TRAJ_CTL | SERVO_CTL | SIM | REAL | EXT_TEST |
-|:------------:|---------------|----------------|-----------|-----|------|----------|
+| :----------: | ------------- | -------------- | --------- | --- | ---- | -------- |
 | Franka Emika | +             | +              | +         | +   | -    | -        |
-| Kinova       | +             | +              | +         | +   | -    | -        |
-| UR           | +             | +              | +         | +   | -    | -        |
-| IIWA         | -             | -              | -         | -   | -    | -        |
+|    Kinova    | +             | +              | +         | +   | -    | -        |
+|      UR      | +             | +              | +         | +   | -    | -        |
+|     IIWA     | -             | -              | -         | -   | -    | -        |
 
 </details>
 
-
 ## Roadmap
-
 
 ```mermaid
 timeline
     4/2024 : Start of the development
     6/2024 : Open-sourced version
     9/2024 : Tested on one manipulator
-    10/2024: Integrated with GUI 
+    10/2024: Integrated with GUI
     11/2024: Integrated with perception capabilities
     12/2024 : Tested on 5 manipulators
     .../2025 : TBA
 ```
 
-If you want to contribute, please check **Status** section and check [CONTRIBUTE](./CONTRIBUTE.md).  
-
+If you want to contribute, please check **Status** section and check [CONTRIBUTE](./CONTRIBUTE.md).
