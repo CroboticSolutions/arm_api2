@@ -77,6 +77,7 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     init_subscribers(); 
     init_services(); 
     init_moveit(); 
+    init_actionservers();
     if (enable_servo) {servoPtr = init_servo();}; 
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized node!"); 
