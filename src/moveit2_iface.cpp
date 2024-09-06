@@ -311,7 +311,7 @@ rclcpp_action::CancelResponse m2Iface::move_to_pose_path_cancel_cb(const std::sh
 void m2Iface::move_to_pose_path_accepted_cb(std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesianPath>> goal_handle)
 {
     m_moveToPosePathGoalHandle_ = goal_handle;
-    recivCmd = true;
+    recivTraj = true;
 }
 
 rclcpp_action::GoalResponse m2Iface::gripper_control_goal_cb(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const arm_api2_msgs::action::GripperControl::Goal> goal)
