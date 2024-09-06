@@ -68,6 +68,7 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
     NUM_CART_PTS        = config["robot"]["num_cart_pts"].as<int>(); 
     JOINT_STATES        = config["robot"]["joint_states"].as<std::string>();
+    WITH_PLANNER        = config["robot"]["with_planner"].as<bool>();
     max_vel_scaling_factor = config["robot"]["max_vel_scaling_factor"].as<float>();
     max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
     
@@ -457,12 +458,21 @@ void m2Iface::planAndExecPose()
     RCLCPP_INFO_STREAM(this->get_logger(), "Target pose is: " << goalPose.pose.position.x << " " << goalPose.pose.position.y << " " << goalPose.pose.position.z);
     RCLCPP_INFO_STREAM(this->get_logger(), "Creating Cartesian waypoints!");
     RCLCPP_INFO_STREAM(this->get_logger(), "Number of waypoints: " << NUM_CART_PTS);
-    std::vector<geometry_msgs::msg::Pose> cartesianWaypoints = utils::createCartesianWaypoints(m_currPoseState.pose, goalPose.pose, NUM_CART_PTS); 
+     
     moveit_msgs::msg::RobotTrajectory trajectory;
-    // TODO: Set as params that can be configured in YAML!
-    double jumpThr = 0.0; 
-    double eefStep = 0.02; 
-    bool success = (m_moveGroupPtr->computeCartesianPath(cartesianWaypoints, eefStep, jumpThr, trajectory) == 1.0);
+
+    bool success = false;
+
+    if(WITH_PLANNER){
+        success = planWithPlanner(goalPose.pose, trajectory);
+    }
+    else{
+        // TODO: Set as params that can be configured in YAML!
+        double jumpThr = 0.0; 
+        double eefStep = 0.02;
+        std::vector<geometry_msgs::msg::Pose> cartesianWaypoints = utils::createCartesianWaypoints(m_currPoseState.pose, goalPose.pose, NUM_CART_PTS); 
+        success = (m_moveGroupPtr->computeCartesianPath(cartesianWaypoints, eefStep, jumpThr, trajectory) == 1.0);
+    }
 
     if(success){
         addTimestempsToTrajectory(trajectory);
@@ -540,6 +550,60 @@ void m2Iface::addTimestempsToTrajectory(moveit_msgs::msg::RobotTrajectory &traje
     // Get RobotTrajectory_msg from RobotTrajectory
     rt.getRobotTrajectoryMsg(trajectory);
 } 
+
+bool m2Iface::planWithPlanner(geometry_msgs::msg::Pose goalPose, moveit_msgs::msg::RobotTrajectory &trajectory){
+    // Planning priority:
+    // 1. LIN planner from pilz_industrial_motion_planner
+    // 2. EST planner from ompl
+    // 3. PRM planner from ompl
+    // for EST and PRM create three plans and choose the best one
+
+    m_moveGroupPtr->setPoseTarget(goalPose);
+    
+    m_moveGroupPtr->setPlanningPipelineId("pilz_industrial_motion_planner");
+    m_moveGroupPtr->setPlannerId("LIN");
+    
+    std::list<moveit::planning_interface::MoveGroupInterface::Plan> all_plans;
+
+    bool success = false;
+    for(int i = 0; i < 9; i++){
+
+        if(i == 3){
+            if(all_plans.size() != 0){
+                RCLCPP_INFO_STREAM(this->get_logger(), "LIN planner succeeded! - no more planners needed");
+                break;
+            }
+            RCLCPP_INFO_STREAM(this->get_logger(), "LIN planner failed! - trying next planner: EST");
+            m_moveGroupPtr->setPlanningPipelineId("ompl");
+            m_moveGroupPtr->setPlannerId("EST");
+        }
+        if(i == 6){
+            RCLCPP_INFO_STREAM(this->get_logger(), "EST had three tries - trying next planner: PRM");
+            m_moveGroupPtr->setPlanningPipelineId("ompl");
+            m_moveGroupPtr->setPlannerId("PRM");
+        }
+
+        moveit::planning_interface::MoveGroupInterface::Plan plan;
+        success = static_cast<bool>(m_moveGroupPtr->plan(plan));
+
+        if(success){
+            RCLCPP_INFO(this->get_logger(), "Plan %d has %d points", i, int(plan.trajectory_.joint_trajectory.points.size()));
+            all_plans.push_back(plan);
+        }
+    }
+
+    if(all_plans.size() == 0){
+        RCLCPP_INFO_STREAM(this->get_logger(), "All planners failed!");
+        return false;
+    }
+    // find the best plan from the list of plans
+    auto best_plan = std::min_element(all_plans.begin(), all_plans.end(), [](auto const& a, auto const& b){
+        return a.trajectory_.joint_trajectory.points.size() < b.trajectory_.joint_trajectory.points.size();
+    });
+
+    trajectory = best_plan->trajectory_;
+    return true;
+}
 
 void m2Iface::getArmState() 
 {   
