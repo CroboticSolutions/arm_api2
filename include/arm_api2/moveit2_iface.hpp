@@ -128,7 +128,8 @@ class m2Iface: public rclcpp::Node
         std::string PLANNING_SCENE; 
         std::string PLANNING_FRAME; 
         std::string MOVE_GROUP_NS; 
-        std::string JOINT_STATES; 
+        std::string JOINT_STATES;
+        bool WITH_PLANNER; 
         int NUM_CART_PTS; 
         bool ENABLE_SERVO; 
 
@@ -235,6 +236,7 @@ class m2Iface: public rclcpp::Node
         void planAndExecPose();
         void planAndExecPosePath();
         void addTimestempsToTrajectory(moveit_msgs::msg::RobotTrajectory &trajectory);
+        bool planWithPlanner(geometry_msgs::msg::Pose goalPose, moveit_msgs::msg::RobotTrajectory &trajectory);
 
         // Simple state machine 
         enum state{
