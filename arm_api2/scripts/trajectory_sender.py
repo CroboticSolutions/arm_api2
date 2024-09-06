@@ -10,6 +10,7 @@ from ament_index_python.packages import get_package_share_directory
 from arm_api2_msgs.action import MoveCartesianPath
 from geometry_msgs.msg import PoseStamped
 from rclpy.action import ActionClient
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from scipy.spatial.transform import Rotation as R
 
@@ -30,8 +31,8 @@ class CreateAndPublishTrajectory(Node):
         )
 
         # Path to predefined trajectories
-        c_csv_pth = get_package_share_directory('arm_api2') + "/utils/CS_C_easy.csv"
-        s_csv_pth = get_package_share_directory('arm_api2') + "/utils/CS_S_easy.csv"
+        c_csv_pth = get_package_share_directory("arm_api2") + "/utils/CS_C_easy.csv"
+        s_csv_pth = get_package_share_directory("arm_api2") + "/utils/CS_S_easy.csv"
 
         self.get_logger().info(f"C trajectory path is: {c_csv_pth}")
         self.get_logger().info(f"S trajectory path is: {s_csv_pth}")
@@ -153,7 +154,9 @@ class CreateAndPublishTrajectory(Node):
             while self.send_traj_flag.is_set() or not self.receive_pose_flag.is_set():
                 pass
 
-            user_input = input("Enter 's' for S trajectory, 'c' for C trajectory, enter 'q' to quit: ")
+            user_input = input(
+                "Enter 's' for S trajectory, 'c' for C trajectory, enter 'q' to quit: "
+            )
 
             if user_input.lower() == "s":
                 self.get_logger().info("Starting S trajectory...")
@@ -176,9 +179,15 @@ class CreateAndPublishTrajectory(Node):
 def main(args=None):
     rclpy.init(args=args)
     CPT = CreateAndPublishTrajectory()
-    rclpy.spin(CPT)
-    CPT.destroy_node()
-    rclpy.shutdown()
+
+    executor = MultiThreadedExecutor()
+    executor.add_node(CPT)
+
+    try:
+        executor.spin()
+
+    finally:
+        CPT.destroy_node()
 
 
 if __name__ == "__main__":
