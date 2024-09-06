@@ -13,7 +13,7 @@ For building ROS 2 packages and moveit, it is neccessary to use [colcon](https:/
 
 ### Depends on:
 
-- [arm_api2_msgs](https://github.com/CroboticSolutions/arm_api2_msgs)
+- [arm_api2_msgs](https://github.com/edgarwelteKIT/arm_api2_msgs)
 
 Aditional dependencies are (depending on the arm you use):
 
@@ -41,39 +41,44 @@ Robot manipulators of interest are:
 - Kinova
 - Kuka
 
-Wanted arm functionalities:
+Current features:
+- go_to_pose
+- go_to_configuration
+- follow_pose_trajectory
 
-1. `go_to_pose`
-2. `grasp`
-3. `release`
-4. `push`
-5. `<something_else?>`
 
 ### ROS 2 robot interface:
 
 **Change robot state**:
 
+The robot state can be changed via a ROS2 service.
+
+- name: `arm/change_state`
 - srv: `/arm_api2_msgs/srv/ChangeState.srv`
 - values `JOINT_TRAJ_CTL || CART_TRAJ_CTL || SERVO_CTL`
 
 **Command robot pose**:
 
-- msg: `geometry_msgs/msg/PoseStamped.msg`
+A robot pose where the robot should move to can be commanded via ROS2 action.
+- name: `arm/move_to_pose`
+- action: `arm_api2_msgs/action/MoveCartesian.action`
 
 **Command cartesian path**:
 
-- msg: `arm_api2_msgs/msg/CartesianWaypoints.msg`
+A catesian path can be commanded via ROS2 action.
+- name: `arm/move_to_pose_path`
+- action: `arm_api2_msgs/action/MoveCartesianPath.action`
 
-**Command gripper closing**:
+**Command joint position**:
 
-- srv: `std_srvs/srv/Trigger.srv`
-
-**Command gripper opening**:
-
-- srv: `std_srvs/srv/Trigger.srv`
+A robot joint position where the robot should move to can be commanded via ROS2 action.
+- name: `arm/move_to_pose`
+- msg: `arm_api2_msgs/action/MoveJoint.msg`
 
 **Get current end effector pose**:
 
+The current endeffector pose is published as topic.
+- topic: `arm/state/current_pose`
 - msg: `geometry_msgs/msg/PoseStamped.msg`
 
 #### Robot states
