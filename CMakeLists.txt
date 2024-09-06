@@ -70,11 +70,11 @@ joy_ctl
 DESTINATION lib/${PROJECT_NAME})
 
 # Install Python modules
-ament_python_install_package(${PROJECT_NAME})
+#ament_python_install_package(${PROJECT_NAME})
 
 install(PROGRAMS
-  arm_api2/scripts/pose_sender.py 
-  arm_api2/scripts/trajectory_sender.py
+  examples/scripts/pose_sender_action_client.py 
+  examples/scripts/trajectory_sender_action_client.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
