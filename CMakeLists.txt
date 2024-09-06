@@ -71,7 +71,8 @@ DESTINATION lib/${PROJECT_NAME})
 # Install Python modules
 ament_python_install_package(${PROJECT_NAME})
 
-install(PROGRAMS 
+install(PROGRAMS
+  arm_api2/scripts/pose_sender.py 
   arm_api2/scripts/trajectory_sender.py
   DESTINATION lib/${PROJECT_NAME}
 )
