@@ -479,9 +479,19 @@ void m2Iface::planAndExecPose()
 
         feedback->set__status("executing");
         m_moveToPoseGoalHandle_->publish_feedback(feedback);
-        m_moveGroupPtr->execute(trajectory);
-        result->success = true;
-        m_moveToPoseGoalHandle_->succeed(result);
+        auto errorcode = m_moveGroupPtr->execute(trajectory);
+        if(errorcode == moveit::planning_interface::MoveItErrorCode::SUCCESS){
+            RCLCPP_INFO_STREAM(this->get_logger(), "Execution succeeded!");
+            result->success = true;
+            m_moveToPoseGoalHandle_->succeed(result);
+        }
+        else{
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Execution failed with error code");
+            result->success = true;
+            m_moveToPoseGoalHandle_->abort(result); 
+        }
+        
+        
     }
     else{
         RCLCPP_ERROR(this->get_logger(), "Planning failed!");
