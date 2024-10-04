@@ -69,6 +69,15 @@ install(TARGETS
 joy_ctl
 DESTINATION lib/${PROJECT_NAME})
 
+add_executable(keyboard_ctl src/servo_keyboard_input.cpp)
+
+ament_target_dependencies(keyboard_ctl
+  rclcpp std_msgs geometry_msgs std_srvs sensor_msgs control_msgs)
+
+install(TARGETS
+  keyboard_ctl
+  DESTINATION lib/${PROJECT_NAME})
+
 # Install Python modules
 #ament_python_install_package(${PROJECT_NAME})
 
