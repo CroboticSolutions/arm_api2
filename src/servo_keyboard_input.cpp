@@ -45,6 +45,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <control_msgs/msg/joint_jog.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 
 #include <signal.h>
 #include <stdio.h>
@@ -75,6 +76,7 @@
 // Some constants used in the Servo Teleop demo
 const std::string TWIST_TOPIC = "/moveit2_iface_node/delta_twist_cmds";
 const std::string JOINT_TOPIC = "/moveit2_iface_node/delta_joint_cmds";
+const std::string JOINT_STATE_TOPIC = "/joint_states";
 const size_t ROS_QUEUE_SIZE = 10;
 const std::string EEF_FRAME_ID = "tool0";
 const std::string BASE_FRAME_ID = "base_link";
@@ -127,18 +129,30 @@ private:
 
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_pub_;
   rclcpp::Publisher<control_msgs::msg::JointJog>::SharedPtr joint_pub_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
 
   std::string frame_to_publish_;
   double joint_vel_cmd_;
   double vel_scale_;
+  bool joint_states_received_;
+  // list of joint names
+  std::vector<std::string> joint_names_;
 };
 
-KeyboardServo::KeyboardServo() : frame_to_publish_(BASE_FRAME_ID), joint_vel_cmd_(1.0), vel_scale_(0.1)
+KeyboardServo::KeyboardServo() : frame_to_publish_(BASE_FRAME_ID), joint_vel_cmd_(1.0), vel_scale_(0.1), joint_states_received_(false)
 {
   nh_ = rclcpp::Node::make_shared("servo_keyboard_input");
 
   twist_pub_ = nh_->create_publisher<geometry_msgs::msg::TwistStamped>(TWIST_TOPIC, ROS_QUEUE_SIZE);
   joint_pub_ = nh_->create_publisher<control_msgs::msg::JointJog>(JOINT_TOPIC, ROS_QUEUE_SIZE);
+  joint_state_sub_ = nh_->create_subscription<sensor_msgs::msg::JointState>(
+      JOINT_STATE_TOPIC, ROS_QUEUE_SIZE,
+      [this](const sensor_msgs::msg::JointState::SharedPtr msg) {
+        (void)msg;
+        joint_states_received_ = true;
+        // save joint names
+        joint_names_ = msg->name;
+      });
 }
 
 KeyboardReader input;
@@ -180,6 +194,18 @@ int KeyboardServo::keyLoop()
   bool publish_joint = false;
 
   std::thread{ std::bind(&KeyboardServo::spin, this) }.detach();
+
+  while(!joint_states_received_)
+  {
+    RCLCPP_INFO(nh_->get_logger(), "Waiting for joint states...");
+    rclcpp::sleep_for(std::chrono::seconds(1));
+  }
+
+  // print joint names with index (starting from 1)
+  for (size_t i = 0; i < joint_names_.size(); ++i)
+  {
+    RCLCPP_INFO(nh_->get_logger(), "Joint %d: %s", int(i + 1), joint_names_[i].c_str());
+  }
 
   puts("Reading from keyboard");
   puts("---------------------------");
@@ -250,43 +276,48 @@ int KeyboardServo::keyLoop()
         break;
       case KEYCODE_1:
         RCLCPP_DEBUG(nh_->get_logger(), "1");
-        joint_msg->joint_names.push_back("panda_joint1");
+        joint_msg->joint_names.push_back(joint_names_[0]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
         publish_joint = true;
         break;
       case KEYCODE_2:
         RCLCPP_DEBUG(nh_->get_logger(), "2");
-        joint_msg->joint_names.push_back("panda_joint2");
+        joint_msg->joint_names.push_back(joint_names_[1]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
         publish_joint = true;
         break;
       case KEYCODE_3:
         RCLCPP_DEBUG(nh_->get_logger(), "3");
-        joint_msg->joint_names.push_back("panda_joint3");
+        joint_msg->joint_names.push_back(joint_names_[2]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
         publish_joint = true;
         break;
       case KEYCODE_4:
         RCLCPP_DEBUG(nh_->get_logger(), "4");
-        joint_msg->joint_names.push_back("panda_joint4");
+        joint_msg->joint_names.push_back(joint_names_[3]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
         publish_joint = true;
         break;
       case KEYCODE_5:
         RCLCPP_DEBUG(nh_->get_logger(), "5");
-        joint_msg->joint_names.push_back("panda_joint5");
+        joint_msg->joint_names.push_back(joint_names_[4]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
         publish_joint = true;
         break;
       case KEYCODE_6:
         RCLCPP_DEBUG(nh_->get_logger(), "6");
-        joint_msg->joint_names.push_back("panda_joint6");
+        joint_msg->joint_names.push_back(joint_names_[5]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
         publish_joint = true;
         break;
       case KEYCODE_7:
+        if (joint_names_.size() < 7)
+        {
+          RCLCPP_WARN(nh_->get_logger(), "Not enough joints for key 7");
+          break;
+        }
         RCLCPP_DEBUG(nh_->get_logger(), "7");
-        joint_msg->joint_names.push_back("panda_joint7");
+        joint_msg->joint_names.push_back(joint_names_[6]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
         publish_joint = true;
         break;
