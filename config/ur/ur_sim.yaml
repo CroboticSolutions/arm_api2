@@ -36,7 +36,7 @@ srv:
     name: /move_group/disable_collision
   add_collision: 
     name: /move_group/add_collision
-  change_state:
+  change_robot_state:
     name: arm/change_state
   open_gripper: 
     name: arm/gripper/open
