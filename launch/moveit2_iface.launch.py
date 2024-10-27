@@ -87,6 +87,7 @@ def launch_setup(context, *args, **kwargs):
     launch_move_group = Node(
         package='arm_api2',
         executable='moveit2_iface',
+        #prefix=['gdbserver localhost:3000'],
         parameters=[{"use_sim_time": use_sim_time},
                     {"enable_servo": use_servo},
                     {"dt": dt},
