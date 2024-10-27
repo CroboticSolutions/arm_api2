@@ -15,7 +15,7 @@ class JointSenderActionClient(Node):
 
     def send_goal(self, goal: JointState):
         goal_msg = MoveJoint.Goal()
-        goal_msg.goal = goal
+        goal_msg.joint_state = goal
 
         self.get_logger().info("Waiting for action server...")
 
