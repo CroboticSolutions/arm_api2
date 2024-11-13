@@ -103,21 +103,21 @@ def launch_setup(context, *args, **kwargs):
         # https://index.ros.org/p/joy/ --> joy node as joystick (Create subscriber that takes cmd_vel)
         # Example of demo joint_jog
         joy_node = Node(
-            package='joy', 
-            executable="joy_node", 
+            package='joy_linux', 
+            executable="joy_linux_node", 
             output="screen", 
-            arguments={'device_name':'js0'}.items()
+            arguments={'device_name':"js0"}.items()
         )
         launch_nodes_.append(joy_node)
 
-        joy_ctl_node = Node(
-            package="arm_api2", 
-            executable="joy_ctl", 
-            output="screen", 
-            parameters = [{"use_sim_time": use_sim_time}]
-        )
+        # joy_ctl_node = Node(
+        #     package="arm_api2", 
+        #     executable="joy_ctl", 
+        #     output="screen", 
+        #     parameters = [{"use_sim_time": use_sim_time}]
+        # )
 
-        launch_nodes_.append(joy_ctl_node)
+        # launch_nodes_.append(joy_ctl_node)
 
     return launch_nodes_
 
