@@ -72,6 +72,7 @@
 #define KEYCODE_R 0x72
 #define KEYCODE_PLUS 0x2B
 #define KEYCODE_MINUS 0x2D
+#define KEYCODE_SPACE 0x20
 
 // Some constants used in the Servo Teleop demo
 const std::string TWIST_TOPIC = "/moveit2_iface_node/delta_twist_cmds";
@@ -212,6 +213,7 @@ int KeyboardServo::keyLoop()
   puts("Use arrow keys and the '.' and ';' keys to Cartesian jog");
   puts("Use 'W' to Cartesian jog in the world frame, and 'E' for the End-Effector frame");
   puts("Use 1|2|3|4|5|6|7 keys to joint jog. 'R' to reverse the direction of jogging.");
+  puts("Press Space to stop all motions.");
   puts("'Q' to quit.");
 
   for (;;)
@@ -328,10 +330,20 @@ int KeyboardServo::keyLoop()
       case KEYCODE_Q:
         RCLCPP_DEBUG(nh_->get_logger(), "quit");
         return 0;
+      case KEYCODE_SPACE:
+        RCLCPP_DEBUG(nh_ -> get_logger(), "STOP");
+        twist_msg->twist.linear.x = 0.0;
+        twist_msg->twist.linear.y = 0.0;
+        twist_msg->twist.linear.z = 0.0;
+        twist_msg->twist.angular.x = 0.0;
+        twist_msg->twist.angular.y = 0.0;
+        twist_msg->twist.angular.z = 0.0;
+        publish_twist = true;
+        break;
       case KEYCODE_PLUS:
         RCLCPP_DEBUG(nh_->get_logger(), "PLUS");
         vel_scale_ += 0.01;
-        RCLCPP_DEBUG(nh_->get_logger(), "Velocity scale: %f", vel_scale_);
+        RCLCPP_INFO(nh_->get_logger(), "Velocity scale: %f", vel_scale_);
         break;
       case KEYCODE_MINUS:
         RCLCPP_DEBUG(nh_->get_logger(), "MINUS");
@@ -340,7 +352,7 @@ int KeyboardServo::keyLoop()
         {
           vel_scale_ = 0.01;
         }
-        RCLCPP_DEBUG(nh_->get_logger(), "Velocity scale: %f", vel_scale_);
+        RCLCPP_INFO(nh_->get_logger(), "Velocity scale: %f", vel_scale_);
         break;
     }
 

@@ -74,22 +74,36 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
 	float x_dir, y_dir, z_dir, yaw;  
 	std::vector<float> axes_ = msg->axes; 
 	
+<<<<<<< HEAD
     x_dir = axes_.at(X_I); 
 	y_dir = axes_.at(Y_I); 
     z_dir = axes_.at(Z_I); 
 	yaw = axes_.at(YAW_I);
+=======
+    x_dir = axes_.at(1); 
+	y_dir = axes_.at(0); 
+	yaw = axes_.at(3);
+>>>>>>> 2439fb3 (fixed bugs about jerking, added outputs for keyboard, integrate xbox joy ctl)
 
     // Enabling joystick functionality
     // R2 pressed --> joy on
     int LOG_JOY_STATE_T = 5000; 
+<<<<<<< HEAD
     if (msg->buttons.at(5) == 1)
+=======
+    if (msg->axes.at(2) == -1)
+>>>>>>> 2439fb3 (fixed bugs about jerking, added outputs for keyboard, integrate xbox joy ctl)
     { 
         RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), clock_, LOG_JOY_STATE_T, "ON");    
         setEnableJoy(true); 
     }
 
     // R2 released --> joy off
+<<<<<<< HEAD
     if (msg->buttons.at(5) == 0)
+=======
+    if (msg->axes.at(2) == 1)
+>>>>>>> 2439fb3 (fixed bugs about jerking, added outputs for keyboard, integrate xbox joy ctl)
     {
         
         RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), clock_, LOG_JOY_STATE_T, "OFF"); 
@@ -100,7 +114,7 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
 
     float sF = getScaleFactor();
     // https://www.quantstart.com/articles/Passing-By-Reference-To-Const-in-C/ 
-    if (msg->axes.at(1) == 1){
+    if (msg->buttons.at(3) == 1){
         
         if (sF > 0 && sF < 100)
         {
@@ -110,7 +124,7 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
         else{sF = 1;}
     }
     
-    if (msg->axes.at(1) == -1){
+    if (msg->buttons.at(0) == 1){
        if (sF > 0 && sF < 100) 
        {
         sF -= 1; 
