@@ -33,21 +33,29 @@
 
 /*      Title       : arm_joy.cpp
  *      Project     : arm_api2
- *      Created     : 05/10/2024
- *      Author      : Filip Zoric
+ *      Created     : 14/11/2024
+ *      Author      : Guanqi Chen
  *
- *      Description : Joystick control code.
+ *      Description : Joystick control code for Servoing
  */
 
 #include "arm_api2/arm_joy.hpp"
+
+// Some constants used in the Servo Teleop demo
+const std::string TWIST_TOPIC = "/moveit2_iface_node/delta_twist_cmds";
+const std::string JOINT_TOPIC = "/moveit2_iface_node/delta_joint_cmds";
+const std::string JOINT_STATE_TOPIC = "/joint_states";
+const size_t ROS_QUEUE_SIZE = 10;
+const std::string EEF_FRAME_ID = "tool0";
+const std::string BASE_FRAME_ID = "base_link";
 
 JoyCtl::JoyCtl(): Node("joy_ctl")
 {
     init();
 
-    setScaleFactor(1); 
+    setScaleFactor(0.1); 
 
-    enableJoy_ = true; 
+    enableJoy_ = false; 
 
 
 }
@@ -56,99 +64,248 @@ void JoyCtl::init()
 {
 
     // publishers
-    cmdVelPub_ 		    = this->create_publisher<geometry_msgs::msg::TwistStamped>("/moveit2_iface_node/delta_twist_cmds", 1); 
-
+    cmdVelPub_ 		    = this->create_publisher<geometry_msgs::msg::TwistStamped>(TWIST_TOPIC, ROS_QUEUE_SIZE); 
+    joint_pub_ 		    = this->create_publisher<control_msgs::msg::JointJog>(JOINT_TOPIC, ROS_QUEUE_SIZE);
     // subscribers
-    joySub_ 		    = this->create_subscription<sensor_msgs::msg::Joy>("/joy", 10, std::bind(&JoyCtl::joy_callback, this, _1)); 
+    joySub_ 		    = this->create_subscription<sensor_msgs::msg::Joy>("/joy", ROS_QUEUE_SIZE, std::bind(&JoyCtl::joy_callback, this, _1)); 
+    joint_state_sub_    = this->create_subscription<sensor_msgs::msg::JointState>(
+        JOINT_STATE_TOPIC, ROS_QUEUE_SIZE,
+        [this](const sensor_msgs::msg::JointState::SharedPtr msg) {
+            (void)msg;
+            joint_states_received_ = true;
+            // save joint names
+            joint_names_ = msg->name;
+        });
 
-    RCLCPP_INFO(this->get_logger(), "Initialized joy_ctl"); 
+    RCLCPP_INFO(this->get_logger(), "Initialized joy_ctl");
+    for (size_t i = 0; i < joint_names_.size(); ++i)
+    {
+    RCLCPP_INFO(this->get_logger(), "Joint %d: %s", int(i + 1), joint_names_[i].c_str());
+    }
+
+    puts("Reading from Joystick");
+    puts("---------------------------");
+    puts("Use Xbox button to turn on/off the joystick control.");
+    puts("Use back and start buttons to accelerate and decelerate the motion.");
+    puts("Use 'LT' and 'RT' for x-direction forward/backward.");
+    puts("Use 'right stick - left/right' for y-direction left/right.");
+    puts("Use 'right stick - up/down' for z-direction up/dwon.");
+    puts("Use 'left stick - left/right' for roll rotation.");
+    puts("Use 'left stick - up/down' for pitch rotation.");
+    puts("Use 'LB' and 'RB' for -/+ yaw rotation.");
+    puts("Cross axes left|up|right|down for joint 1|2|3|4 jog, Button X|Y|B|A for joint 5|6|7|8 jog.");
+    puts("Use 'LS' to reverse the direction of jogging.");
+ 
 }
 
 void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) 
 {   
-	float x_dir, y_dir, yaw;  
-	std::vector<float> axes_ = msg->axes; 
-	
-    x_dir = axes_.at(1); 
-	y_dir = axes_.at(0); 
-	yaw = axes_.at(3);
+    // while(!joint_states_received_)
+    // {
+    // RCLCPP_INFO(this->get_logger(), "Waiting for joint states...");
+    // rclcpp::sleep_for(std::chrono::seconds(1));
+    // }
+
+    // print joint names with index (starting from 1)
+	float x_dir, y_dir, z_dir, yaw, pitch, roll;
+
+    // Create teleop msg
+    auto teleop_msg 	    = geometry_msgs::msg::TwistStamped();
+    auto joint_msg          = control_msgs::msg::JointJog();
 
     // Enabling joystick functionality
-    // R2 pressed --> joy on
+    // xbox button pressed --> on/off switch
     int LOG_JOY_STATE_T = 5000; 
     if (msg->axes.at(2) == -1)
     { 
-        RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), clock_, LOG_JOY_STATE_T, "ON");    
-        setEnableJoy(true); 
+        RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), clock_, LOG_JOY_STATE_T, "ON"); 
+        setEnableJoy(true);
     }
-
-    // R2 released --> joy off
-    if (msg->axes.at(2) == 1)
+    else if (msg->axes.at(2) == 1)
     {
-        
         RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), clock_, LOG_JOY_STATE_T, "OFF"); 
-        setEnableJoy(false); 
+        setEnableJoy(false);
     }
 
-    enableJoy_ = getEnableJoy(); 
+    enableJoy_ = getEnableJoy();
 
-    int sF = getScaleFactor();
+    float sF = getScaleFactor();
     // https://www.quantstart.com/articles/Passing-By-Reference-To-Const-in-C/ 
-    if (msg->buttons.at(3) == 1){
+
+    // Velocity control
+    if (msg->buttons.at(7) == 1){
         
-        if (sF > 0 && sF < 100)
+        if (sF > 0 && sF < 10)
         {
-          sF += 1; 
+          sF += 0.1; 
           RCLCPP_INFO_STREAM(this->get_logger(), "Increasing scale factor: " << sF); 
         }
-        else{sF = 1;}
+        else{sF = 0.1;}
     }
     
-    if (msg->buttons.at(0) == 1){
-       if (sF > 0 && sF < 100) 
+    if (msg->buttons.at(6) == 1){
+       if (sF > 0 && sF < 10) 
        {
-        sF -= 1; 
+        sF -= 0.1; 
         RCLCPP_INFO_STREAM(this->get_logger(), "Decreasing scale factor: " << sF); 
        }
-       else{sF = 1;}
+       else{sF = 0.1;}
     }
 
-    /*if (msg->buttons.at(4) == 1) {
-       RCLCPP_INFO_STREAM(this->get_logger(), "Calling jingle bells!"); 
-       auto req_ = std::make_shared<std_srvs::srv::Trigger::Request>();
-       jingleBellsClient_->async_send_request(req_); 
-    }*/
+    // Motion control
+    if (msg->axes.at(3) != 0)
+    {
+        y_dir = msg->axes.at(3);
+    }
+
+    if (msg->axes.at(4) != 0)
+    {
+        z_dir = msg->axes.at(4);
+    }
+
+    if (msg->buttons.at(8) == 1)
+    {
+        x_dir = 1.0;
+    }
+
+    if (msg->axes.at(5) <= 0)
+    {
+        x_dir = msg->axes.at(5);
+    }
+
+    if (msg->axes.at(1) != 0)
+    {
+        pitch = msg->axes.at(0);
+    }
+
+    if (msg->axes.at(0) != 0)
+    {
+        roll = msg->axes.at(1);
+    }
+
+    if (msg->buttons.at(4) == 1)
+    {
+        yaw = -1;
+    }
+
+    if (msg->buttons.at(5) == 1)
+    {
+        yaw = 1;
+    }
+
+    // Joint control
+    if (msg->axes.at(6) == 1)
+    {
+        joint_msg.joint_names.push_back(joint_names_[0]);
+        joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
+        RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
+    } // Cross axes left
+
+    if(msg->axes.at(7) == 1)
+    {
+        joint_msg.joint_names.push_back(joint_names_[1]);
+        joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
+        RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
+    } // Cross axes up
+
+    if(msg->axes.at(6) == -1)
+    {
+        joint_msg.joint_names.push_back(joint_names_[2]);
+        joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
+        RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
+    } // Cross axes right
+
+    if(msg->axes.at(7) == -1)
+    {
+        joint_msg.joint_names.push_back(joint_names_[3]);
+        joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
+        RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
+    } // Cross axes down
+
+    if(msg->buttons.at(2) == 1)
+    {
+        joint_msg.joint_names.push_back(joint_names_[4]);
+        joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
+        RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
+    } // Button X
+
+    if(msg->buttons.at(3) == 1)
+    {
+        joint_msg.joint_names.push_back(joint_names_[5]);
+        joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
+        RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
+    } // Button Y
+
+    if(msg->buttons.at(1) == 1)
+    {
+        if(joint_names_.size() < 7)
+        {
+            RCLCPP_WARN(this->get_logger(), "Not enough joints");
+        }else{
+            joint_msg.joint_names.push_back(joint_names_[6]);
+            joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
+            RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
+        }
+    } // Button B
+
+    if(msg->buttons.at(0) == 1)
+    {   
+        if(joint_names_.size() < 8)
+        {
+            RCLCPP_WARN(this->get_logger(), "Not enough joints");
+        }else{
+            joint_msg.joint_names.push_back(joint_names_[7]);
+            joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
+            RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
+        }
+    } // Button A
+
+    if (msg->buttons.at(9) == 1)
+    {
+        joint_vel_cmd_ *= -1;
+    } // Left stick button
+
+
     setScaleFactor(sF); 
 
-
-	
-    // Create teleop msg
-    auto teleop_msg 	    = geometry_msgs::msg::TwistStamped(); 
-    teleop_msg.header.stamp = this->get_clock()->now(); 
-    teleop_msg.twist.linear.x	    = x_dir  * sF; 
-    teleop_msg.twist.linear.y 	= y_dir   * sF; 
-    teleop_msg.twist.angular.z 	= yaw    * sF; 
+    // Modify the message
+    teleop_msg.header.stamp = this->get_clock()->now();
+    teleop_msg.header.frame_id = frame_to_publish_; 
+    teleop_msg.twist.linear.x	= x_dir  * sF; 
+    teleop_msg.twist.linear.y 	= y_dir   * sF;
+    teleop_msg.twist.linear.z 	= z_dir   * sF; 
+    teleop_msg.twist.angular.z = yaw    * sF;
+    teleop_msg.twist.angular.y = pitch * sF;
+    teleop_msg.twist.angular.x = roll  * sF; 
     
     if (enableJoy_){
-        cmdVelPub_->publish(teleop_msg); 
+        cmdVelPub_->publish(teleop_msg);
+        joint_pub_->publish(joint_msg); 
     }
     else{
         teleop_msg.twist.linear.x = 0;
         teleop_msg.twist.linear.y = 0;
+        teleop_msg.twist.linear.z = 0;
         teleop_msg.twist.angular.z = 0;
-	cmdVelPub_->publish(teleop_msg); 
+        teleop_msg.twist.angular.y = 0;
+        teleop_msg.twist.angular.x = 0;
+	    cmdVelPub_->publish(teleop_msg);
+
+        joint_msg.joint_names.clear();
+        joint_msg.velocities.push_back(0.0);
+        joint_pub_->publish(joint_msg); 
     }
 
 
 }
 
 // Methods that set scale factor 
-void JoyCtl::setScaleFactor(int value)
+void JoyCtl::setScaleFactor(float value)
 {
     scale_factor = value; 
 }
 
-int JoyCtl::getScaleFactor() const
+float JoyCtl::getScaleFactor() const
 {
     return scale_factor; 
 }

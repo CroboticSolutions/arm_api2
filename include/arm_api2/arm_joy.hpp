@@ -54,6 +54,8 @@
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "sensor_msgs/msg/joy.hpp"
+#include <control_msgs/msg/joint_jog.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include "geometry_msgs/msg/twist_stamped.hpp"
 
 //* srvs
@@ -73,15 +75,21 @@ class JoyCtl: public rclcpp::Node
 
 		// vars
 		bool 		enableJoy_; 
-		mutable int scale_factor;  
-        rclcpp::Clock clock_; 
+		mutable float scale_factor;  
+        rclcpp::Clock clock_;
+		std::string frame_to_publish_ = "base_link";
+		bool joint_states_received_ = false;
+		double joint_vel_cmd_ = 1.0;
+		// list of joint names
+		std::vector<std::string> joint_names_; 
 	    
 		// publishers	
-		rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr cmdVelPub_; 
+		rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr cmdVelPub_;
+		rclcpp::Publisher<control_msgs::msg::JointJog>::SharedPtr joint_pub_;
 		
 		// subscribers
 		rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joySub_; 
-
+		rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
 		// clients 
  		rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr  jingleBellsClient_; // Could be used for initing all UAVs
 
@@ -89,8 +97,8 @@ class JoyCtl: public rclcpp::Node
 		void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg); 
 
 		// Setting them as const to be usable by joy_callback which is also const
-		void setScaleFactor(int value); 
-		int getScaleFactor() const; 
+		void setScaleFactor(float value); 
+		float getScaleFactor() const; 
 		void setEnableJoy(bool val); 
 		bool getEnableJoy() const; 
 
