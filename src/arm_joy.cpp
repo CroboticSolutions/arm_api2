@@ -76,8 +76,9 @@ void JoyCtl::init()
             // save joint names
             joint_names_ = msg->name;
         });
-
-    RCLCPP_INFO(this->get_logger(), "Initialized joy_ctl");
+    // client
+    gripper_client_ = rclcpp_action::create_client<control_msgs::action::GripperCommand>(this,"robotiq_2f_urcap_adapter/gripper_command");
+    RCLCPP_INFO(this->get_logger(), "Initialized joy_ctl with gripper control");
     for (size_t i = 0; i < joint_names_.size(); ++i)
     {
     RCLCPP_INFO(this->get_logger(), "Joint %d: %s", int(i + 1), joint_names_[i].c_str());
@@ -210,6 +211,16 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
 
     }
 
+    // Gripper control
+    if (msg->buttons.at(2) == 1)
+    {
+        send_gripper_command(0.8); // close gripper
+    }
+    if (msg->buttons.at(3) == 1)
+    {
+        send_gripper_command(0.0); // open gripper
+    }
+
     setScaleFactor(sF); 
 
     // Modify the message
@@ -223,7 +234,10 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
     teleop_msg.twist.angular.x  = roll  * sF; 
     
     if (enableJoy_){
-        if (joint_space_){claude
+        if (joint_space_){
+            joint_pub_->publish(joint_msg);
+        }
+        else{
             cmdVelPub_->publish(teleop_msg);
         }
     }
@@ -263,4 +277,18 @@ void JoyCtl::setEnableJoy(bool val)
 bool JoyCtl::getEnableJoy() const
 {
     return enableJoy_; 
+}
+
+void JoyCtl::send_gripper_command(double position)
+{
+    if (!gripper_client_->wait_for_action_server(std::chrono::seconds(5))) {
+        RCLCPP_ERROR(this->get_logger(), "Gripper action server not available!");
+        return;
+    }
+    auto goal = control_msgs::action::GripperCommand::Goal();
+    goal.command.position = position;
+    goal.command.max_effort = 140.0;
+    
+    auto result = gripper_client_->async_send_goal(goal);
+    RCLCPP_INFO(this->get_logger(), "Sending gripper command");
 }

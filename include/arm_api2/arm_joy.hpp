@@ -49,12 +49,15 @@
 
 //* ros 
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
 
 //* msgs
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "sensor_msgs/msg/joy.hpp"
 #include <control_msgs/msg/joint_jog.hpp>
+#include <control_msgs/action/gripper_command.hpp>
+#include <control_msgs/msg/gripper_command.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include "geometry_msgs/msg/twist_stamped.hpp"
 
@@ -99,7 +102,7 @@ class JoyCtl: public rclcpp::Node
 		rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joySub_; 
 		rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
 		// clients 
- 		rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr  jingleBellsClient_; // Could be used for initing all UAVs
+ 		rclcpp_action::Client<control_msgs::action::GripperCommand>::SharedPtr gripper_client_;
 
 		void init(); 
 		void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg); 
@@ -111,7 +114,7 @@ class JoyCtl: public rclcpp::Node
 		bool getEnableJoy() const; 
 
 		// TODO: Add service to turn joystick on and off
-
+		void send_gripper_command(double position);
 };
 
 #endif
