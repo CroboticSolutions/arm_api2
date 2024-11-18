@@ -80,6 +80,14 @@ class JoyCtl: public rclcpp::Node
 		std::string frame_to_publish_ = "base_link";
 		bool joint_states_received_ = false;
 		double joint_vel_cmd_ = 1.0;
+		double joint1_vel_cmd_;
+		double joint2_vel_cmd_;
+		double joint3_vel_cmd_;
+		double joint4_vel_cmd_;
+		double joint5_vel_cmd_;
+		double joint6_vel_cmd_;
+		bool task_space_ = true;
+		bool joint_space_ = false;
 		// list of joint names
 		std::vector<std::string> joint_names_; 
 	    

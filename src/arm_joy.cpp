@@ -85,16 +85,27 @@ void JoyCtl::init()
 
     puts("Reading from Joystick");
     puts("---------------------------");
-    puts("Use Xbox button to turn on/off the joystick control.");
+    puts("Hold 'LT' button to turn on/off the joystick control.");
+    puts("Use 'A' or 'B' buttons to switch between joint space or task space control - Default is task space control.");
     puts("Use back and start buttons to accelerate and decelerate the motion.");
-    puts("Use 'LT' and 'RT' for x-direction forward/backward.");
-    puts("Use 'right stick - left/right' for y-direction left/right.");
-    puts("Use 'right stick - up/down' for z-direction up/dwon.");
-    puts("Use 'left stick - left/right' for roll rotation.");
-    puts("Use 'left stick - up/down' for pitch rotation.");
-    puts("Use 'LB' and 'RB' for -/+ yaw rotation.");
-    puts("Cross axes left|up|right|down for joint 1|2|3|4 jog, Button X|Y|B|A for joint 5|6|7|8 jog.");
-    puts("Use 'LS' to reverse the direction of jogging.");
+    puts("------------For task space control:-------------");
+    puts("  ");
+    puts("Use 'right stick - left/right' for x-direction movement.");
+    puts("Use 'right stick - up/down' for y-direction movement.");
+    puts("Use 'left stick - up/down' for z-direction movement.");
+    puts("Cross axes left|right for x rotation.");
+    puts("Cross axes up|down for y rotation.");
+    puts("Use 'left stick - left/right' for z rotation.");
+    puts("  ");
+    puts("------------For joint space control:------------");
+    puts("  ");
+    puts("Use 'left stick - left/right' for joint1.");
+    puts("Use 'left stick - up/down' for joint2.");
+    puts("Use 'cross - left/right' for joint3.");
+    puts("Use 'cross - up/down' for joint4.");
+    puts("Use 'right stick - left/right' for joint5.");
+    puts("Use 'right stick - up/down' for joint6.");
+    puts("  ");
  
 }
 
@@ -137,134 +148,77 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
         
         if (sF > 0 && sF < 10)
         {
-          sF += 0.1; 
+          sF += 0.01; 
           RCLCPP_INFO_STREAM(this->get_logger(), "Increasing scale factor: " << sF); 
         }
         else{sF = 0.1;}
-    }
+    } // button right select
     
     if (msg->buttons.at(6) == 1){
        if (sF > 0 && sF < 10) 
        {
-        sF -= 0.1; 
+        sF -= 0.01; 
         RCLCPP_INFO_STREAM(this->get_logger(), "Decreasing scale factor: " << sF); 
        }
        else{sF = 0.1;}
+    } // button left select
+
+    // -----------Task Space------------
+    if (msg->buttons.at(0) == 1)
+    {
+        task_space_ = true;
+        joint_space_ = false;
+        RCLCPP_INFO(this->get_logger(), "Task Space Control");
     }
+    if(msg->buttons.at(1) == 1){
+        joint_space_ = true;
+        task_space_ = false;
+        RCLCPP_INFO(this->get_logger(), "Joint Space Control");
+    }
+
 
     // Motion control
-    if (msg->axes.at(3) != 0)
+    if (task_space_)
     {
-        y_dir = msg->axes.at(3);
-    }
+        x_dir = msg->axes.at(3); // right joystick left/right
+        y_dir = msg->axes.at(4); // right joystick up/down
+        z_dir = msg->axes.at(1); // left joystick up/down
+        yaw = msg->axes.at(0); // left joystick left/right, z rotation
+        roll = msg->axes.at(6); // cross left/right, x rotation
+        pitch = msg->axes.at(7); // cross up/down, y rotation
 
-    if (msg->axes.at(4) != 0)
+        joint_msg.joint_names.clear();
+        joint_msg.velocities.push_back(0.0);
+    }else if(joint_space_)
     {
-        z_dir = msg->axes.at(4);
-    }
+        x_dir = 0;
+        y_dir = 0;
+        z_dir = 0;
+        yaw = 0;
+        roll = 0;
+        pitch = 0;
 
-    if (msg->buttons.at(8) == 1)
-    {
-        x_dir = 1.0;
-    }
+        joint1_vel_cmd_ = msg->axes.at(0); // left joystick left/right
+        joint2_vel_cmd_ = msg->axes.at(1); // left joystick up/down
+        joint3_vel_cmd_ = msg->axes.at(6); // cross left/right
+        joint4_vel_cmd_ = msg->axes.at(7); // cross up/down
+        joint5_vel_cmd_ = msg->axes.at(3); // right joystick left/right
+        joint6_vel_cmd_ = msg->axes.at(4); // right joystick up/down
 
-    if (msg->axes.at(5) <= 0)
-    {
-        x_dir = msg->axes.at(5);
-    }
-
-    if (msg->axes.at(1) != 0)
-    {
-        pitch = msg->axes.at(0);
-    }
-
-    if (msg->axes.at(0) != 0)
-    {
-        roll = msg->axes.at(1);
-    }
-
-    if (msg->buttons.at(4) == 1)
-    {
-        yaw = -1;
-    }
-
-    if (msg->buttons.at(5) == 1)
-    {
-        yaw = 1;
-    }
-
-    // Joint control
-    if (msg->axes.at(6) == 1)
-    {
-        joint_msg.joint_names.push_back(joint_names_[0]);
-        joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
-        RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
-    } // Cross axes left
-
-    if(msg->axes.at(7) == 1)
-    {
-        joint_msg.joint_names.push_back(joint_names_[1]);
-        joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
-        RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
-    } // Cross axes up
-
-    if(msg->axes.at(6) == -1)
-    {
-        joint_msg.joint_names.push_back(joint_names_[2]);
-        joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
-        RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
-    } // Cross axes right
-
-    if(msg->axes.at(7) == -1)
-    {
-        joint_msg.joint_names.push_back(joint_names_[3]);
-        joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
-        RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
-    } // Cross axes down
-
-    if(msg->buttons.at(2) == 1)
-    {
-        joint_msg.joint_names.push_back(joint_names_[4]);
-        joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
-        RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
-    } // Button X
-
-    if(msg->buttons.at(3) == 1)
-    {
-        joint_msg.joint_names.push_back(joint_names_[5]);
-        joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
-        RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
-    } // Button Y
-
-    if(msg->buttons.at(1) == 1)
-    {
-        if(joint_names_.size() < 7)
+        for(auto i=0;i<joint_names_.size();i++)
         {
-            RCLCPP_WARN(this->get_logger(), "Not enough joints");
-        }else{
-            joint_msg.joint_names.push_back(joint_names_[6]);
-            joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
-            RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
+            joint_msg.joint_names.push_back(joint_names_[i]);
+            joint_msg.velocities.push_back(
+                (i == 0) ? joint1_vel_cmd_ :
+                (i == 1) ? joint2_vel_cmd_ :
+                (i == 2) ? joint3_vel_cmd_ :
+                (i == 3) ? joint4_vel_cmd_ :
+                (i == 4) ? joint5_vel_cmd_ :
+                (i == 5) ? joint6_vel_cmd_ : 0.0  // default to 0 if index out of range
+            );
         }
-    } // Button B
 
-    if(msg->buttons.at(0) == 1)
-    {   
-        if(joint_names_.size() < 8)
-        {
-            RCLCPP_WARN(this->get_logger(), "Not enough joints");
-        }else{
-            joint_msg.joint_names.push_back(joint_names_[7]);
-            joint_msg.velocities.push_back(joint_vel_cmd_ * sF);
-            RCLCPP_INFO(this->get_logger(), "Now is controlling: %s", joint_msg.joint_names[0].c_str());
-        }
-    } // Button A
-
-    if (msg->buttons.at(9) == 1)
-    {
-        joint_vel_cmd_ *= -1;
-    } // Left stick button
-
+    }
 
     setScaleFactor(sF); 
 
@@ -274,13 +228,16 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
     teleop_msg.twist.linear.x	= x_dir  * sF; 
     teleop_msg.twist.linear.y 	= y_dir   * sF;
     teleop_msg.twist.linear.z 	= z_dir   * sF; 
-    teleop_msg.twist.angular.z = yaw    * sF;
-    teleop_msg.twist.angular.y = pitch * sF;
-    teleop_msg.twist.angular.x = roll  * sF; 
+    teleop_msg.twist.angular.z  = yaw    * sF;
+    teleop_msg.twist.angular.y  = pitch * sF;
+    teleop_msg.twist.angular.x  = roll  * sF; 
     
     if (enableJoy_){
-        cmdVelPub_->publish(teleop_msg);
-        joint_pub_->publish(joint_msg); 
+        if (joint_space_){
+            joint_pub_->publish(joint_msg); 
+        }else{
+            cmdVelPub_->publish(teleop_msg);
+        }
     }
     else{
         teleop_msg.twist.linear.x = 0;
