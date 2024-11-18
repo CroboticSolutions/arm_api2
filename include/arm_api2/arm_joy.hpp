@@ -77,7 +77,7 @@ class JoyCtl: public rclcpp::Node
 		bool 		enableJoy_; 
 		mutable float scale_factor;  
         rclcpp::Clock clock_;
-		std::string frame_to_publish_ = "base_link";
+		std::string frame_to_publish_;
 		bool joint_states_received_ = false;
 		double joint_vel_cmd_ = 1.0;
 		double joint1_vel_cmd_;

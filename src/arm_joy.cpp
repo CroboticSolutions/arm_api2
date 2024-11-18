@@ -111,16 +111,8 @@ void JoyCtl::init()
 
 void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) 
 {   
-    // while(!joint_states_received_)
-    // {
-    // RCLCPP_INFO(this->get_logger(), "Waiting for joint states...");
-    // rclcpp::sleep_for(std::chrono::seconds(1));
-    // }
-
-    // print joint names with index (starting from 1)
 	float x_dir, y_dir, z_dir, yaw, pitch, roll;
 
-    // Create teleop msg
     auto teleop_msg 	    = geometry_msgs::msg::TwistStamped();
     auto joint_msg          = control_msgs::msg::JointJog();
 
@@ -141,26 +133,24 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
     enableJoy_ = getEnableJoy();
 
     float sF = getScaleFactor();
-    // https://www.quantstart.com/articles/Passing-By-Reference-To-Const-in-C/ 
 
     // Velocity control
     if (msg->buttons.at(7) == 1){
         
         if (sF > 0 && sF < 10)
         {
-          sF += 0.01; 
+          sF += 0.1; 
           RCLCPP_INFO_STREAM(this->get_logger(), "Increasing scale factor: " << sF); 
         }
-        else{sF = 0.1;}
+        else{sF = 0.5;}
     } // button right select
-    
     if (msg->buttons.at(6) == 1){
        if (sF > 0 && sF < 10) 
        {
-        sF -= 0.01; 
+        sF -= 0.1; 
         RCLCPP_INFO_STREAM(this->get_logger(), "Decreasing scale factor: " << sF); 
        }
-       else{sF = 0.1;}
+       else{sF = 0.5;}
     } // button left select
 
     // -----------Task Space------------
@@ -209,12 +199,12 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
         {
             joint_msg.joint_names.push_back(joint_names_[i]);
             joint_msg.velocities.push_back(
-                (i == 0) ? joint1_vel_cmd_ :
-                (i == 1) ? joint2_vel_cmd_ :
-                (i == 2) ? joint3_vel_cmd_ :
-                (i == 3) ? joint4_vel_cmd_ :
-                (i == 4) ? joint5_vel_cmd_ :
-                (i == 5) ? joint6_vel_cmd_ : 0.0  // default to 0 if index out of range
+                (i == 0) ? joint2_vel_cmd_ * sF  :
+                (i == 1) ? joint3_vel_cmd_ * sF  :
+                (i == 2) ? joint4_vel_cmd_ * sF  :
+                (i == 3) ? joint5_vel_cmd_ * sF  :
+                (i == 4) ? joint6_vel_cmd_ * sF  :
+                (i == 5) ? joint1_vel_cmd_ * sF : 0.0  // default to 0 if index out of range
             );
         }
 
@@ -224,7 +214,7 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
 
     // Modify the message
     teleop_msg.header.stamp = this->get_clock()->now();
-    teleop_msg.header.frame_id = frame_to_publish_; 
+    teleop_msg.header.frame_id = EEF_FRAME_ID; 
     teleop_msg.twist.linear.x	= x_dir  * sF; 
     teleop_msg.twist.linear.y 	= y_dir   * sF;
     teleop_msg.twist.linear.z 	= z_dir   * sF; 
@@ -233,9 +223,7 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
     teleop_msg.twist.angular.x  = roll  * sF; 
     
     if (enableJoy_){
-        if (joint_space_){
-            joint_pub_->publish(joint_msg); 
-        }else{
+        if (joint_space_){claude
             cmdVelPub_->publish(teleop_msg);
         }
     }
