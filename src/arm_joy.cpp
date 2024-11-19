@@ -46,14 +46,16 @@ const std::string TWIST_TOPIC = "/moveit2_iface_node/delta_twist_cmds";
 const std::string JOINT_TOPIC = "/moveit2_iface_node/delta_joint_cmds";
 const std::string JOINT_STATE_TOPIC = "/joint_states";
 const size_t ROS_QUEUE_SIZE = 10;
-const std::string EEF_FRAME_ID = "tool0";
+const std::string EEF_FRAME_ID = "tcp";
 const std::string BASE_FRAME_ID = "base_link";
 
 JoyCtl::JoyCtl(): Node("joy_ctl")
 {
     init();
 
-    setScaleFactor(0.1); 
+    frame_to_publish_ = EEF_FRAME_ID;
+
+    setScaleFactor(0.5); 
 
     enableJoy_ = false; 
 
@@ -154,6 +156,18 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
        else{sF = 0.5;}
     } // button left select
 
+    // Frame selection
+    if(msg->buttons.at(4)==1)
+    {
+        frame_to_publish_ = EEF_FRAME_ID;
+        RCLCPP_INFO(this->get_logger(), "End Effector Frame Selected");
+    }
+    if(msg->buttons.at(5)==1)
+    {
+        frame_to_publish_ = BASE_FRAME_ID;
+        RCLCPP_INFO(this->get_logger(), "Base Frame Selected");
+    }
+    
     // -----------Task Space------------
     if (msg->buttons.at(0) == 1)
     {
@@ -196,7 +210,7 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
         joint5_vel_cmd_ = msg->axes.at(3); // right joystick left/right
         joint6_vel_cmd_ = msg->axes.at(4); // right joystick up/down
 
-        for(auto i=0;i<joint_names_.size();i++)
+        for(auto i=0u;i<joint_names_.size();i++)
         {
             joint_msg.joint_names.push_back(joint_names_[i]);
             joint_msg.velocities.push_back(
@@ -225,7 +239,7 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
 
     // Modify the message
     teleop_msg.header.stamp = this->get_clock()->now();
-    teleop_msg.header.frame_id = EEF_FRAME_ID; 
+    teleop_msg.header.frame_id = frame_to_publish_; 
     teleop_msg.twist.linear.x	= x_dir  * sF; 
     teleop_msg.twist.linear.y 	= y_dir   * sF;
     teleop_msg.twist.linear.z 	= z_dir   * sF; 
