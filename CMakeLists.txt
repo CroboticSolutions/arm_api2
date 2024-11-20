@@ -63,7 +63,7 @@ target_include_directories(joy_ctl
 
 # python dependencies 
 ament_target_dependencies(joy_ctl
-  rclcpp std_msgs geometry_msgs std_srvs sensor_msgs)
+  rclcpp std_msgs geometry_msgs std_srvs sensor_msgs control_msgs rclcpp_action)
 
 install(TARGETS 
 joy_ctl

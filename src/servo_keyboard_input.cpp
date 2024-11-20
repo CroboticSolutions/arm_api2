@@ -34,9 +34,8 @@
 
 /*      Title     : servo_keyboard_input.cpp
  *      Project   : arm_api2
- *      Created   : 10/04/2024
- *      Author    : Edgar Welte
- * 
+ *      Created   : 14/11/2024
+ *      Author    : Guanqi Chen
  *      Description : Keyboard control code for Servoing
  */
 
@@ -72,6 +71,13 @@
 #define KEYCODE_R 0x72
 #define KEYCODE_PLUS 0x2B
 #define KEYCODE_MINUS 0x2D
+#define KEYCODE_SPACE 0x20
+#define KEYCODE_L 0x6C
+#define KEYCODE_K 0x6B
+#define KEYCODE_J 0x6A
+#define KEYCODE_I 0x69
+#define KEYCODE_M 0x6D
+#define KEYCODE_COMMA 0x2C
 
 // Some constants used in the Servo Teleop demo
 const std::string TWIST_TOPIC = "/moveit2_iface_node/delta_twist_cmds";
@@ -210,8 +216,10 @@ int KeyboardServo::keyLoop()
   puts("Reading from keyboard");
   puts("---------------------------");
   puts("Use arrow keys and the '.' and ';' keys to Cartesian jog");
+  puts("Use 'I' and 'K' to pitch(y rotate), 'J' and 'L' to yaw(z rotate), and 'M' and ',' to roll(x rotate)");
   puts("Use 'W' to Cartesian jog in the world frame, and 'E' for the End-Effector frame");
   puts("Use 1|2|3|4|5|6|7 keys to joint jog. 'R' to reverse the direction of jogging.");
+  puts("Press Space to stop all motions.");
   puts("'Q' to quit.");
 
   for (;;)
@@ -233,9 +241,11 @@ int KeyboardServo::keyLoop()
     auto twist_msg = std::make_unique<geometry_msgs::msg::TwistStamped>();
     auto joint_msg = std::make_unique<control_msgs::msg::JointJog>();
 
+
     // Use read key-press
     switch (c)
     {
+      // Cartesian motions
       case KEYCODE_LEFT:
         RCLCPP_DEBUG(nh_->get_logger(), "LEFT");
         twist_msg->twist.linear.y = -1.0 * vel_scale_;
@@ -266,6 +276,40 @@ int KeyboardServo::keyLoop()
         twist_msg->twist.linear.z = 1.0 * vel_scale_;
         publish_twist = true;
         break;
+      
+      // rotational motions
+      case KEYCODE_J:
+        RCLCPP_DEBUG(nh_->get_logger(), "J");
+        twist_msg->twist.angular.z = 1.0 * vel_scale_;
+        publish_twist = true;
+        break;
+      case KEYCODE_L:
+        RCLCPP_DEBUG(nh_->get_logger(), "L");
+        twist_msg->twist.angular.z = -1.0 * vel_scale_;
+        publish_twist = true;
+        break;
+      case KEYCODE_I:
+        RCLCPP_DEBUG(nh_->get_logger(), "I");
+        twist_msg->twist.angular.y = 1.0 * vel_scale_;
+        publish_twist = true;
+        break;
+      case KEYCODE_K:
+        RCLCPP_DEBUG(nh_->get_logger(), "K");
+        twist_msg->twist.angular.y = -1.0 * vel_scale_;
+        publish_twist = true;
+        break;
+      case KEYCODE_M:
+        RCLCPP_DEBUG(nh_->get_logger(), "M");
+        twist_msg->twist.angular.x = 1.0 * vel_scale_;
+        publish_twist = true;
+        break;
+      case KEYCODE_COMMA:
+        RCLCPP_DEBUG(nh_->get_logger(), "COMMA");
+        twist_msg->twist.angular.x = -1.0 * vel_scale_;
+        publish_twist = true;
+        break;
+
+      // Frame selection
       case KEYCODE_E:
         RCLCPP_DEBUG(nh_->get_logger(), "E");
         frame_to_publish_ = EEF_FRAME_ID;
@@ -274,40 +318,48 @@ int KeyboardServo::keyLoop()
         RCLCPP_DEBUG(nh_->get_logger(), "W");
         frame_to_publish_ = BASE_FRAME_ID;
         break;
+
+      // Joint motions
       case KEYCODE_1:
-        RCLCPP_DEBUG(nh_->get_logger(), "1");
+        RCLCPP_INFO(nh_->get_logger(), "1");
         joint_msg->joint_names.push_back(joint_names_[0]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
+        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
         publish_joint = true;
         break;
       case KEYCODE_2:
-        RCLCPP_DEBUG(nh_->get_logger(), "2");
+        RCLCPP_INFO(nh_->get_logger(), "2");
         joint_msg->joint_names.push_back(joint_names_[1]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
         publish_joint = true;
+        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
         break;
       case KEYCODE_3:
-        RCLCPP_DEBUG(nh_->get_logger(), "3");
+        RCLCPP_INFO(nh_->get_logger(), "3");
         joint_msg->joint_names.push_back(joint_names_[2]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
+        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
         publish_joint = true;
         break;
       case KEYCODE_4:
-        RCLCPP_DEBUG(nh_->get_logger(), "4");
+        RCLCPP_INFO(nh_->get_logger(), "4");
         joint_msg->joint_names.push_back(joint_names_[3]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
+        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
         publish_joint = true;
         break;
       case KEYCODE_5:
-        RCLCPP_DEBUG(nh_->get_logger(), "5");
+        RCLCPP_INFO(nh_->get_logger(), "5");
         joint_msg->joint_names.push_back(joint_names_[4]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
+        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
         publish_joint = true;
         break;
       case KEYCODE_6:
-        RCLCPP_DEBUG(nh_->get_logger(), "6");
+        RCLCPP_INFO(nh_->get_logger(), "6");
         joint_msg->joint_names.push_back(joint_names_[5]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
+        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
         publish_joint = true;
         break;
       case KEYCODE_7:
@@ -316,22 +368,40 @@ int KeyboardServo::keyLoop()
           RCLCPP_WARN(nh_->get_logger(), "Not enough joints for key 7");
           break;
         }
-        RCLCPP_DEBUG(nh_->get_logger(), "7");
+        RCLCPP_INFO(nh_->get_logger(), "7");
         joint_msg->joint_names.push_back(joint_names_[6]);
         joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
+        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
         publish_joint = true;
         break;
       case KEYCODE_R:
-        RCLCPP_DEBUG(nh_->get_logger(), "R");
+        RCLCPP_INFO(nh_->get_logger(), "R");
         joint_vel_cmd_ *= -1;
         break;
+      
+      // Stop actions
       case KEYCODE_Q:
-        RCLCPP_DEBUG(nh_->get_logger(), "quit");
+        RCLCPP_INFO(nh_->get_logger(), "quit");
         return 0;
+      case KEYCODE_SPACE:
+        RCLCPP_INFO(nh_ -> get_logger(), "STOP");
+        twist_msg->twist.linear.x = 0.0;
+        twist_msg->twist.linear.y = 0.0;
+        twist_msg->twist.linear.z = 0.0;
+        twist_msg->twist.angular.x = 0.0;
+        twist_msg->twist.angular.y = 0.0;
+        twist_msg->twist.angular.z = 0.0;
+        joint_msg->joint_names.push_back(joint_names_[0]);
+        joint_msg->velocities.push_back(0.0);
+        publish_twist = true;
+        publish_joint = true;
+        break;
+
+      // Velocity control
       case KEYCODE_PLUS:
         RCLCPP_DEBUG(nh_->get_logger(), "PLUS");
         vel_scale_ += 0.01;
-        RCLCPP_DEBUG(nh_->get_logger(), "Velocity scale: %f", vel_scale_);
+        RCLCPP_INFO(nh_->get_logger(), "Velocity scale: %f", vel_scale_);
         break;
       case KEYCODE_MINUS:
         RCLCPP_DEBUG(nh_->get_logger(), "MINUS");
@@ -340,7 +410,7 @@ int KeyboardServo::keyLoop()
         {
           vel_scale_ = 0.01;
         }
-        RCLCPP_DEBUG(nh_->get_logger(), "Velocity scale: %f", vel_scale_);
+        RCLCPP_INFO(nh_->get_logger(), "Velocity scale: %f", vel_scale_);
         break;
     }
 
@@ -352,7 +422,7 @@ int KeyboardServo::keyLoop()
       twist_pub_->publish(std::move(twist_msg));
       publish_twist = false;
     }
-    else if (publish_joint)
+    if (publish_joint)
     {
       joint_msg->header.stamp = nh_->now();
       joint_msg->header.frame_id = BASE_FRAME_ID;
@@ -360,6 +430,6 @@ int KeyboardServo::keyLoop()
       publish_joint = false;
     }
   }
-
   return 0;
 }
+
