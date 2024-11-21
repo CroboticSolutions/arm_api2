@@ -42,9 +42,12 @@
 // Code modified from https://github.com/moveit/moveit2_tutorials/blob/humble/doc/examples/realtime_servo/src/servo_keyboard_input.cpp
 
 #include <rclcpp/rclcpp.hpp>
+#include "rclcpp_action/rclcpp_action.hpp"
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <control_msgs/msg/joint_jog.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <control_msgs/action/gripper_command.hpp>
+#include <control_msgs/msg/gripper_command.hpp>
 
 #include <signal.h>
 #include <stdio.h>
@@ -78,13 +81,16 @@
 #define KEYCODE_I 0x69
 #define KEYCODE_M 0x6D
 #define KEYCODE_COMMA 0x2C
+#define KEYCODE_A 0x61
+#define KEYCODE_D 0x64
 
 // Some constants used in the Servo Teleop demo
 const std::string TWIST_TOPIC = "/moveit2_iface_node/delta_twist_cmds";
 const std::string JOINT_TOPIC = "/moveit2_iface_node/delta_joint_cmds";
 const std::string JOINT_STATE_TOPIC = "/joint_states";
+const std::string GRIPPER_SERVICE = "robotiq_2f_urcap_adapter/gripper_command";
 const size_t ROS_QUEUE_SIZE = 10;
-const std::string EEF_FRAME_ID = "tool0";
+const std::string EEF_FRAME_ID = "tcp";
 const std::string BASE_FRAME_ID = "base_link";
 
 // A class for reading the key inputs from the terminal
@@ -127,6 +133,7 @@ class KeyboardServo
 public:
   KeyboardServo();
   int keyLoop();
+  void send_gripper_command(double position);
 
 private:
   void spin();
@@ -137,6 +144,8 @@ private:
   rclcpp::Publisher<control_msgs::msg::JointJog>::SharedPtr joint_pub_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
 
+  rclcpp_action::Client<control_msgs::action::GripperCommand>::SharedPtr gripper_client_;
+
   std::string frame_to_publish_;
   double joint_vel_cmd_;
   double vel_scale_;
@@ -145,7 +154,7 @@ private:
   std::vector<std::string> joint_names_;
 };
 
-KeyboardServo::KeyboardServo() : frame_to_publish_(BASE_FRAME_ID), joint_vel_cmd_(1.0), vel_scale_(0.1), joint_states_received_(false)
+KeyboardServo::KeyboardServo() : frame_to_publish_(BASE_FRAME_ID), joint_vel_cmd_(1.0), vel_scale_(0.5), joint_states_received_(false)
 {
   nh_ = rclcpp::Node::make_shared("servo_keyboard_input");
 
@@ -159,6 +168,7 @@ KeyboardServo::KeyboardServo() : frame_to_publish_(BASE_FRAME_ID), joint_vel_cmd
         // save joint names
         joint_names_ = msg->name;
       });
+  gripper_client_ = rclcpp_action::create_client<control_msgs::action::GripperCommand>(nh_,GRIPPER_SERVICE);
 }
 
 KeyboardReader input;
@@ -219,8 +229,11 @@ int KeyboardServo::keyLoop()
   puts("Use 'I' and 'K' to pitch(y rotate), 'J' and 'L' to yaw(z rotate), and 'M' and ',' to roll(x rotate)");
   puts("Use 'W' to Cartesian jog in the world frame, and 'E' for the End-Effector frame");
   puts("Use 1|2|3|4|5|6|7 keys to joint jog. 'R' to reverse the direction of jogging.");
+  puts("Use '+' and '-' to increase/decrease the speed.");
+  puts("Use 'A' to close the gripper, 'D' to open the gripper.");
   puts("Press Space to stop all motions.");
   puts("'Q' to quit.");
+  puts("  ");
 
   for (;;)
   {
@@ -391,10 +404,12 @@ int KeyboardServo::keyLoop()
         twist_msg->twist.angular.x = 0.0;
         twist_msg->twist.angular.y = 0.0;
         twist_msg->twist.angular.z = 0.0;
-        joint_msg->joint_names.push_back(joint_names_[0]);
+        joint_msg->joint_names.clear();
         joint_msg->velocities.push_back(0.0);
-        publish_twist = true;
-        publish_joint = true;
+        twist_pub_->publish(std::move(twist_msg));
+        joint_pub_->publish(std::move(joint_msg));
+        publish_twist = false;
+        publish_joint = false;
         break;
 
       // Velocity control
@@ -412,6 +427,16 @@ int KeyboardServo::keyLoop()
         }
         RCLCPP_INFO(nh_->get_logger(), "Velocity scale: %f", vel_scale_);
         break;
+
+      // Gripper control
+      case KEYCODE_A:
+        RCLCPP_INFO(nh_->get_logger(), "close gripper");
+        send_gripper_command(0.8); // close gripper
+        break;
+      case KEYCODE_D:
+        RCLCPP_INFO(nh_->get_logger(), "open gripper");
+        send_gripper_command(0.0); // open gripper
+        break;
     }
 
     // If a key requiring a publish was pressed, publish the message now
@@ -422,7 +447,7 @@ int KeyboardServo::keyLoop()
       twist_pub_->publish(std::move(twist_msg));
       publish_twist = false;
     }
-    if (publish_joint)
+    else if (publish_joint)
     {
       joint_msg->header.stamp = nh_->now();
       joint_msg->header.frame_id = BASE_FRAME_ID;
@@ -433,3 +458,14 @@ int KeyboardServo::keyLoop()
   return 0;
 }
 
+void KeyboardServo::send_gripper_command(double position)
+{
+    if (!gripper_client_->wait_for_action_server(std::chrono::seconds(5))) {
+        return;
+    }
+    auto goal = control_msgs::action::GripperCommand::Goal();
+    goal.command.position = position;
+    goal.command.max_effort = 140.0;
+    
+    auto result = gripper_client_->async_send_goal(goal);
+}
