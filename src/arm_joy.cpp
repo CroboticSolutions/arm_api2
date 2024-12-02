@@ -45,6 +45,7 @@
 const std::string TWIST_TOPIC = "/moveit2_iface_node/delta_twist_cmds";
 const std::string JOINT_TOPIC = "/moveit2_iface_node/delta_joint_cmds";
 const std::string JOINT_STATE_TOPIC = "/joint_states";
+const std::string GRIPPER_SERVICE = "robotiq_2f_urcap_adapter/gripper_command";
 const size_t ROS_QUEUE_SIZE = 10;
 const std::string EEF_FRAME_ID = "tcp";
 const std::string BASE_FRAME_ID = "base_link";
@@ -79,7 +80,7 @@ void JoyCtl::init()
             joint_names_ = msg->name;
         });
     // client
-    gripper_client_ = rclcpp_action::create_client<control_msgs::action::GripperCommand>(this,"robotiq_2f_urcap_adapter/gripper_command");
+    gripper_client_ = rclcpp_action::create_client<control_msgs::action::GripperCommand>(this,GRIPPER_SERVICE);
     RCLCPP_INFO(this->get_logger(), "Initialized joy_ctl with gripper control");
     for (size_t i = 0; i < joint_names_.size(); ++i)
     {
@@ -89,8 +90,10 @@ void JoyCtl::init()
     puts("Reading from Joystick");
     puts("---------------------------");
     puts("Hold 'LT' button to turn on/off the joystick control.");
+    puts("Use 'LB' and 'RB' buttons to swticth between end effector frame and base frame - Default is end effector frame.");
     puts("Use 'A' or 'B' buttons to switch between joint space or task space control - Default is task space control.");
     puts("Use back and start buttons to accelerate and decelerate the motion.");
+    puts("Use 'X' to close the gripper, 'Y' to open the gripper.");
     puts("------------For task space control:-------------");
     puts("  ");
     puts("Use 'right stick - left/right' for x-direction movement.");

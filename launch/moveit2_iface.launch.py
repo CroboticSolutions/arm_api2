@@ -16,11 +16,7 @@
  #
  # * Neither the name of the copyright holder nor the names of its
  #   contributors may be used to endorse or promote products derived from
- #   this software without specific prior written permission.
- #
- # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ #   this software without specific prior written permission.Need document name?RTICULAR PURPOSE
  # ARE
  # DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
  # FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
@@ -59,7 +55,8 @@ def launch_setup(context, *args, **kwargs):
 
     launch_nodes_ = []
     arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
-    arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=False))   
+    arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=False))
+    print("arg_launch_joy: ", arg_launch_joy)   
 
     # TODO: Swap between sim and real arg depending on the robot type
     robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
@@ -97,11 +94,9 @@ def launch_setup(context, *args, **kwargs):
     )
 
     launch_nodes_.append(launch_move_group)
-
-    if arg_launch_joy: 
-
+    
+    if str(arg_launch_joy).lower() == "true": # To avoid pkg not found 
         # https://index.ros.org/p/joy/ --> joy node as joystick (Create subscriber that takes cmd_vel)
-        # Example of demo joint_jog
         joy_node = Node(
             package='joy_linux', 
             executable="joy_linux_node", 
@@ -109,15 +104,6 @@ def launch_setup(context, *args, **kwargs):
             arguments={'device_name':"js0"}.items()
         )
         launch_nodes_.append(joy_node)
-
-        # joy_ctl_node = Node(
-        #     package="arm_api2", 
-        #     executable="joy_ctl", 
-        #     output="screen", 
-        #     parameters = [{"use_sim_time": use_sim_time}]
-        # )
-
-        # launch_nodes_.append(joy_ctl_node)
 
     return launch_nodes_
 
@@ -134,7 +120,7 @@ def generate_launch_description():
     # TODO: THIS IS NOT CONVERTED TO FALSE WHEN SETUP! FIX IT!
     declared_arguments.append(
         DeclareLaunchArgument(name='launch_joy', 
-                              default_value='true', 
+                              default_value='False', 
                               description='launch joystick')
     )
 
