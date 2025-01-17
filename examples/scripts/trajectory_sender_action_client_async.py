@@ -15,28 +15,24 @@ from rclpy.node import Node
 from scipy.spatial.transform import Rotation as R
 
 
-class CreateAndPublishTrajectory(Node):
+class CreateAndPublishTrajectoryAsync(Node):
 
     def __init__(self):
-        super().__init__("create_publish_trajectory")
+        super().__init__("create_publish_trajectory_async")
 
         # Create subscribers
         self.curr_p_sub = self.create_subscription(
             PoseStamped, "/arm/state/current_pose", self.curr_p_cb, 1
         )
-        # Create timer
-        timer_period        = 1.0  # seconds
-        self.timer          = self.create_timer(timer_period, self.run)
-        
 
         # Create action client
         self._action_client = ActionClient(
             self, MoveCartesianPath, "arm/move_to_pose_path"
         )
 
-        c_csv_pth = get_package_share_directory('arm_api2') + "/utils/CS_C_easy.csv"
-        s_csv_pth = get_package_share_directory('arm_api2') + "/utils/CS_S_easy.csv"
-
+        # Path to predefined trajectories
+        c_csv_pth = get_package_share_directory("arm_api2") + "/utils/CS_C_easy.csv"
+        s_csv_pth = get_package_share_directory("arm_api2") + "/utils/CS_S_easy.csv"
 
         self.get_logger().info(f"C trajectory path is: {c_csv_pth}")
         self.get_logger().info(f"S trajectory path is: {s_csv_pth}")
@@ -46,6 +42,7 @@ class CreateAndPublishTrajectory(Node):
         self.s_data = self.load_positions(s_csv_pth)
 
         # Flags
+        self.send_traj_flag = threading.Event()
         self.receive_pose_flag = threading.Event()
 
         # Create a separate thread to handle user input
@@ -62,12 +59,35 @@ class CreateAndPublishTrajectory(Node):
 
         self.get_logger().info("Sending goal request...")
 
-        result = self._action_client.send_goal(goal_msg)
-        
+        self._send_goal_future = self._action_client.send_goal_async(
+            goal_msg, feedback_callback=self.feedback_callback
+        )
+
+        self._send_goal_future.add_done_callback(self.goal_response_callback)
+
+    def goal_response_callback(self, future):
+        goal_handle = future.result()
+
+        if not goal_handle.accepted:
+            self.get_logger().info("Goal rejected")
+            return
+
+        self.get_logger().info("Goal accepted")
+
+        self._get_result_future = goal_handle.get_result_async()
+        self._get_result_future.add_done_callback(self.get_result_callback)
+
+    def get_result_callback(self, future):
+        result = future.result().result
         if result.success:
             self.get_logger().info("Result: Trajectory executed successfully!")
         else:
             self.get_logger().info("Result: Trajectory execution failed!")
+        self.send_traj_flag.clear()
+
+    def feedback_callback(self, feedback_msg):
+        feedback = feedback_msg.feedback
+        self.get_logger().info("Feedback: {0}".format(feedback.status))
 
     def load_positions(self, csv_pth):
         p_data = []
@@ -131,7 +151,7 @@ class CreateAndPublishTrajectory(Node):
     def handle_user_input(self):
         while rclpy.ok():
 
-            while not self.receive_pose_flag.is_set():
+            while self.send_traj_flag.is_set() or not self.receive_pose_flag.is_set():
                 pass
 
             user_input = input(
@@ -142,11 +162,13 @@ class CreateAndPublishTrajectory(Node):
                 self.get_logger().info("Starting S trajectory...")
                 traj = self.create_trajectory("S")
                 self.send_goal(traj)
+                self.send_traj_flag.set()
 
             elif user_input.lower() == "c":
                 self.get_logger().info("Starting C trajectory...")
                 traj = self.create_trajectory("C")
                 self.send_goal(traj)
+                self.send_traj_flag.set()
 
             if user_input.lower() == "q":
                 self.get_logger().info("Shutting down.")
@@ -156,7 +178,7 @@ class CreateAndPublishTrajectory(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    CPT = CreateAndPublishTrajectory()
+    CPT = CreateAndPublishTrajectoryAsync()
 
     executor = MultiThreadedExecutor()
     executor.add_node(CPT)

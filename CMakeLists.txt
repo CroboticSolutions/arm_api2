@@ -82,7 +82,11 @@ install(TARGETS
 #ament_python_install_package(${PROJECT_NAME})
 
 install(PROGRAMS
-  examples/scripts/pose_sender_action_client.py 
+  examples/scripts/joint_sender_action_client_async.py
+  examples/scripts/joint_sender_action_client.py
+  examples/scripts/pose_sender_action_client_async.py
+  examples/scripts/pose_sender_action_client.py
+  examples/scripts/trajectory_sender_action_client_async.py
   examples/scripts/trajectory_sender_action_client.py
   DESTINATION lib/${PROJECT_NAME}
 )
