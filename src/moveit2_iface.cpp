@@ -474,7 +474,8 @@ void m2Iface::planAndExecPose()
     }
 
     if(success){
-        addTimestempsToTrajectory(trajectory);
+        addTimestampsToTrajectory(trajectory);
+        printTimestamps(trajectory);
 
         feedback->set__status("executing");
         m_moveToPoseGoalHandle_->publish_feedback(feedback);
@@ -527,7 +528,7 @@ void m2Iface::planAndExecPosePath()
     bool success = (m_moveGroupPtr->computeCartesianPath(goalPoses, eefStep, jumpThr, trajectory) == 1.0);
 
     if(success){
-        addTimestempsToTrajectory(trajectory);
+        addTimestampsToTrajectory(trajectory);
 
         feedback->set__status("executing");
         m_moveToPosePathGoalHandle_->publish_feedback(feedback);
@@ -544,7 +545,18 @@ void m2Iface::planAndExecPosePath()
 
 }
 
-void m2Iface::addTimestempsToTrajectory(moveit_msgs::msg::RobotTrajectory &trajectory){
+void m2Iface::printTimestamps(const moveit_msgs::msg::RobotTrajectory &trajectory){
+    trajectory_msgs::msg::JointTrajectory jointTrajectory = trajectory.joint_trajectory;
+    std::vector<std::string> joint_names = jointTrajectory.joint_names;
+    std::vector<trajectory_msgs::msg::JointTrajectoryPoint> points = jointTrajectory.points;
+    for (long unsigned int i = 0; i < points.size(); i++){
+        trajectory_msgs::msg::JointTrajectoryPoint point = points[i];
+        rclcpp::Duration duration = point.time_from_start;
+        RCLCPP_INFO_STREAM(this->get_logger(), "Point " << i << " - time_from_start [s]: " << duration.seconds());
+    } 
+}
+
+void m2Iface::addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory &trajectory){
     // The trajectory created with computeCartesianPath() needs to be modified so it will include velocities as well.
     // reference: https://groups.google.com/g/moveit-users/c/MOoFxy2exT4
     // First to create a RobotTrajectory object
