@@ -165,8 +165,6 @@ class m2Iface: public rclcpp::Node
 
         /* srvs */
         rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
-        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       open_gripper_srv_; 
-        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       close_gripper_srv_;
         rclcpp::Service<arm_api2_msgs::srv::SetVelAcc>::SharedPtr                set_vel_acc_srv_;
 
         /* actions */
@@ -181,10 +179,6 @@ class m2Iface: public rclcpp::Node
         /* srv callbacks*/
         void change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
                              const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res);
-        void open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
-                             const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
-        void close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
-                             const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
         void set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req,
                              const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res);
 
@@ -263,10 +257,10 @@ class m2Iface: public rclcpp::Node
         bool moveGroupInit      = false;
         bool robotModelInit     = false;  
         bool pSceneMonitorInit  = false;
-        bool gripperInit        = false; 
         bool nodeInit           = false; 
         bool recivCmd           = false; 
         bool recivTraj          = false; 
+        bool recivGripperCmd    = false;
         bool servoEntered       = false; 
         bool async              = false; 
 
