@@ -23,6 +23,7 @@
   <depend>moveit_servo</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>control_msgs</depend>
   <depend>tf2</depend>
   <depend>std_srvs</depend>
 

@@ -79,7 +79,8 @@
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
 #include "arm_api2_msgs/srv/set_vel_acc.hpp"
-#include "arm_api2_msgs/action/gripper_control.hpp"
+#include "arm_api2_msgs/srv/set_string_param.hpp"
+#include "control_msgs/action/gripper_command.hpp"
 #include "arm_api2_msgs/action/move_cartesian.hpp"
 #include "arm_api2_msgs/action/move_joint.hpp"
 #include "arm_api2_msgs/action/move_cartesian_path.hpp"
@@ -165,15 +166,14 @@ class m2Iface: public rclcpp::Node
 
         /* srvs */
         rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
-        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       open_gripper_srv_; 
-        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       close_gripper_srv_;
         rclcpp::Service<arm_api2_msgs::srv::SetVelAcc>::SharedPtr                set_vel_acc_srv_;
+        rclcpp::Service<arm_api2_msgs::srv::SetStringParam>::SharedPtr           set_eelink_srv_;
 
         /* actions */
         rclcpp_action::Server<arm_api2_msgs::action::MoveJoint>::SharedPtr              move_to_joint_as_;
         rclcpp_action::Server<arm_api2_msgs::action::MoveCartesian>::SharedPtr          move_to_pose_as_;
         rclcpp_action::Server<arm_api2_msgs::action::MoveCartesianPath>::SharedPtr      move_to_pose_path_as_;
-        rclcpp_action::Server<arm_api2_msgs::action::GripperControl>::SharedPtr         gripper_control_as_;
+        rclcpp_action::Server<control_msgs::action::GripperCommand>::SharedPtr          gripper_control_as_;
 
         /* topic callbacks */
         void joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg);
@@ -181,12 +181,10 @@ class m2Iface: public rclcpp::Node
         /* srv callbacks*/
         void change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
                              const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res);
-        void open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
-                             const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
-        void close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
-                             const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
         void set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req,
                              const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res);
+        void set_eelink_cb(const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Request> req,
+                            const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Response> res);
 
         /* action callbacks */
         rclcpp_action::GoalResponse move_to_joint_goal_cb(
@@ -215,11 +213,11 @@ class m2Iface: public rclcpp::Node
 
         rclcpp_action::GoalResponse gripper_control_goal_cb(
             const rclcpp_action::GoalUUID &uuid, 
-            std::shared_ptr<const arm_api2_msgs::action::GripperControl::Goal> goal);
+            std::shared_ptr<const control_msgs::action::GripperCommand::Goal> goal);
         rclcpp_action::CancelResponse gripper_control_cancel_cb(
-            const std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::GripperControl>> goal_handle);
+            const std::shared_ptr<rclcpp_action::ServerGoalHandle<control_msgs::action::GripperCommand>> goal_handle);
         void gripper_control_accepted_cb(
-            std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::GripperControl>> goal_handle);
+            std::shared_ptr<rclcpp_action::ServerGoalHandle<control_msgs::action::GripperCommand>> goal_handle);
 
         bool run(); 
 
@@ -235,8 +233,9 @@ class m2Iface: public rclcpp::Node
         void planAndExecJoint();
         void planAndExecPose();
         void planAndExecPosePath();
-        void addTimestempsToTrajectory(moveit_msgs::msg::RobotTrajectory &trajectory);
-        bool planWithPlanner(geometry_msgs::msg::Pose goalPose, moveit_msgs::msg::RobotTrajectory &trajectory);
+        void printTimestamps(const moveit_msgs::msg::RobotTrajectory &trajectory);
+        void addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory &trajectory);
+        bool planWithPlanner(moveit::planning_interface::MoveGroupInterface::Plan &plan);
 
         // Simple state machine 
         enum state{
@@ -262,10 +261,10 @@ class m2Iface: public rclcpp::Node
         bool moveGroupInit      = false;
         bool robotModelInit     = false;  
         bool pSceneMonitorInit  = false;
-        bool gripperInit        = false; 
         bool nodeInit           = false; 
         bool recivCmd           = false; 
         bool recivTraj          = false; 
+        bool recivGripperCmd    = false;
         bool servoEntered       = false; 
         bool async              = false; 
 
@@ -273,7 +272,7 @@ class m2Iface: public rclcpp::Node
         std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveJoint>> m_moveToJointGoalHandle_;
         std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesian>> m_moveToPoseGoalHandle_;
         std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesianPath>> m_moveToPosePathGoalHandle_;
-        std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::GripperControl>> m_gripperControlGoalHandle_;
+        std::shared_ptr<rclcpp_action::ServerGoalHandle<control_msgs::action::GripperCommand>> m_gripperControlGoalHandle_;
         
         /* ros vars */
         std::vector<double> m_currJointPosition;
