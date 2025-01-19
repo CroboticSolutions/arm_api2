@@ -79,6 +79,7 @@
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
 #include "arm_api2_msgs/srv/set_vel_acc.hpp"
+#include "arm_api2_msgs/srv/set_string_param.hpp"
 #include "control_msgs/action/gripper_command.hpp"
 #include "arm_api2_msgs/action/move_cartesian.hpp"
 #include "arm_api2_msgs/action/move_joint.hpp"
@@ -166,6 +167,7 @@ class m2Iface: public rclcpp::Node
         /* srvs */
         rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
         rclcpp::Service<arm_api2_msgs::srv::SetVelAcc>::SharedPtr                set_vel_acc_srv_;
+        rclcpp::Service<arm_api2_msgs::srv::SetStringParam>::SharedPtr           set_eelink_srv_;
 
         /* actions */
         rclcpp_action::Server<arm_api2_msgs::action::MoveJoint>::SharedPtr              move_to_joint_as_;
@@ -181,6 +183,8 @@ class m2Iface: public rclcpp::Node
                              const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res);
         void set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req,
                              const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res);
+        void set_eelink_cb(const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Request> req,
+                            const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Response> res);
 
         /* action callbacks */
         rclcpp_action::GoalResponse move_to_joint_goal_cb(

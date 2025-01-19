@@ -37,6 +37,8 @@ srv:
     name: arm/change_state
   set_vel_acc:
     name: arm/set_vel_acc
+  set_eelink:
+    name: arm/set_eelink
 
 action:
   move_to_pose:
