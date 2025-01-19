@@ -112,6 +112,22 @@ public:
         return success;
     };
 
+    float get_position(){
+        return last_position;
+    };
+
+    float get_effort(){
+        return last_effort;
+    };
+
+    bool is_stalled(){
+        return last_stalled;
+    };
+
+    bool reached_goal(){
+        return last_reached_goal;
+    };
+
 private:
     std::shared_ptr<rclcpp::Node> node_;
     bool isOpen;
