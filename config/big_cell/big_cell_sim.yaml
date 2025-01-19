@@ -37,10 +37,6 @@ srv:
     name: arm/change_state
   set_vel_acc:
     name: arm/set_vel_acc
-  open_gripper:
-    name: arm/gripper/open
-  close_gripper:
-    name: arm/gripper/close
 
 action:
   move_to_pose:

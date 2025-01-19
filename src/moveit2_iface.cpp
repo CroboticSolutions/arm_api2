@@ -43,7 +43,7 @@
 
 m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     : Node("moveit2_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_iface_node")), 
-     executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()) 
+     executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()), gripper(node_) 
 {   
     // USE_SIM_TIME HACK TO TEST SERVO!
     this->set_parameter(rclcpp::Parameter("use_sim_time", false));
@@ -85,9 +85,6 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
 
     // Init anything for the old pose because it is non-existent at the beggining
     nodeInit = true; 
-
-    // TODO: Change gripper based on the config file and the gripper types
-    gripper = RobotiqGripper();
 }
 
 YAML::Node m2Iface::init_config(std::string yaml_path)
@@ -113,12 +110,8 @@ void m2Iface::init_subscribers()
 void m2Iface::init_services()
 {
     auto change_state_name = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
-    auto open_gripper_name = config["srv"]["open_gripper"]["name"].as<std::string>(); 
-    auto close_gripper_name= config["srv"]["close_gripper"]["name"].as<std::string>();
     auto set_vel_acc_name = config["srv"]["set_vel_acc"]["name"].as<std::string>();
     change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
-    open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + open_gripper_name, std::bind(&m2Iface::open_gripper_cb, this, _1, _2));
-    close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + close_gripper_name, std::bind(&m2Iface::close_gripper_cb, this, _1, _2));
     set_vel_acc_srv_ = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2Iface::set_vel_acc_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
@@ -188,18 +181,6 @@ void m2Iface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg)
     std::vector<double> jointPositions = msg->position;
     if(robotModelInit) {m_robotStatePtr->setVariablePositions(jointNames, jointPositions);}; 
 
-}
-
-void m2Iface::open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
-                              const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
-{
-    gripper.open();
-}
-
-void m2Iface::close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
-                               const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
-{
-    gripper.close(); 
 }
 
 void m2Iface::set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req, const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res)
@@ -318,16 +299,19 @@ void m2Iface::move_to_pose_path_accepted_cb(std::shared_ptr<rclcpp_action::Serve
 rclcpp_action::GoalResponse m2Iface::gripper_control_goal_cb(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const arm_api2_msgs::action::GripperControl::Goal> goal)
 {
     RCLCPP_INFO_STREAM(this->get_logger(), "Received goal request for gripper control!");
-    return rclcpp_action::GoalResponse();
+    (void)uuid;
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
 rclcpp_action::CancelResponse m2Iface::gripper_control_cancel_cb(const std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::GripperControl>> goal_handle)
 {
-    return rclcpp_action::CancelResponse();
+    return rclcpp_action::CancelResponse::ACCEPT;
 }
 
 void m2Iface::gripper_control_accepted_cb(std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::GripperControl>> goal_handle)
 {
+    m_gripperControlGoalHandle_ = goal_handle;
+    recivGripperCmd = true;
 }
 
 void m2Iface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
@@ -698,6 +682,27 @@ bool m2Iface::run()
             servoPtr->start(); 
             servoEntered = true; 
         }
+    }
+
+    if(recivGripperCmd){
+        auto goal = m_gripperControlGoalHandle_->get_goal();
+        float position = goal->position;
+        float effort = goal->effort;
+
+        auto result = std::make_shared<arm_api2_msgs::action::GripperControl::Result>();
+        bool success = gripper.send_gripper_command(position, effort);
+
+        if(success){
+            RCLCPP_INFO_STREAM(this->get_logger(), "Gripper command succeeded!");
+            result->success = true;
+            m_gripperControlGoalHandle_->succeed(result);
+        }
+        else{
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Gripper command failed!");
+            result->success = false;
+            m_gripperControlGoalHandle_->abort(result);
+        }
+        recivGripperCmd = false;
     }
 
     return true;     
