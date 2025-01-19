@@ -79,7 +79,7 @@
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
 #include "arm_api2_msgs/srv/set_vel_acc.hpp"
-#include "arm_api2_msgs/action/gripper_control.hpp"
+#include "control_msgs/action/gripper_command.hpp"
 #include "arm_api2_msgs/action/move_cartesian.hpp"
 #include "arm_api2_msgs/action/move_joint.hpp"
 #include "arm_api2_msgs/action/move_cartesian_path.hpp"
@@ -171,7 +171,7 @@ class m2Iface: public rclcpp::Node
         rclcpp_action::Server<arm_api2_msgs::action::MoveJoint>::SharedPtr              move_to_joint_as_;
         rclcpp_action::Server<arm_api2_msgs::action::MoveCartesian>::SharedPtr          move_to_pose_as_;
         rclcpp_action::Server<arm_api2_msgs::action::MoveCartesianPath>::SharedPtr      move_to_pose_path_as_;
-        rclcpp_action::Server<arm_api2_msgs::action::GripperControl>::SharedPtr         gripper_control_as_;
+        rclcpp_action::Server<control_msgs::action::GripperCommand>::SharedPtr          gripper_control_as_;
 
         /* topic callbacks */
         void joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg);
@@ -209,11 +209,11 @@ class m2Iface: public rclcpp::Node
 
         rclcpp_action::GoalResponse gripper_control_goal_cb(
             const rclcpp_action::GoalUUID &uuid, 
-            std::shared_ptr<const arm_api2_msgs::action::GripperControl::Goal> goal);
+            std::shared_ptr<const control_msgs::action::GripperCommand::Goal> goal);
         rclcpp_action::CancelResponse gripper_control_cancel_cb(
-            const std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::GripperControl>> goal_handle);
+            const std::shared_ptr<rclcpp_action::ServerGoalHandle<control_msgs::action::GripperCommand>> goal_handle);
         void gripper_control_accepted_cb(
-            std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::GripperControl>> goal_handle);
+            std::shared_ptr<rclcpp_action::ServerGoalHandle<control_msgs::action::GripperCommand>> goal_handle);
 
         bool run(); 
 
@@ -268,7 +268,7 @@ class m2Iface: public rclcpp::Node
         std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveJoint>> m_moveToJointGoalHandle_;
         std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesian>> m_moveToPoseGoalHandle_;
         std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesianPath>> m_moveToPosePathGoalHandle_;
-        std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::GripperControl>> m_gripperControlGoalHandle_;
+        std::shared_ptr<rclcpp_action::ServerGoalHandle<control_msgs::action::GripperCommand>> m_gripperControlGoalHandle_;
         
         /* ros vars */
         std::vector<double> m_currJointPosition;

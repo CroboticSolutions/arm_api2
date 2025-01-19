@@ -135,7 +135,7 @@ void m2Iface::init_actionservers()
                                                                                         std::bind(&m2Iface::move_to_pose_path_goal_cb, this, _1, _2),
                                                                                         std::bind(&m2Iface::move_to_pose_path_cancel_cb, this, _1),
                                                                                         std::bind(&m2Iface::move_to_pose_path_accepted_cb, this, _1));
-    gripper_control_as_ = rclcpp_action::create_server<arm_api2_msgs::action::GripperControl>(this,
+    gripper_control_as_ = rclcpp_action::create_server<control_msgs::action::GripperCommand>(this,
                                                                                         ns_ + gripper_control_name,
                                                                                         std::bind(&m2Iface::gripper_control_goal_cb, this, _1, _2),
                                                                                         std::bind(&m2Iface::gripper_control_cancel_cb, this, _1),
@@ -294,19 +294,19 @@ void m2Iface::move_to_pose_path_accepted_cb(std::shared_ptr<rclcpp_action::Serve
     recivTraj = true;
 }
 
-rclcpp_action::GoalResponse m2Iface::gripper_control_goal_cb(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const arm_api2_msgs::action::GripperControl::Goal> goal)
+rclcpp_action::GoalResponse m2Iface::gripper_control_goal_cb(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const control_msgs::action::GripperCommand::Goal> goal)
 {
     RCLCPP_INFO_STREAM(this->get_logger(), "Received goal request for gripper control!");
     (void)uuid;
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
-rclcpp_action::CancelResponse m2Iface::gripper_control_cancel_cb(const std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::GripperControl>> goal_handle)
+rclcpp_action::CancelResponse m2Iface::gripper_control_cancel_cb(const std::shared_ptr<rclcpp_action::ServerGoalHandle<control_msgs::action::GripperCommand>> goal_handle)
 {
     return rclcpp_action::CancelResponse::ACCEPT;
 }
 
-void m2Iface::gripper_control_accepted_cb(std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::GripperControl>> goal_handle)
+void m2Iface::gripper_control_accepted_cb(std::shared_ptr<rclcpp_action::ServerGoalHandle<control_msgs::action::GripperCommand>> goal_handle)
 {
     m_gripperControlGoalHandle_ = goal_handle;
     recivGripperCmd = true;
@@ -685,20 +685,23 @@ bool m2Iface::run()
 
     if(recivGripperCmd){
         auto goal = m_gripperControlGoalHandle_->get_goal();
-        float position = goal->position;
-        float effort = goal->effort;
+        float position = goal->command.position;
+        float effort = goal->command.max_effort;
 
-        auto result = std::make_shared<arm_api2_msgs::action::GripperControl::Result>();
+        auto result = std::make_shared<control_msgs::action::GripperCommand::Result>();
         bool success = gripper.send_gripper_command(position, effort);
 
         if(success){
             RCLCPP_INFO_STREAM(this->get_logger(), "Gripper command succeeded!");
-            result->success = true;
+            result->position = gripper.get_position();
+            result->effort = gripper.get_effort();
+            result->stalled = gripper.is_stalled();
+            result->reached_goal = gripper.reached_goal();
             m_gripperControlGoalHandle_->succeed(result);
         }
         else{
             RCLCPP_ERROR_STREAM(this->get_logger(), "Gripper command failed!");
-            result->success = false;
+            result->reached_goal = gripper.reached_goal();
             m_gripperControlGoalHandle_->abort(result);
         }
         recivGripperCmd = false;
