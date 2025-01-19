@@ -109,8 +109,10 @@ void m2Iface::init_services()
 {
     auto change_state_name = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
     auto set_vel_acc_name = config["srv"]["set_vel_acc"]["name"].as<std::string>();
+    auto set_eelink_name = config["srv"]["set_eelink"]["name"].as<std::string>();
     change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
     set_vel_acc_srv_ = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2Iface::set_vel_acc_cb, this, _1, _2));
+    set_eelink_srv_ = this->create_service<arm_api2_msgs::srv::SetStringParam>(ns_ + set_eelink_name, std::bind(&m2Iface::set_eelink_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
@@ -194,6 +196,13 @@ void m2Iface::set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc
     res->success = true;
     RCLCPP_INFO_STREAM(this->get_logger(), "Set velocity and acceleration to " << max_vel_scaling_factor << " " << max_acc_scaling_factor);
 
+}
+
+void m2Iface::set_eelink_cb(const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Request> req, const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Response> res)
+{
+    m_moveGroupPtr->setEndEffectorLink(req->value);
+    res->success = true;
+    RCLCPP_INFO_STREAM(this->get_logger(), "Set end effector link to " << req->value);
 }
 
 rclcpp_action::GoalResponse m2Iface::move_to_joint_goal_cb(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const arm_api2_msgs::action::MoveJoint::Goal> goal)
@@ -298,11 +307,13 @@ rclcpp_action::GoalResponse m2Iface::gripper_control_goal_cb(const rclcpp_action
 {
     RCLCPP_INFO_STREAM(this->get_logger(), "Received goal request for gripper control!");
     (void)uuid;
+    (void)goal;
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
 rclcpp_action::CancelResponse m2Iface::gripper_control_cancel_cb(const std::shared_ptr<rclcpp_action::ServerGoalHandle<control_msgs::action::GripperCommand>> goal_handle)
 {
+    (void)goal_handle;
     return rclcpp_action::CancelResponse::ACCEPT;
 }
 
@@ -453,7 +464,7 @@ void m2Iface::planAndExecPose()
     RCLCPP_INFO_STREAM(this->get_logger(), "Target pose is: " << goalPose.pose.position.x << " " << goalPose.pose.position.y << " " << goalPose.pose.position.z);
     RCLCPP_INFO_STREAM(this->get_logger(), "Creating Cartesian waypoints!");
     RCLCPP_INFO_STREAM(this->get_logger(), "Number of waypoints: " << NUM_CART_PTS);
-     
+
     m_moveGroupPtr->setPoseTarget(goalPose);
     m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
     m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
