@@ -429,16 +429,28 @@ void m2Iface::planAndExecJoint()
     m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
 
     moveit::planning_interface::MoveGroupInterface::Plan plan;
-    const bool success = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+    const bool success = planWithPlanner(plan);
     RCLCPP_INFO_STREAM(this->get_logger(), "Planning to joint space goal: " << (success ? "SUCCEEDED" : "FAILED"));
     
     if (success) {
+        //addTimestampsToTrajectory(plan.trajectory_);
+        //printTimestamps(plan.trajectory_);
+
         feedback->set__status("executing");
         m_moveToJointGoalHandle_->publish_feedback(feedback);
-        m_moveGroupPtr->execute(plan);
-        result->success = true;
-        m_moveToJointGoalHandle_->succeed(result);
-    }else {
+        auto errorcode = m_moveGroupPtr->execute(plan);
+        if(errorcode == moveit::core::MoveItErrorCode::SUCCESS){
+            RCLCPP_INFO_STREAM(this->get_logger(), "Execution succeeded!");
+            result->success = true;
+            m_moveToJointGoalHandle_->succeed(result);
+        }
+        else{
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Execution failed with error code");
+            result->success = true;
+            m_moveToJointGoalHandle_->abort(result); 
+        }
+    }
+    else {
         RCLCPP_ERROR(this->get_logger(), "Planning failed!");
         result->success = false;
         m_moveToJointGoalHandle_->abort(result); 
@@ -459,29 +471,22 @@ void m2Iface::planAndExecPose()
     RCLCPP_INFO_STREAM(this->get_logger(), "Creating Cartesian waypoints!");
     RCLCPP_INFO_STREAM(this->get_logger(), "Number of waypoints: " << NUM_CART_PTS);
      
-    moveit_msgs::msg::RobotTrajectory trajectory;
+    m_moveGroupPtr->setPoseTarget(goalPose);
+    m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
+    m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
 
-    bool success = false;
-
-    if(WITH_PLANNER){
-        success = planWithPlanner(goalPose.pose, trajectory);
-    }
-    else{
-        // TODO: Set as params that can be configured in YAML!
-        double jumpThr = 0.0; 
-        double eefStep = 0.02;
-        std::vector<geometry_msgs::msg::Pose> cartesianWaypoints = utils::createCartesianWaypoints(m_currPoseState.pose, goalPose.pose, NUM_CART_PTS); 
-        success = (m_moveGroupPtr->computeCartesianPath(cartesianWaypoints, eefStep, jumpThr, trajectory) == 1.0);
-    }
+    moveit::planning_interface::MoveGroupInterface::Plan plan;
+    const bool success = planWithPlanner(plan);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Planning to pose goal: " << (success ? "SUCCEEDED" : "FAILED"));
 
     if(success){
-        addTimestampsToTrajectory(trajectory);
-        printTimestamps(trajectory);
+        //addTimestampsToTrajectory(plan.trajectory_);
+        //printTimestamps(plan.trajectory_);
 
         feedback->set__status("executing");
         m_moveToPoseGoalHandle_->publish_feedback(feedback);
-        auto errorcode = m_moveGroupPtr->execute(trajectory);
-        if(errorcode == moveit::planning_interface::MoveItErrorCode::SUCCESS){
+        auto errorcode = m_moveGroupPtr->execute(plan);
+        if(errorcode == moveit::core::MoveItErrorCode::SUCCESS){
             RCLCPP_INFO_STREAM(this->get_logger(), "Execution succeeded!");
             result->success = true;
             m_moveToPoseGoalHandle_->succeed(result);
@@ -491,8 +496,6 @@ void m2Iface::planAndExecPose()
             result->success = true;
             m_moveToPoseGoalHandle_->abort(result); 
         }
-        
-        
     }
     else{
         RCLCPP_ERROR(this->get_logger(), "Planning failed!");
@@ -573,14 +576,12 @@ void m2Iface::addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory &traje
     rt.getRobotTrajectoryMsg(trajectory);
 } 
 
-bool m2Iface::planWithPlanner(geometry_msgs::msg::Pose goalPose, moveit_msgs::msg::RobotTrajectory &trajectory){
+bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Plan &plan){
     // Planning priority:
     // 1. LIN planner from pilz_industrial_motion_planner
     // 2. EST planner from ompl
     // 3. PRM planner from ompl
     // for EST and PRM create three plans and choose the best one
-
-    m_moveGroupPtr->setPoseTarget(goalPose);
     
     m_moveGroupPtr->setPlanningPipelineId("pilz_industrial_motion_planner");
     m_moveGroupPtr->setPlannerId("LIN");
@@ -623,7 +624,7 @@ bool m2Iface::planWithPlanner(geometry_msgs::msg::Pose goalPose, moveit_msgs::ms
         return a.trajectory_.joint_trajectory.points.size() < b.trajectory_.joint_trajectory.points.size();
     });
 
-    trajectory = best_plan->trajectory_;
+    plan = *best_plan;
     return true;
 }
 
