@@ -235,7 +235,8 @@ class m2Iface: public rclcpp::Node
         void planAndExecJoint();
         void planAndExecPose();
         void planAndExecPosePath();
-        void addTimestempsToTrajectory(moveit_msgs::msg::RobotTrajectory &trajectory);
+        void printTimestamps(const moveit_msgs::msg::RobotTrajectory &trajectory);
+        void addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory &trajectory);
         bool planWithPlanner(geometry_msgs::msg::Pose goalPose, moveit_msgs::msg::RobotTrajectory &trajectory);
 
         // Simple state machine 
