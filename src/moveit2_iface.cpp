@@ -202,7 +202,8 @@ void m2Iface::set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc
 
 void m2Iface::set_eelink_cb(const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Request> req, const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Response> res)
 {
-    m_moveGroupPtr->setEndEffectorLink(req->value);
+    EE_LINK_NAME = req->value;
+    m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME);
     res->success = true;
     RCLCPP_INFO_STREAM(this->get_logger(), "Set end effector link to " << req->value);
 }
