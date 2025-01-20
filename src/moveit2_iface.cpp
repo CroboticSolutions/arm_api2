@@ -486,8 +486,9 @@ void m2Iface::planAndExecPose()
             m_moveToPoseGoalHandle_->succeed(result);
         }
         else{
-            RCLCPP_ERROR_STREAM(this->get_logger(), "Execution failed with error code");
-            result->success = true;
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Execution failed with error code, time stamps:");
+            printTimestamps(plan.trajectory_);
+            result->success = false;
             m_moveToPoseGoalHandle_->abort(result); 
         }
     }
