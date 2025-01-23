@@ -583,8 +583,6 @@ bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Pl
     // 4. PRM planner from ompl
     // for EST and PRM create three plans and choose the best one
 
-    m_moveGroupPtr->setPoseTarget(goalPose);
-
     //-----------------------------------------------------------------------------------------------
     std::vector<std::pair<std::string, std::string>> planners = {
         {"isaac_ros_cumotion", 
@@ -639,54 +637,9 @@ bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Pl
         return a.trajectory_.joint_trajectory.points.size() < b.trajectory_.joint_trajectory.points.size();
     });
 
-    trajectory = best_plan->trajectory_;
+    plan = *best_plan;
     RCLCPP_INFO(this->get_logger(), "Best plan selected with %d points.", int(best_plan->trajectory_.joint_trajectory.points.size()));
     return true;
-
-
-    // bool success = false;
-    // for(int i = 0; i < 12; i++){
-
-    //     if(i == 3){
-    //         if(all_plans.size() != 0){
-    //             RCLCPP_INFO_STREAM(this->get_logger(), "cuMotion planner succeeded! - no more planners needed");
-    //             break;
-    //         }
-    //         RCLCPP_INFO_STREAM(this->get_logger(), "cuMotion planner failed! - trying next planner: LIN");
-    //         m_moveGroupPtr->setPlanningPipelineId("pilz_industrial_motion_planner");
-    //         m_moveGroupPtr->setPlannerId("LIN");
-    //     }
-    //     if(i == 6){
-    //         RCLCPP_INFO_STREAM(this->get_logger(), "LIN planner failed! - trying next planner: EST");
-    //         m_moveGroupPtr->setPlanningPipelineId("ompl");
-    //         m_moveGroupPtr->setPlannerId("EST");
-    //     }
-    //     if(i == 9){
-    //         RCLCPP_INFO_STREAM(this->get_logger(), "EST had three tries - trying next planner: PRM");
-    //         m_moveGroupPtr->setPlanningPipelineId("ompl");
-    //         m_moveGroupPtr->setPlannerId("PRM");
-    //     }
-
-    //     moveit::planning_interface::MoveGroupInterface::Plan plan;
-    //     success = static_cast<bool>(m_moveGroupPtr->plan(plan));
-
-    //     if(success){
-    //         RCLCPP_INFO(this->get_logger(), "Plan %d has %d points", i, int(plan.trajectory_.joint_trajectory.points.size()));
-    //         all_plans.push_back(plan);
-    //     }
-    // }
-
-    // if(all_plans.size() == 0){
-    //     RCLCPP_INFO_STREAM(this->get_logger(), "All planners failed!");
-    //     return false;
-    // }
-    // // find the best plan from the list of plans
-    // auto best_plan = std::min_element(all_plans.begin(), all_plans.end(), [](auto const& a, auto const& b){
-    //     return a.trajectory_.joint_trajectory.points.size() < b.trajectory_.joint_trajectory.points.size();
-    // });
-
-    // trajectory = best_plan->trajectory_;
-    // return true;
 }
 
 void m2Iface::getArmState() 
