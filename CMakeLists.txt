@@ -88,6 +88,7 @@ install(PROGRAMS
   examples/scripts/pose_sender_action_client.py
   examples/scripts/trajectory_sender_action_client_async.py
   examples/scripts/trajectory_sender_action_client.py
+  examples/scripts/servo_watchdog.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
