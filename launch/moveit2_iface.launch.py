@@ -56,6 +56,7 @@ def launch_setup(context, *args, **kwargs):
     launch_nodes_ = []
     arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
     arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=False))
+    arg_launch_servo_watchdog = context.perform_substitution(LaunchConfiguration('launch_servo_watchdog', default=False))
     print("arg_launch_joy: ", arg_launch_joy)   
 
     # TODO: Swap between sim and real arg depending on the robot type
@@ -104,6 +105,14 @@ def launch_setup(context, *args, **kwargs):
             arguments={'device_name':"js0"}.items()
         )
         launch_nodes_.append(joy_node)
+    
+    if str(arg_launch_servo_watchdog).lower() == "true":
+        launch_servo_watchdog = Node(
+            package='arm_api2',
+            executable='servo_watchdog.py',
+            output='screen'
+        )
+        launch_nodes_.append(launch_servo_watchdog)
 
     return launch_nodes_
 
@@ -120,8 +129,14 @@ def generate_launch_description():
     # TODO: THIS IS NOT CONVERTED TO FALSE WHEN SETUP! FIX IT!
     declared_arguments.append(
         DeclareLaunchArgument(name='launch_joy', 
-                              default_value='False', 
+                              default_value='false', 
                               description='launch joystick')
+    )
+    
+    declared_arguments.append(
+        DeclareLaunchArgument(name='launch_servo_watchdog', 
+                              default_value='false', 
+                              description='launch servo_watchdog node')
     )
 
     declared_arguments.append(
