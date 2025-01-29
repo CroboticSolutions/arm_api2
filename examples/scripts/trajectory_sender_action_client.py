@@ -62,9 +62,11 @@ class CreateAndPublishTrajectory(Node):
 
         self.get_logger().info("Sending goal request...")
 
-        result = self._action_client.send_goal(goal_msg)
+        response = self._action_client.send_goal(goal_msg)
         
-        if result.success:
+        print(response.result)
+        
+        if response.result.success:
             self.get_logger().info("Result: Trajectory executed successfully!")
         else:
             self.get_logger().info("Result: Trajectory execution failed!")
