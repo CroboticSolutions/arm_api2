@@ -38,6 +38,11 @@ check_octomap_collisions: false  # Check collision against the octomap (if a 3D 
 
 ## MoveIt properties
 move_group_name: manipulator # Often 'manipulator' or 'arm'
+planning_frame: base_link # The MoveIt planning frame. Often 'base_link' or 'world'
+
+## Other frames
+ee_frame_name: tcp # The name of the end effector link, used to return the EE pose
+robot_link_command_frame: base_link # commands must be given in the frame of a robot link. Usually either the base or end effector
 
 ## Stopping behaviour
 incoming_command_timeout: 0.25 # Commands will be discarded if they are older than the timeout, in seconds.
