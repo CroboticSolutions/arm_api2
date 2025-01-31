@@ -6,10 +6,9 @@
 # override_velocity_scaling_factor = 0.0 # valid range [0.0:1.0]
 
 ## Properties of outgoing commands
-publish_period: 0.05 # 1/Nominal publish rate [seconds]
-low_latency_mode: false # Set this to true to publish as soon as an incoming Twist command is received (publish_period is ignored)
+publish_period: 0.005 # 1/Nominal publish rate [seconds]
 
-command_in_type: "speed_units"  # "unitless"> in the range [-1:1], as if from joystick. "speed_units"> cmds are in m/s and rad/s
+command_in_type: speed_units  # "unitless"> in the range [-1:1], as if from joystick. "speed_units"> cmds are in m/s and rad/s
 scale:
   # Scale parameters are only used if command_in_type=="unitless"
   linear:  0.4  # Max linear velocity. Unit is [m/s]. Only used for Cartesian commands.
@@ -19,16 +18,16 @@ scale:
 
 # What type of topic does your robot driver expect?
 # Currently supported are std_msgs/Float64MultiArray or trajectory_msgs/JointTrajectory
-command_out_type: trajectory_msgs/JointTrajectory
+command_out_type: std_msgs/Float64MultiArray
 
 # What to publish? Can save some bandwidth as most robots only require positions or velocities
 publish_joint_positions: true
-publish_joint_velocities: true
+publish_joint_velocities: false
 publish_joint_accelerations: false
 
 ## Plugins for smoothing outgoing commands
-use_smoothing: true
-smoothing_filter_plugin_name: "online_signal_smoothing::ButterworthFilterPlugin"
+use_smoothing: true # Enables the use of smoothing plugins for joint trajectory smoothing
+smoothing_filter_plugin_name: online_signal_smoothing::ButterworthFilterPlugin
 
 # If is_primary_planning_scene_monitor is set to true, the Servo server's PlanningScene advertises the /get_planning_scene service,
 # which other nodes can use as a source for information about the planning environment.
@@ -38,30 +37,27 @@ is_primary_planning_scene_monitor: false
 check_octomap_collisions: false  # Check collision against the octomap (if a 3D sensor plugin is available)
 
 ## MoveIt properties
-move_group_name: ur_manipulator # Often 'manipulator' or 'arm'
-planning_frame: base_link # The MoveIt planning frame. Often 'base_link' or 'world'
-
-## Other frames
-ee_frame_name: tool0 # The name of the end effector link, used to return the EE pose
-robot_link_command_frame: base_link # commands must be given in the frame of a robot link. Usually either the base or end effector
+move_group_name: manipulator # Often 'manipulator' or 'arm'
 
 ## Stopping behaviour
-incoming_command_timeout: 0.25 # Stop servoing if X seconds elapse without a new command
-# If 0, republish commands forever even if the robot is stationary. Otherwise, specify num. to publish.
-# Important because ROS may drop some messages and we need the robot to halt reliably.
-num_outgoing_halt_msgs_to_publish: 1
+incoming_command_timeout: 0.25 # Commands will be discarded if they are older than the timeout, in seconds.
 
 ## Configure handling of singularities and joint limits
 lower_singularity_threshold: 20.0 # Start decelerating when the condition number hits this (close to singularity)
 hard_stop_singularity_threshold: 50.0 # Stop when the condition number hits this
-joint_limit_margin: 0.087267 # added as a buffer to joint limits [radians]. If moving quickly, make this larger.
+leaving_singularity_threshold_multiplier: 2.0 # Multiply the hard stop limit by this when leaving singularity
+# Added as a buffer to joint variable position bounds [in that joint variable's respective units].
+# Can be of size 1, which applies the margin to all joints, or the same size as the number of degrees of freedom of the active joint group.
+# If moving quickly, make these values larger.
+joint_limit_margins: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
 
 ## Topic names
-cartesian_command_in_topic: ~/delta_twist_cmds  # Topic for incoming Cartesian twist commands
-joint_command_in_topic: ~/delta_joint_cmds  # Topic for incoming joint angle commands
+pose_command_in_topic: /moveit2_iface_node/pose_cmds  # Topic for incoming Cartesian pose commands
+cartesian_command_in_topic: /moveit2_iface_node/delta_twist_cmds  # Topic for incoming Cartesian twist commands
+joint_command_in_topic: /moveit2_iface_node/delta_joint_cmds  # Topic for incoming joint angle commands
 joint_topic: /joint_states  # Get joint states from this tpoic
 status_topic: ~/status  # Publish status to this topic
-command_out_topic: /joint_trajectory_controller/joint_trajectory  # Publish outgoing commands here
+command_out_topic: /forward_position_controller/commands  # Publish outgoing commands here
 
 ## Collision checking for the entire robot body
 check_collisions: true # Check collisions?
