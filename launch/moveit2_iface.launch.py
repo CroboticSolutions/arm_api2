@@ -56,7 +56,7 @@ def launch_setup(context, *args, **kwargs):
     launch_nodes_ = []
     arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
     arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=False))
-    arg_launch_servo_watchdog = context.perform_substitution(LaunchConfiguration('launch_servo_watchdog', default=False))
+    arg_launch_servo_watchdog = context.perform_substitution(LaunchConfiguration('launch_servo_watchdog', default=True))
     print("arg_launch_joy: ", arg_launch_joy)   
 
     # TODO: Swap between sim and real arg depending on the robot type
@@ -135,7 +135,7 @@ def generate_launch_description():
     
     declared_arguments.append(
         DeclareLaunchArgument(name='launch_servo_watchdog', 
-                              default_value='false', 
+                              default_value='true', 
                               description='launch servo_watchdog node')
     )
 
