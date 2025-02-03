@@ -28,6 +28,9 @@ topic:
     current_pose:
       name: arm/state/current_pose
       queue: 1
+    current_robot_state:
+      name: arm/state/current_state
+      queue: 1
 srv:
   disable_collision:
     name: /move_group/disable_collision

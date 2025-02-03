@@ -93,8 +93,10 @@ YAML::Node m2Iface::init_config(std::string yaml_path)
 
 void m2Iface::init_publishers()
 {   
-    auto pose_state_name = config["topic"]["pub"]["current_pose"]["name"].as<std::string>(); 
-    pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(ns_ + pose_state_name, 1); 
+    auto pose_state_name = config["topic"]["pub"]["current_pose"]["name"].as<std::string>();
+    auto robot_state_name = config["topic"]["pub"]["current_robot_state"]["name"].as<std::string>(); 
+    pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(ns_ + pose_state_name, 1);
+    robot_state_pub_ = this->create_publisher<std_msgs::msg::String>(ns_ + robot_state_name, 1); 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized publishers!");
 }
 
@@ -648,6 +650,9 @@ bool m2Iface::run()
 
     getArmState(); 
     pose_state_pub_->publish(m_currPoseState);
+    std_msgs::msg::String stateMsg;
+    stateMsg.data = stateNames[robotState];
+    robot_state_pub_->publish(stateMsg);
 
     rclcpp::Clock steady_clock; 
     int LOG_STATE_TIMEOUT=10000; 
