@@ -581,26 +581,30 @@ bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Pl
     // 3. EST planner from ompl
     // 4. PRM planner from ompl
     // for EST and PRM create three plans and choose the best one
-
     //-----------------------------------------------------------------------------------------------
+    m_moveGroupPtr->setPlanningPipelineId("isaac_ros_cumotion");
+    m_moveGroupPtr->setPlannerId("cuMotion");
+    std::list<moveit::planning_interface::MoveGroupInterface::Plan> all_plans;
+    moveit::planning_interface::MoveGroupInterface::Plan cuMotion_plan;
+    bool cuMotion_success = (m_moveGroupPtr->plan(cuMotion_plan) == moveit::core::MoveItErrorCode::SUCCESS);
+    if (cuMotion_success) {
+        plan = cuMotion_plan;
+        RCLCPP_INFO(this->get_logger(), "cuMotion planner succeeded. Immediate return.");
+        return true;
+    }
+
     std::vector<std::pair<std::string, std::string>> planners = {
-        {"isaac_ros_cumotion", 
-        "cuMotion"},
         {"pilz_industrial_motion_planner", "LIN"},
         {"ompl", "EST"},
         {"ompl", "PRM"}
     };
     // Vector to store futures for parallel planning
     std::vector<std::future<std::optional<moveit::planning_interface::MoveGroupInterface::Plan>>> futures;
-
-    m_moveGroupPtr->setPlanningPipelineId("isaac_ros_cumotion");
-    m_moveGroupPtr->setPlannerId("cuMotion");
-    std::list<moveit::planning_interface::MoveGroupInterface::Plan> all_plans;
-    std::optional<moveit::planning_interface::MoveGroupInterface::Plan> cuMotion_plan;
-
+    std::atomic<bool> plan_found{false};    
     // Launch planning tasks in parallel
     for (const auto &planner : planners) {
-        futures.emplace_back(std::async(std::launch::async, [this, planner, &cuMotion_plan]() -> std::optional<moveit::planning_interface::MoveGroupInterface::Plan> {
+        futures.emplace_back(std::async(std::launch::async, [this, planner, &plan_found]() -> std::optional<moveit::planning_interface::MoveGroupInterface::Plan> {
+            if (plan_found.load()) return std::nullopt;
             m_moveGroupPtr->setPlanningPipelineId(planner.first);
             m_moveGroupPtr->setPlannerId(planner.second);
 
@@ -609,12 +613,6 @@ bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Pl
             if (success) {
                 RCLCPP_INFO(this->get_logger(), "Planner %s succeeded with %d points.", planner.second.c_str(),
                             int(plan.trajectory_.joint_trajectory.points.size()));
-
-                // If cuMotion succeeded, store it separately
-                if (planner.second == "cuMotion") {
-                    cuMotion_plan = plan;
-                }
-                
                 return plan;
             } else {
                 RCLCPP_WARN(this->get_logger(), "Planner %s failed.", planner.second.c_str());
@@ -622,37 +620,30 @@ bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Pl
             }
         }));
     }
+    std::list<moveit::planning_interface::MoveGroupInterface::Plan> valid_plans;
     // Collect all results
     for (auto &future : futures) {
         try {
             auto result = future.get();  // Wait for the task to finish
             if (result.has_value()) {
-                all_plans.push_back(result.value());
+                valid_plans.push_back(result.value());
+                
+                if(valid_plans.size() >= 2){
+                   plan_found.store(true);
+                   break;
+                }
             }
         } catch (const std::exception &e) {
             RCLCPP_ERROR(this->get_logger(), "Exception in planner: %s", e.what());
         }
     }
 
-    // Check if cuMotion succeeded
-    if (cuMotion_plan.has_value()) {
-        plan = cuMotion_plan.value();
-        RCLCPP_INFO(this->get_logger(), "cuMotion planner succeeded. Using cuMotion plan.");
-        return true;
-    }
-
-    // If cuMotion failed, find the best plan based on the number of points
-    if (all_plans.empty()) {
-        RCLCPP_ERROR(this->get_logger(), "All planners failed!");
-        return false;
-    }
-
-    if (all_plans.empty()) {
+    if (valid_plans.empty()) {
         RCLCPP_ERROR(this->get_logger(), "All planners failed!");
         return false;
     }
     // Find the best plan from the list of plans
-    auto best_plan = std::min_element(all_plans.begin(), all_plans.end(), [](auto const &a, auto const &b) {
+    auto best_plan = std::min_element(valid_plans.begin(), valid_plans.end(), [](auto const &a, auto const &b) {
         return a.trajectory_.joint_trajectory.points.size() < b.trajectory_.joint_trajectory.points.size();
     });
 
