@@ -163,6 +163,7 @@ class m2Iface: public rclcpp::Node
 
         /* pubs */
         rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr       pose_state_pub_;
+        rclcpp::Publisher<std_msgs::msg::String>::SharedPtr                 robot_state_pub_;
 
         /* srvs */
         rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
