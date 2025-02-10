@@ -530,7 +530,7 @@ void m2Iface::planAndExecPosePath()
     // TODO: Set as params that can be configured in YAML!
     double jumpThr = 0.0; 
     double eefStep = 0.02; 
-    bool success = (m_moveGroupPtr->computeCartesianPath(goalPoses, eefStep, jumpThr, trajectory) == 1.0);
+    bool success = (m_moveGroupPtr->computeCartesianPath(goalPoses, eefStep, jumpThr, trajectory, true) == 1.0);
 
     if(success){
         addTimestampsToTrajectory(trajectory);
