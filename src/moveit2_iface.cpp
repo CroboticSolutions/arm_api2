@@ -585,6 +585,10 @@ bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Pl
     m_moveGroupPtr->setPlannerId("cuMotion");
     std::list<moveit::planning_interface::MoveGroupInterface::Plan> all_plans;
     moveit::planning_interface::MoveGroupInterface::Plan cuMotion_plan;
+
+    // TODO: if EE_LINK_NAME != tcp then move_group.setEndEffectorLink(tcp) need to be called before planning 
+    // with cuMotion and the target pose needs to be transformed to tcp frame and sets again
+
     bool cuMotion_success = (m_moveGroupPtr->plan(cuMotion_plan) == moveit::core::MoveItErrorCode::SUCCESS);
     if (cuMotion_success) {
         plan = cuMotion_plan;
