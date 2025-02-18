@@ -66,7 +66,6 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     PLANNING_FRAME      = config["robot"]["planning_frame"].as<std::string>(); 
     PLANNING_SCENE      = config["robot"]["planning_scene"].as<std::string>(); 
     MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
-    NUM_CART_PTS        = config["robot"]["num_cart_pts"].as<int>(); 
     JOINT_STATES        = config["robot"]["joint_states"].as<std::string>();
     WITH_PLANNER        = config["robot"]["with_planner"].as<bool>();
     max_vel_scaling_factor = config["robot"]["max_vel_scaling_factor"].as<float>();
@@ -464,11 +463,9 @@ void m2Iface::planAndExecPose()
     m_moveToPoseGoalHandle_->publish_feedback(feedback);
 
     auto goalPose = m_moveToPoseGoalHandle_->get_goal()->goal;
-    RCLCPP_INFO_STREAM(this->get_logger(), "Planning Cartesian path!");
+    RCLCPP_INFO_STREAM(this->get_logger(), "Planning to Cartesian Pose!");
     RCLCPP_INFO_STREAM(this->get_logger(), "Current pose is: " << m_currPoseState.pose.position.x << " " << m_currPoseState.pose.position.y << " " << m_currPoseState.pose.position.z);
     RCLCPP_INFO_STREAM(this->get_logger(), "Target pose is: " << goalPose.pose.position.x << " " << goalPose.pose.position.y << " " << goalPose.pose.position.z);
-    RCLCPP_INFO_STREAM(this->get_logger(), "Creating Cartesian waypoints!");
-    RCLCPP_INFO_STREAM(this->get_logger(), "Number of waypoints: " << NUM_CART_PTS);
 
     m_moveGroupPtr->setPoseTarget(goalPose);
     m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
