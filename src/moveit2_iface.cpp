@@ -601,52 +601,45 @@ bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Pl
         {"ompl", "EST"},
         {"ompl", "PRM"}
     };
-    // Vector to store futures for parallel planning
-    std::vector<std::future<std::optional<moveit::planning_interface::MoveGroupInterface::Plan>>> futures;
-    std::atomic<bool> plan_found{false};    
-    // Launch planning tasks in parallel
-    for (const auto &planner : planners) {
-        futures.emplace_back(std::async(std::launch::async, [this, planner, &plan_found]() -> std::optional<moveit::planning_interface::MoveGroupInterface::Plan> {
-            if (plan_found.load()) return std::nullopt;
-            m_moveGroupPtr->setPlanningPipelineId(planner.first);
-            m_moveGroupPtr->setPlannerId(planner.second);
 
-            moveit::planning_interface::MoveGroupInterface::Plan plan;
-            bool success = static_cast<bool>(m_moveGroupPtr->plan(plan));
-            if (success) {
-                RCLCPP_INFO(this->get_logger(), "Planner %s succeeded with %d points.", planner.second.c_str(),
-                            int(plan.trajectory_.joint_trajectory.points.size()));
-                return plan;
-            } else {
-                RCLCPP_WARN(this->get_logger(), "Planner %s failed.", planner.second.c_str());
-                return std::nullopt;
-            }
-        }));
-    }
-    std::list<moveit::planning_interface::MoveGroupInterface::Plan> valid_plans;
-    // Collect all results
-    for (auto &future : futures) {
-        try {
-            auto result = future.get();  // Wait for the task to finish
-            if (result.has_value()) {
-                valid_plans.push_back(result.value());
-                
-                if(valid_plans.size() >= 2){
-                   plan_found.store(true);
-                   break;
-                }
-            }
-        } catch (const std::exception &e) {
-            RCLCPP_ERROR(this->get_logger(), "Exception in planner: %s", e.what());
+    bool success = false;
+    int tries_per_planner = 3;
+    for(int i = 0; i < int(tries_per_planner*planners.size()); i++){
+
+        int planner_index = i / tries_per_planner;
+        int planner_try = i % tries_per_planner;
+
+        m_moveGroupPtr->setPlanningPipelineId(planners[planner_index].first);
+        m_moveGroupPtr->setPlannerId(planners[planner_index].second);
+
+        moveit::planning_interface::MoveGroupInterface::Plan plan;
+        success = static_cast<bool>(m_moveGroupPtr->plan(plan));
+
+        if(success){
+            RCLCPP_INFO(this->get_logger(), "%s found plan %d with %d points", 
+                planners[planner_index].second.c_str(), i, int(plan.trajectory_.joint_trajectory.points.size()));
+            all_plans.push_back(plan);
+        }
+        else {
+            RCLCPP_INFO(this->get_logger(), "%s failed to find plan %d", 
+                planners[planner_index].second.c_str(), i);
+        }
+
+        if(planner_try == tries_per_planner - 1 && all_plans.size() >= 3){
+            RCLCPP_INFO(this->get_logger(), "Found %d plans, stopping planning", int(all_plans.size()));
         }
     }
 
-    if (valid_plans.empty()) {
-        RCLCPP_ERROR(this->get_logger(), "All planners failed!");
+    if(all_plans.size() == 0){
+        RCLCPP_INFO_STREAM(this->get_logger(), "All planners failed!");
         return false;
     }
-    // Find the best plan from the list of plans
-    auto best_plan = std::min_element(valid_plans.begin(), valid_plans.end(), [](auto const &a, auto const &b) {
+    else{
+        RCLCPP_INFO_STREAM(this->get_logger(), "Found " << all_plans.size() << " plans!");
+    }
+
+    // find the best plan from the list of plans
+    auto best_plan = std::min_element(all_plans.begin(), all_plans.end(), [](auto const& a, auto const& b){
         return a.trajectory_.joint_trajectory.points.size() < b.trajectory_.joint_trajectory.points.size();
     });
 
