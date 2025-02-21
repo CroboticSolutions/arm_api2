@@ -113,9 +113,11 @@ void m2Iface::init_services()
     auto change_state_name = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
     auto set_vel_acc_name = config["srv"]["set_vel_acc"]["name"].as<std::string>();
     auto set_eelink_name = config["srv"]["set_eelink"]["name"].as<std::string>();
+    auto set_plan_only_name = config["srv"]["set_planonly"]["name"].as<std::string>();
     change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
     set_vel_acc_srv_ = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2Iface::set_vel_acc_cb, this, _1, _2));
     set_eelink_srv_ = this->create_service<arm_api2_msgs::srv::SetStringParam>(ns_ + set_eelink_name, std::bind(&m2Iface::set_eelink_cb, this, _1, _2));
+    set_plan_only_srv_ = this->create_service<std_srvs::srv::SetBool>(ns_ + set_plan_only_name, std::bind(&m2Iface::set_plan_only_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
@@ -207,6 +209,13 @@ void m2Iface::set_eelink_cb(const std::shared_ptr<arm_api2_msgs::srv::SetStringP
     m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME);
     res->success = true;
     RCLCPP_INFO_STREAM(this->get_logger(), "Set end effector link to " << req->value);
+}
+
+void m2Iface::set_plan_only_cb(const std::shared_ptr<std_srvs::srv::SetBool::Request> req, const std::shared_ptr<std_srvs::srv::SetBool::Response> res)
+{
+    planOnly = req->data;
+    res->success = true;
+    RCLCPP_INFO_STREAM(this->get_logger(), "Set plan only to " << req->data);
 }
 
 rclcpp_action::GoalResponse m2Iface::move_to_joint_goal_cb(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const arm_api2_msgs::action::MoveJoint::Goal> goal)
@@ -430,7 +439,14 @@ void m2Iface::planAndExecJoint()
     const bool success = planWithPlanner(plan);
     RCLCPP_INFO_STREAM(this->get_logger(), "Planning to joint space goal: " << (success ? "SUCCEEDED" : "FAILED"));
     
-    if (success) {
+    if (success && planOnly) {
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        RCLCPP_INFO_STREAM(this->get_logger(), "                   Plan only mode!");
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        result->success = true;
+        m_moveToJointGoalHandle_->succeed(result);
+    }
+    else if (success) {
         //addTimestampsToTrajectory(plan.trajectory_);
         //printTimestamps(plan.trajectory_);
 
@@ -475,7 +491,14 @@ void m2Iface::planAndExecPose()
     const bool success = planWithPlanner(plan);
     RCLCPP_INFO_STREAM(this->get_logger(), "Planning to pose goal: " << (success ? "SUCCEEDED" : "FAILED"));
 
-    if(success){
+    if (success && planOnly) {
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        RCLCPP_INFO_STREAM(this->get_logger(), "                   Plan only mode!");
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        result->success = true;
+        m_moveToPoseGoalHandle_->succeed(result);
+    }
+    else if(success){
         //addTimestampsToTrajectory(plan.trajectory_);
         //printTimestamps(plan.trajectory_);
 
@@ -528,7 +551,14 @@ void m2Iface::planAndExecPosePath()
     double eefStep = 0.02; 
     bool success = (m_moveGroupPtr->computeCartesianPath(goalPoses, eefStep, jumpThr, trajectory, true) == 1.0);
 
-    if(success){
+    if (success && planOnly) {
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        RCLCPP_INFO_STREAM(this->get_logger(), "                   Plan only mode!");
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        result->success = true;
+        m_moveToPosePathGoalHandle_->succeed(result);
+    }
+    else if(success){
         addTimestampsToTrajectory(trajectory);
 
         feedback->set__status("executing");
