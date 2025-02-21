@@ -85,6 +85,7 @@
 #include "arm_api2_msgs/action/move_joint.hpp"
 #include "arm_api2_msgs/action/move_cartesian_path.hpp"
 #include "std_srvs/srv/trigger.hpp"
+#include "std_srvs/srv/set_bool.hpp"
 
 // utils
 #include "arm_api2/utils.hpp"
@@ -169,6 +170,7 @@ class m2Iface: public rclcpp::Node
         rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
         rclcpp::Service<arm_api2_msgs::srv::SetVelAcc>::SharedPtr                set_vel_acc_srv_;
         rclcpp::Service<arm_api2_msgs::srv::SetStringParam>::SharedPtr           set_eelink_srv_;
+        rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr                      set_plan_only_srv_;
 
         /* actions */
         rclcpp_action::Server<arm_api2_msgs::action::MoveJoint>::SharedPtr              move_to_joint_as_;
@@ -186,6 +188,8 @@ class m2Iface: public rclcpp::Node
                              const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res);
         void set_eelink_cb(const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Request> req,
                             const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Response> res);
+        void set_plan_only_cb(const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
+                               const std::shared_ptr<std_srvs::srv::SetBool::Response> res);
 
         /* action callbacks */
         rclcpp_action::GoalResponse move_to_joint_goal_cb(
@@ -267,7 +271,8 @@ class m2Iface: public rclcpp::Node
         bool recivTraj          = false; 
         bool recivGripperCmd    = false;
         bool servoEntered       = false; 
-        bool async              = false; 
+        bool async              = false;
+        bool planOnly           = false; 
 
         /* goal handles */
         std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveJoint>> m_moveToJointGoalHandle_;

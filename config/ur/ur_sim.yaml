@@ -42,6 +42,8 @@ srv:
     name: arm/set_vel_acc
   set_eelink:
     name: arm/set_eelink
+  set_planonly:
+    name: arm/set_planonly
 
 action:
   move_to_pose:
