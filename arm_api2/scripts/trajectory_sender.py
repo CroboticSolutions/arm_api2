@@ -29,8 +29,10 @@ class CreateAndPublishTrajectory(Node):
         # Create timer
         timer_period        = 1.0  # seconds
         self.timer          = self.create_timer(timer_period, self.run)
-        c_csv_pth = "/root/kortex2_ws/src/arm_api2/utils/CS_C.csv"
-        s_csv_pth = "/root/kortex2_ws/src/arm_api2/utils/CS_S.csv"
+        
+        # TODO: Add absolute path to the CSV files
+        c_csv_pth = "/root/arm_ws/src/arm_api2/utils/CS_C.csv"
+        s_csv_pth = "/root/arm_ws/src/arm_api2/utils/CS_S.csv"
 
         self.get_logger().info(f"C trajectory path is: {c_csv_pth}")
         self.get_logger().info(f"S trajectory path is: {s_csv_pth}")
