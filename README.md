@@ -327,9 +327,29 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 | Kinova       | +             | +              | +         | +   | -    | -        |
 | UR           | +             | +              | +         | +   | -    | -        |
 | IIWA         | -             | -              | -         | -   | -    | -        |
+| Piper        | -             | +              | +         | -   | +    | -        |
 
 </details>
 
+
+<summary><h3>moveit status codes</h3></summary>
+
+<details>
+
+MoveIt2! status codes that can be used to debug moveit servo: 
+
+```
+INVALID = -1,
+NO_WARNING = 0,
+DECELERATE_FOR_APPROACHING_SINGULARITY = 1,
+HALT_FOR_SINGULARITY = 2,
+DECELERATE_FOR_COLLISION = 3,
+HALT_FOR_COLLISION = 4,
+JOINT_BOUND = 5,
+DECELERATE_FOR_LEAVING_SINGULARITY = 6
+```
+
+</details>
 
 ## Roadmap
 

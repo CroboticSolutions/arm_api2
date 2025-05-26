@@ -4,7 +4,7 @@ robot:
   robot_desc: robot_description
   move_group_ns: 
   planning_scene: planning_scene
-  planning_frame: world
+  planning_frame: base_link
   num_cart_pts: 20
   joint_states: joint_states_single
 topic:

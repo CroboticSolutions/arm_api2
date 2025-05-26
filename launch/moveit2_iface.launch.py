@@ -143,6 +143,12 @@ def generate_launch_description():
                               description='time step')
     )
 
+    declared_arguments.append(
+        DeclareLaunchArgument(name='use_sim_time', 
+                              default_value='false', 
+                              description='use simulation time')
+    )
+
     return LaunchDescription(declared_arguments + [OpaqueFunction(function=launch_setup)])
 
 
