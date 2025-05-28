@@ -4,7 +4,20 @@
 * [Moveit2](https://moveit.picknik.ai/main/index.html)
 * [ROS 2](https://docs.ros.org/en/humble/index.html)
 
-Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/kinova). 
+Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/kinova).
+
+In order to build it easily, run following comands: 
+```
+git clone git@github.com:CroboticSolutions/docker_files.git
+cd ./docker_files/ros2/humble/arm_api2
+docker build -t arm_api2_img:humble .
+./run_docker.sh 
+```
+
+After running docker, you can enter container with: 
+```
+docker exec -it arm_api2_cont bash
+```
 
 For building ROS 2 packages and moveit, it is neccessary to use [colcon](https://colcon.readthedocs.io/en/released/user/quick-start.html). 
 
@@ -302,9 +315,13 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 - [x] Add contributing
 - [x] Add gripper abstract class 
 - [ ] Add correct inheritance for the gripper abstract class
-- [ ] Create universal launch file
-- [ ] Create standardized joystick class
-- [ ] Test/Test/Test
+- [x] Create universal launch file
+- [x] Create standardized joystick class
+- [x] Test on the real robot
+- [ ] Test on the real UR
+- [ ] Test on the real Franka 
+- [ ] Test on the real Kinova
+- [ ] Test on the real FANUC 
 
 ### TODO [Low priority]: 
 - [x] Test with real robot manipulator [tested on Kinova, basic functionality tested]
@@ -362,7 +379,8 @@ timeline
     10/2024: Integrated with GUI 
     11/2024: Integrated with perception capabilities
     12/2024 : Tested on 5 manipulators
-    .../2025 : TBA
+    5/2025 : Integrated with the AgileX Piper robot arm
+    6/2025: Add vision module
 ```
 
 If you want to contribute, please check **Status** section and check [CONTRIBUTE](./CONTRIBUTE.md).  

@@ -133,11 +133,12 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
     teleop_msg.header.stamp = this->get_clock()->now(); 
     teleop_msg.header.frame_id = "link6"; 
 
-    float C = 0.1; 
+    float C = 0.01; 
     if (enableJoy_){
-        teleop_msg.twist.linear.x = x_dir  * sF * C; 
+        // Currently modified for the PIPER
+        teleop_msg.twist.linear.z = x_dir  * sF * C; 
         teleop_msg.twist.linear.y  = y_dir  * sF * C;
-        teleop_msg.twist.linear.z = z_dir * sF * C;  
+        teleop_msg.twist.linear.x = - z_dir * sF * C;  
         teleop_msg.twist.angular.z 	= yaw  * sF * C; 
         cmdVelPub_->publish(teleop_msg); 
     }
