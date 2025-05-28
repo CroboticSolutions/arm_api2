@@ -45,8 +45,10 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     : Node("moveit2_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_iface_node")), 
      executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()) 
 {   
+    // USE_SIM_TIME HACK TO TEST SERVO!
+    this->set_parameter(rclcpp::Parameter("use_sim_time", false));
     this->get_parameter("config_path", config_path);
-    this->get_parameter("enable_servo", enable_servo); 
+    this->get_parameter("enable_servo", enable_servo);
     this->get_parameter("dt", dt); 
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
@@ -218,7 +220,6 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
     // set move group stuff
     m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME); 
     m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME); 
-
     m_moveGroupPtr->setGoalPositionTolerance(POS_TOL);
     m_moveGroupPtr->startStateMonitor(); 
     // executor

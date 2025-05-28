@@ -40,12 +40,17 @@
  */
 
 #include "arm_api2/arm_joy.hpp"
+#define X_I 4
+#define Y_I 3
+#define YAW_I 6
+#define Z_I 7
 
 JoyCtl::JoyCtl(): Node("joy_ctl")
 {
     init();
 
     setScaleFactor(1); 
+    this->set_parameter(rclcpp::Parameter("use_sim_time", false));
 
     enableJoy_ = true; 
 
@@ -66,24 +71,25 @@ void JoyCtl::init()
 
 void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) 
 {   
-	float x_dir, y_dir, yaw;  
+	float x_dir, y_dir, z_dir, yaw;  
 	std::vector<float> axes_ = msg->axes; 
 	
-    x_dir = axes_.at(3); 
-	y_dir = axes_.at(2); 
-	yaw = axes_.at(4);
+    x_dir = axes_.at(X_I); 
+	y_dir = axes_.at(Y_I); 
+    z_dir = axes_.at(Z_I); 
+	yaw = axes_.at(YAW_I);
 
     // Enabling joystick functionality
     // R2 pressed --> joy on
     int LOG_JOY_STATE_T = 5000; 
-    if (msg->buttons.at(7) == 1)
+    if (msg->buttons.at(5) == 1)
     { 
         RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), clock_, LOG_JOY_STATE_T, "ON");    
         setEnableJoy(true); 
     }
 
     // R2 released --> joy off
-    if (msg->buttons.at(7) == 0)
+    if (msg->buttons.at(5) == 0)
     {
         
         RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), clock_, LOG_JOY_STATE_T, "OFF"); 
@@ -92,7 +98,7 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
 
     enableJoy_ = getEnableJoy(); 
 
-    int sF = getScaleFactor();
+    float sF = getScaleFactor();
     // https://www.quantstart.com/articles/Passing-By-Reference-To-Const-in-C/ 
     if (msg->axes.at(1) == 1){
         
@@ -118,23 +124,28 @@ void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
        auto req_ = std::make_shared<std_srvs::srv::Trigger::Request>();
        jingleBellsClient_->async_send_request(req_); 
     }*/
+    // Test scale fact (ADD C const to prevent large cmd)
     setScaleFactor(sF); 
-
 
 	
     // Create teleop msg
     auto teleop_msg 	    = geometry_msgs::msg::TwistStamped(); 
     teleop_msg.header.stamp = this->get_clock()->now(); 
-    teleop_msg.twist.linear.x	    = x_dir  * sF; 
-    teleop_msg.twist.linear.y 	= y_dir   * sF; 
-    teleop_msg.twist.angular.z 	= yaw    * sF; 
-    
+    teleop_msg.header.frame_id = "link6"; 
+
+    float C = 0.01; 
     if (enableJoy_){
+        // Currently modified for the PIPER
+        teleop_msg.twist.linear.z = x_dir  * sF * C; 
+        teleop_msg.twist.linear.y  = y_dir  * sF * C;
+        teleop_msg.twist.linear.x = - z_dir * sF * C;  
+        teleop_msg.twist.angular.z 	= yaw  * sF * C; 
         cmdVelPub_->publish(teleop_msg); 
     }
     else{
         teleop_msg.twist.linear.x = 0;
         teleop_msg.twist.linear.y = 0;
+        teleop_msg.twist.linear.z = 0; 
         teleop_msg.twist.angular.z = 0;
 	cmdVelPub_->publish(teleop_msg); 
     }
