@@ -77,6 +77,60 @@ The robot state can be changed via a ROS2 service.
 - srv: `/arm_api2_msgs/srv/ChangeState.srv`
 - values `JOINT_TRAJ_CTL || CART_TRAJ_CTL || SERVO_CTL`
 
+Example service call:
+
+```bash
+ros2 service call /arm/change_state arm_api2_msgs/srv/ChangeState "{state: JOINT_TRAJ_CTL}"
+```
+
+Currently implemented and available robot states are:
+
+- `JOINT_TRAJ_CTL`, which is used for joint control
+- `CART_TRAJ_CTL`, which is used for cartesian control
+- `SERVO_CTL`, which is used for the end effector servoing
+  
+**Set max velocity and acceleration scaling factor**:
+
+Set velocity and acceleration scaling factors via service call:
+
+- name: `arm/set_vel_acc`
+- srv: `/arm_api2_msgs/srv/SetVelAcc.srv`
+- values `max_vel` and `max_acc` (both float64)
+
+Example service call:
+
+```bash
+ros2 service call /arm/set_vel_acc arm_api2_msgs/srv/SetVelAcc "{max_vel: 0.5, max_acc: 0.5}"
+```
+
+**Set end effector link**:
+
+Set end effector link via service call:
+
+- name: `arm/set_eelink`
+- srv: `/arm_api2_msgs/srv/SetStringParam.srv`
+- values `value` (string)
+
+Example service call:
+
+```bash
+ros2 service call /arm/set_eelink arm_api2_msgs/srv/SetStringParam "{value: 'tcp'}"
+```
+
+**Set planonly mode**:
+
+Planonly mode is used to plan a trajectory without executing it.
+Set planonly mode via service call:
+- name: `arm/set_planonly`
+- srv: `/std_srvs/srv/SetBool.srv`
+- values `value` (bool)
+
+Example service call:
+
+```bash
+ros2 service call /arm/set_planonly std_srvs/srv/SetBool "{data: true}"
+```
+
 **Command robot pose**:
 
 A robot pose where the robot should move to can be commanded via ROS2 action.
@@ -101,19 +155,6 @@ The current endeffector pose is published as topic.
 - topic: `arm/state/current_pose`
 - msg: `geometry_msgs/msg/PoseStamped.msg`
 
-#### Robot states
-
-Currently implemented and available robot states are:
-
-- `JOINT_TRAJ_CTL`, which is used for joint control
-- `CART_TRAJ_CTL`, which is used for cartesian control
-- `SERVO_CTL`, which is used for the end effector servoing
-
-Change robot state by calling:
-
-```bash
-ros2 service call arm/change_state arm_api2_msgs/srv/ChangeState "{state: JOINT_TRAJ_CTL}"
-```
 
 <details>
 <summary><h3>How to build package?</h3></summary>
