@@ -1,6 +1,6 @@
 # Changes added by KIT (Edgar Welte)
 
-# Sep 2024
+## Sep 2024
 
 - add frame_id to published current pose
 - add service to set max_vel and max_acc scaling factor
@@ -8,15 +8,15 @@
 - add example script to send pose to action server
 - add LIN, EST and PRM Planner for pose action
 
-# Oct 2024
+## Oct 2024
 
 - add keyboard control node to control the robot via keyboard in servo mode
 
-# Nov 2024
+## Nov 2024
 - integrate xbox joy ctl
 
 
-# Jan 2025
+## Jan 2025
 
 - refactor code for planning
 - add gripper functionality incl. action client for robotiq_2f
@@ -24,6 +24,12 @@
 - add servo watchdog node to monitor twist/jog commands and publish zero velocity if inactive
 - add cumotion as planner
 
-# Feb 2025
+## Feb 2025
 - set proper planner priority: 1. cumotion, if failed then PRM, EST, LIN (each 3 times)
 - add planonly mode
+
+# Future potential features
+
+- realtime pose follower (teleoperation: servo via absolute position)
+- constraints for planners (e.g. orientation constraint for cup transport)
+- dynamic scene object update
