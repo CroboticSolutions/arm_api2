@@ -2,6 +2,7 @@
 
 :mechanical_arm: API for robotic manipulators based on:
 
+<<<<<<< HEAD
 Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/kinova).
 
 Run arm_api2 easily: 
@@ -12,6 +13,14 @@ cd ./docker_files/ros2/humble/arm_api2
 kinova_sim (start kinova in simulation)
 ```
 
+=======
+<<<<<<< HEAD
+- [Moveit2](https://moveit.picknik.ai/main/index.html)
+- [ROS 2](https://docs.ros.org/en/humble/index.html)
+=======
+Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/kinova).
+
+>>>>>>> 49b5e41 (Mergeing new arm_joy)
 In order to build it easily, run following comands: 
 ```
 git clone git@github.com:CroboticSolutions/docker_files.git
@@ -24,6 +33,10 @@ After running docker, you can enter container with:
 ```
 docker exec -it arm_api2_cont bash
 ```
+<<<<<<< HEAD
+=======
+>>>>>>> ec0471d (Added joy modified for the position control of the AgileX Piper)
+>>>>>>> 49b5e41 (Mergeing new arm_joy)
 
 Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/kinova).
 
@@ -463,18 +476,34 @@ DECELERATE_FOR_LEAVING_SINGULARITY = 6
 ```mermaid
 timeline
 <<<<<<< HEAD
+<<<<<<< HEAD
     6/2025 : Merge latest developments
     6/2025 : Decouple joy for different joys
     6/2025 : Test with cumotion
     9/2025 : Integrated with GUI
     10/2025 : Tested on 5 manipulators
 =======
+=======
+>>>>>>> 49b5e41 (Mergeing new arm_joy)
     6/2025: Test and merge recent developments
     6/2025: Include cumotion for simple
     6/2025: Enable joy for multiple joysticks 
     7/2025: Test on few robot manipulators  
     9/2025: 
+<<<<<<< HEAD
 >>>>>>> 11f48ae (Mergeing KIT changes on devel branch)
+=======
+=======
+    4/2024 : Start of the development
+    6/2024 : Open-sourced version
+    9/2024 : Tested on one manipulator
+    10/2024: Integrated with GUI 
+    11/2024: Integrated with perception capabilities
+    12/2024 : Tested on 5 manipulators
+    5/2025 : Integrated with the AgileX Piper robot arm
+    6/2025: Add vision module
+>>>>>>> ec0471d (Added joy modified for the position control of the AgileX Piper)
+>>>>>>> 49b5e41 (Mergeing new arm_joy)
 ```
 
 If you want to contribute, please check **Status** section and check [CONTRIBUTE](./CONTRIBUTE.md).
