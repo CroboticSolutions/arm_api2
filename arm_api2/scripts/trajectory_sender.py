@@ -10,6 +10,7 @@ from ament_index_python.packages import get_package_share_directory
 from arm_api2_msgs.action import MoveCartesianPath
 from geometry_msgs.msg import PoseStamped
 from rclpy.action import ActionClient
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from scipy.spatial.transform import Rotation as R
 
@@ -23,28 +24,19 @@ class CreateAndPublishTrajectory(Node):
         self.curr_p_sub = self.create_subscription(
             PoseStamped, "/arm/state/current_pose", self.curr_p_cb, 1
         )
-
-<<<<<<< HEAD
-        # Create publishers
-        self.traj_pub       = self.create_publisher(CartesianWaypoints, '/arm/cmd/traj', 1)
-        
         # Create timer
         timer_period        = 1.0  # seconds
         self.timer          = self.create_timer(timer_period, self.run)
         
-        # TODO: Add absolute path to the CSV files
-        c_csv_pth = "/root/arm_ws/src/arm_api2/utils/CS_C.csv"
-        s_csv_pth = "/root/arm_ws/src/arm_api2/utils/CS_S.csv"
-=======
+
         # Create action client
         self._action_client = ActionClient(
             self, MoveCartesianPath, "arm/move_to_pose_path"
         )
 
-        # Path to predefined trajectories
         c_csv_pth = get_package_share_directory('arm_api2') + "/utils/CS_C_easy.csv"
         s_csv_pth = get_package_share_directory('arm_api2') + "/utils/CS_S_easy.csv"
->>>>>>> f056cf5 (add example script to send cartesian path to action server)
+
 
         self.get_logger().info(f"C trajectory path is: {c_csv_pth}")
         self.get_logger().info(f"S trajectory path is: {s_csv_pth}")
@@ -166,7 +158,9 @@ class CreateAndPublishTrajectory(Node):
             while self.send_traj_flag.is_set() or not self.receive_pose_flag.is_set():
                 pass
 
-            user_input = input("Enter 's' for S trajectory, 'c' for C trajectory, enter 'q' to quit: ")
+            user_input = input(
+                "Enter 's' for S trajectory, 'c' for C trajectory, enter 'q' to quit: "
+            )
 
             if user_input.lower() == "s":
                 self.get_logger().info("Starting S trajectory...")
@@ -189,9 +183,15 @@ class CreateAndPublishTrajectory(Node):
 def main(args=None):
     rclpy.init(args=args)
     CPT = CreateAndPublishTrajectory()
-    rclpy.spin(CPT)
-    CPT.destroy_node()
-    rclpy.shutdown()
+
+    executor = MultiThreadedExecutor()
+    executor.add_node(CPT)
+
+    try:
+        executor.spin()
+
+    finally:
+        CPT.destroy_node()
 
 
 if __name__ == "__main__":
