@@ -20,7 +20,18 @@ kinova_sim (start kinova in simulation)
 =======
 Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/kinova).
 
+<<<<<<< HEAD
 >>>>>>> 49b5e41 (Mergeing new arm_joy)
+=======
+Run arm_api2 easily: 
+```
+git clone git@github.com:CroboticsSolutions/docker_files.git 
+cd ./docker_files/ros2/humble/arm_api2
+./pull_and_run_docker.sh
+kinova_sim (start kinova in simulation)
+```
+
+>>>>>>> 0545dfc (Easy build and run instructions)
 In order to build it easily, run following comands: 
 ```
 git clone git@github.com:CroboticSolutions/docker_files.git
