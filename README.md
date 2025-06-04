@@ -462,11 +462,19 @@ DECELERATE_FOR_LEAVING_SINGULARITY = 6
 
 ```mermaid
 timeline
+<<<<<<< HEAD
     6/2025 : Merge latest developments
     6/2025 : Decouple joy for different joys
     6/2025 : Test with cumotion
     9/2025 : Integrated with GUI
     10/2025 : Tested on 5 manipulators
+=======
+    6/2025: Test and merge recent developments
+    6/2025: Include cumotion for simple
+    6/2025: Enable joy for multiple joysticks 
+    7/2025: Test on few robot manipulators  
+    9/2025: 
+>>>>>>> 11f48ae (Mergeing KIT changes on devel branch)
 ```
 
 If you want to contribute, please check **Status** section and check [CONTRIBUTE](./CONTRIBUTE.md).

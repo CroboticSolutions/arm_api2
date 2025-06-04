@@ -35,7 +35,7 @@
  *      Project     : arm_api2
  *      Created     : 05/10/2024
  *      Author      : Filip Zoric
- *
+ *      Contributors: Edgar Welte
  *      Description : The core robot manipulator and MoveIt2! ROS 2 interfacing header class.
  */
 
