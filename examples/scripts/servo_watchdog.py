@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 
 import threading
-from typing import List
 import rclpy
 from rclpy.node import Node
+from rclpy.time import Time
+from rclpy.qos import QoSProfile
+
+from typing import List
 from geometry_msgs.msg import TwistStamped
 from control_msgs.msg import JointJog
 from std_msgs.msg import String
-from rclpy.time import Time
+
 from controller_manager_msgs.srv import SwitchController
-from rclpy.qos import QoSProfile
+
 
 from arm_api2_msgs.srv import ChangeState
 
