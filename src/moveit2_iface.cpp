@@ -70,6 +70,8 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
     JOINT_STATES        = config["robot"]["joint_states"].as<std::string>();
     WITH_PLANNER        = config["robot"]["with_planner"].as<bool>();
+    INIT_VEL_SCALING    = 0.05; 
+    INIT_ACC_SCALING    = 0.05; 
     max_vel_scaling_factor = config["robot"]["max_vel_scaling_factor"].as<float>();
     max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
     
@@ -173,10 +175,6 @@ std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()
     RCLCPP_INFO_STREAM(this->get_logger(), "ee_frame_name: " << servoParams->ee_frame_name);  
     servoParams->get("moveit_servo", nodeParameters);
 
-
-    //auto servoParamsPtr = std::make_shared<moveit_servo::ServoParameters>(std::move(servoParams));
-    //auto servo_parameters = moveit_servo::ServoParameters::makeServoParameters(node_); 
-    // Servo parameters need to bee constSharedPtr
     auto servo = std::make_unique<moveit_servo::Servo>(node_, servoParams, m_pSceneMonitorPtr); 
     RCLCPP_INFO(this->get_logger(), "Servo initialized!"); 
     return servo;
@@ -375,8 +373,8 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
     m_moveGroupPtr->startStateMonitor(); 
 
     // velocity scaling
-    m_moveGroupPtr->setMaxVelocityScalingFactor(0.05);
-    m_moveGroupPtr->setMaxAccelerationScalingFactor(0.05);
+    m_moveGroupPtr->setMaxVelocityScalingFactor(INIT_VEL_SCALING);
+    m_moveGroupPtr->setMaxAccelerationScalingFactor(INIT_ACC_SCALING);
     // executor
     executor_->add_node(node_); 
     executor_thread_ = std::thread([this]() {executor_->spin();});
@@ -606,32 +604,19 @@ void m2Iface::addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory &traje
 
 bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Plan &plan){
     // Planning priority:
-    // 1. cuMotion planner from cuMotion (if have)
-    // 2. LIN planner from pilz_industrial_motion_planner
-    // 3. EST planner from ompl
-    // 4. PRM planner from ompl
-    // for EST and PRM create three plans and choose the best one
+    // 1. LIN planner from pilz_industrial_motion_planner
+    // 2. EST planner from ompl
+    // 3. PRM planner from ompl
+    // for EST and PRM create three plans and choose the best one 
     //-----------------------------------------------------------------------------------------------
-    m_moveGroupPtr->setPlanningPipelineId("isaac_ros_cumotion");
-    m_moveGroupPtr->setPlannerId("cuMotion");
-    std::list<moveit::planning_interface::MoveGroupInterface::Plan> all_plans;
-    moveit::planning_interface::MoveGroupInterface::Plan cuMotion_plan;
-
-    // TODO: if EE_LINK_NAME != tcp then move_group.setEndEffectorLink(tcp) need to be called before planning 
-    // with cuMotion and the target pose needs to be transformed to tcp frame and sets again
-
-    bool cuMotion_success = (m_moveGroupPtr->plan(cuMotion_plan) == moveit::core::MoveItErrorCode::SUCCESS);
-    if (cuMotion_success) {
-        plan = cuMotion_plan;
-        RCLCPP_INFO(this->get_logger(), "cuMotion planner succeeded. Immediate return.");
-        return true;
-    }
-
+    // TODO: Add cuMotion planner to the list of planners
+  
     std::vector<std::pair<std::string, std::string>> planners = {
         {"pilz_industrial_motion_planner", "LIN"},
         {"ompl", "EST"},
         {"ompl", "PRM"}
     };
+    std::vector<moveit::planning_interface::MoveGroupInterface::Plan> all_plans; 
 
     bool success = false;
     int tries_per_planner = 3;
@@ -755,6 +740,7 @@ bool m2Iface::run()
     }
 
     if(recivGripperCmd){
+    
         auto goal = m_gripperControlGoalHandle_->get_goal();
         float position = goal->command.position;
         float effort = goal->command.max_effort;
@@ -763,6 +749,7 @@ bool m2Iface::run()
         bool success = gripper.send_gripper_command(position, effort);
 
         if(success){
+            // TODO: Wrap this in methods
             RCLCPP_INFO_STREAM(this->get_logger(), "Gripper command succeeded!");
             result->position = gripper.get_position();
             result->effort = gripper.get_effort();

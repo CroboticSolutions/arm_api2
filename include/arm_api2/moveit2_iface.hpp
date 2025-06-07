@@ -132,8 +132,9 @@ class m2Iface: public rclcpp::Node
         std::string MOVE_GROUP_NS; 
         std::string JOINT_STATES;
         bool WITH_PLANNER; 
-        int NUM_CART_PTS; 
         bool ENABLE_SERVO; 
+        float INIT_VEL_SCALING; 
+        float INIT_ACC_SCALING; 
 
         /* timers */
         rclcpp::TimerBase::SharedPtr                                        timer_;

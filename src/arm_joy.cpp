@@ -33,33 +33,29 @@
 
 /*      Title       : arm_joy.cpp
  *      Project     : arm_api2
- *      Created     : 14/11/2024
- *      Author      : Guanqi Chen
- *      Contributors: Filip Zoric, Edgar Welte
+ *      Created     : 05/10/2024
+ *      Author      : Filip Zoric
  *
- *      Description : Joystick control code for Servoing
+ *      Description : Joystick control code.
  */
 
 #include "arm_api2/arm_joy.hpp"
+#define X_I 4
+#define Y_I 3
+#define YAW_I 6
+#define Z_I 7
 
-// Some constants used in the Servo Teleop demo
-const std::string TWIST_TOPIC = "/moveit2_iface_node/delta_twist_cmds";
-const std::string JOINT_TOPIC = "/moveit2_iface_node/delta_joint_cmds";
-const std::string JOINT_STATE_TOPIC = "/joint_states";
-const std::string GRIPPER_SERVICE = "robotiq_2f_urcap_adapter/gripper_command";
-const size_t ROS_QUEUE_SIZE = 10;
-const std::string EEF_FRAME_ID = "tcp";
-const std::string BASE_FRAME_ID = "base_link";
+// TODO: Add config file to modify this values based on the joystick/robot used
+// TODO: Enable joint space and task space control 
 
 JoyCtl::JoyCtl(): Node("joy_ctl")
 {
     init();
 
-    frame_to_publish_ = EEF_FRAME_ID;
+    setScaleFactor(1); 
+    this->set_parameter(rclcpp::Parameter("use_sim_time", false));
 
-    setScaleFactor(0.5); 
-
-    enableJoy_ = false; 
+    enableJoy_ = true; 
 
 
 }
@@ -68,221 +64,105 @@ void JoyCtl::init()
 {
 
     // publishers
-    cmdVelPub_ 		    = this->create_publisher<geometry_msgs::msg::TwistStamped>(TWIST_TOPIC, ROS_QUEUE_SIZE); 
-    joint_pub_ 		    = this->create_publisher<control_msgs::msg::JointJog>(JOINT_TOPIC, ROS_QUEUE_SIZE);
-    // subscribers
-    joySub_ 		    = this->create_subscription<sensor_msgs::msg::Joy>("/joy", ROS_QUEUE_SIZE, std::bind(&JoyCtl::joy_callback, this, _1)); 
-    joint_state_sub_    = this->create_subscription<sensor_msgs::msg::JointState>(
-        JOINT_STATE_TOPIC, ROS_QUEUE_SIZE,
-        [this](const sensor_msgs::msg::JointState::SharedPtr msg) {
-            (void)msg;
-            joint_states_received_ = true;
-            // save joint names
-            joint_names_ = msg->name;
-        });
-    // client
-    gripper_client_ = rclcpp_action::create_client<control_msgs::action::GripperCommand>(this,GRIPPER_SERVICE);
-    RCLCPP_INFO(this->get_logger(), "Initialized joy_ctl with gripper control");
-    for (size_t i = 0; i < joint_names_.size(); ++i)
-    {
-    RCLCPP_INFO(this->get_logger(), "Joint %d: %s", int(i + 1), joint_names_[i].c_str());
-    }
+    cmdVelPub_ 		    = this->create_publisher<geometry_msgs::msg::TwistStamped>("/moveit2_iface_node/delta_twist_cmds", 1); 
 
-    puts("Reading from Joystick");
-    puts("---------------------------");
-    puts("Hold 'LT' button to turn on/off the joystick control.");
-    puts("Use 'LB' and 'RB' buttons to swticth between end effector frame and base frame - Default is end effector frame.");
-    puts("Use 'A' or 'B' buttons to switch between joint space or task space control - Default is task space control.");
-    puts("Use back and start buttons to accelerate and decelerate the motion.");
-    puts("Use 'X' to close the gripper, 'Y' to open the gripper.");
-    puts("------------For task space control:-------------");
-    puts("  ");
-    puts("Use 'right stick - left/right' for x-direction movement.");
-    puts("Use 'right stick - up/down' for y-direction movement.");
-    puts("Use 'left stick - up/down' for z-direction movement.");
-    puts("Cross axes left|right for x rotation.");
-    puts("Cross axes up|down for y rotation.");
-    puts("Use 'left stick - left/right' for z rotation.");
-    puts("  ");
-    puts("------------For joint space control:------------");
-    puts("  ");
-    puts("Use 'left stick - left/right' for joint1.");
-    puts("Use 'left stick - up/down' for joint2.");
-    puts("Use 'cross - left/right' for joint3.");
-    puts("Use 'cross - up/down' for joint4.");
-    puts("Use 'right stick - left/right' for joint5.");
-    puts("Use 'right stick - up/down' for joint6.");
-    puts("  ");
- 
+    // subscribers
+    joySub_ 		    = this->create_subscription<sensor_msgs::msg::Joy>("/joy", 10, std::bind(&JoyCtl::joy_callback, this, _1)); 
+
+    RCLCPP_INFO(this->get_logger(), "Initialized joy_ctl"); 
 }
 
 void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) 
 {   
-	float x_dir, y_dir, z_dir, yaw, pitch, roll;
-
-    auto teleop_msg 	    = geometry_msgs::msg::TwistStamped();
-    auto joint_msg          = control_msgs::msg::JointJog();
+	float x_dir, y_dir, z_dir, yaw;  
+	std::vector<float> axes_ = msg->axes; 
+	
+    x_dir = axes_.at(X_I); 
+	y_dir = axes_.at(Y_I); 
+    z_dir = axes_.at(Z_I); 
+	yaw = axes_.at(YAW_I);
 
     // Enabling joystick functionality
-    // xbox button pressed --> on/off switch
+    // R2 pressed --> joy on
     int LOG_JOY_STATE_T = 5000; 
-    if (msg->axes.at(2) == -1)
+    if (msg->buttons.at(5) == 1)
     { 
-        RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), clock_, LOG_JOY_STATE_T, "ON"); 
-        setEnableJoy(true);
-    }
-    else if (msg->axes.at(2) == 1)
-    {
-        RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), clock_, LOG_JOY_STATE_T, "OFF"); 
-        setEnableJoy(false);
+        RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), clock_, LOG_JOY_STATE_T, "ON");    
+        setEnableJoy(true); 
     }
 
-    enableJoy_ = getEnableJoy();
+    // R2 released --> joy off
+    if (msg->buttons.at(5) == 0)
+    {
+        
+        RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), clock_, LOG_JOY_STATE_T, "OFF"); 
+        setEnableJoy(false); 
+    }
+
+    enableJoy_ = getEnableJoy(); 
 
     float sF = getScaleFactor();
-
-    // Velocity control
-    if (msg->buttons.at(7) == 1){
+    // https://www.quantstart.com/articles/Passing-By-Reference-To-Const-in-C/ 
+    if (msg->axes.at(1) == 1){
         
-        if (sF > 0 && sF < 10)
+        if (sF > 0 && sF < 100)
         {
-          sF += 0.1; 
+          sF += 1; 
           RCLCPP_INFO_STREAM(this->get_logger(), "Increasing scale factor: " << sF); 
         }
-        else{sF = 0.5;}
-    } // button right select
-    if (msg->buttons.at(6) == 1){
-       if (sF > 0 && sF < 10) 
+        else{sF = 1;}
+    }
+    
+    if (msg->axes.at(1) == -1){
+       if (sF > 0 && sF < 100) 
        {
-        sF -= 0.1; 
+        sF -= 1; 
         RCLCPP_INFO_STREAM(this->get_logger(), "Decreasing scale factor: " << sF); 
        }
-       else{sF = 0.5;}
-    } // button left select
-
-    // Frame selection
-    if(msg->buttons.at(4)==1)
-    {
-        frame_to_publish_ = EEF_FRAME_ID;
-        RCLCPP_INFO(this->get_logger(), "End Effector Frame Selected");
-    }
-    if(msg->buttons.at(5)==1)
-    {
-        frame_to_publish_ = BASE_FRAME_ID;
-        RCLCPP_INFO(this->get_logger(), "Base Frame Selected");
-    }
-    
-    // -----------Task Space------------
-    if (msg->buttons.at(0) == 1)
-    {
-        task_space_ = true;
-        joint_space_ = false;
-        RCLCPP_INFO(this->get_logger(), "Task Space Control");
-    }
-    if(msg->buttons.at(1) == 1){
-        joint_space_ = true;
-        task_space_ = false;
-        RCLCPP_INFO(this->get_logger(), "Joint Space Control");
+       else{sF = 1;}
     }
 
-
-    // Motion control
-    if (task_space_)
-    {
-        x_dir = msg->axes.at(3); // right joystick left/right
-        y_dir = msg->axes.at(4); // right joystick up/down
-        z_dir = msg->axes.at(1); // left joystick up/down
-        yaw = msg->axes.at(0); // left joystick left/right, z rotation
-        roll = msg->axes.at(6); // cross left/right, x rotation
-        pitch = msg->axes.at(7); // cross up/down, y rotation
-
-        joint_msg.joint_names.clear();
-        joint_msg.velocities.push_back(0.0);
-    }else if(joint_space_)
-    {
-        x_dir = 0;
-        y_dir = 0;
-        z_dir = 0;
-        yaw = 0;
-        roll = 0;
-        pitch = 0;
-
-        joint1_vel_cmd_ = msg->axes.at(0); // left joystick left/right
-        joint2_vel_cmd_ = msg->axes.at(1); // left joystick up/down
-        joint3_vel_cmd_ = msg->axes.at(6); // cross left/right
-        joint4_vel_cmd_ = msg->axes.at(7); // cross up/down
-        joint5_vel_cmd_ = msg->axes.at(3); // right joystick left/right
-        joint6_vel_cmd_ = msg->axes.at(4); // right joystick up/down
-
-        for(auto i=0u;i<joint_names_.size();i++)
-        {
-            joint_msg.joint_names.push_back(joint_names_[i]);
-            joint_msg.velocities.push_back(
-                (i == 0) ? joint2_vel_cmd_ * sF  :
-                (i == 1) ? joint3_vel_cmd_ * sF  :
-                (i == 2) ? joint4_vel_cmd_ * sF  :
-                (i == 3) ? joint5_vel_cmd_ * sF  :
-                (i == 4) ? joint6_vel_cmd_ * sF  :
-                (i == 5) ? joint1_vel_cmd_ * sF : 0.0  // default to 0 if index out of range
-            );
-        }
-
-    }
-
-    // Gripper control
-    if (msg->buttons.at(2) == 1)
-    {
-        send_gripper_command(0.8); // close gripper
-    }
-    if (msg->buttons.at(3) == 1)
-    {
-        send_gripper_command(0.0); // open gripper
-    }
-
+    /*if (msg->buttons.at(4) == 1) {
+       RCLCPP_INFO_STREAM(this->get_logger(), "Calling jingle bells!"); 
+       auto req_ = std::make_shared<std_srvs::srv::Trigger::Request>();
+       jingleBellsClient_->async_send_request(req_); 
+    }*/
+    // Test scale fact (ADD C const to prevent large cmd)
     setScaleFactor(sF); 
 
-    // Modify the message
-    teleop_msg.header.stamp = this->get_clock()->now();
-    teleop_msg.header.frame_id = frame_to_publish_; 
-    teleop_msg.twist.linear.x	= x_dir  * sF; 
-    teleop_msg.twist.linear.y 	= y_dir   * sF;
-    teleop_msg.twist.linear.z 	= z_dir   * sF; 
-    teleop_msg.twist.angular.z  = yaw    * sF;
-    teleop_msg.twist.angular.y  = pitch * sF;
-    teleop_msg.twist.angular.x  = roll  * sF; 
-    
+	
+    // Create teleop msg
+    auto teleop_msg 	    = geometry_msgs::msg::TwistStamped(); 
+    teleop_msg.header.stamp = this->get_clock()->now(); 
+    teleop_msg.header.frame_id = "link6"; 
+
+    float C = 0.01; 
     if (enableJoy_){
-        if (joint_space_){
-            joint_pub_->publish(joint_msg);
-        }
-        else{
-            cmdVelPub_->publish(teleop_msg);
-        }
+        // Currently modified for the PIPER
+        teleop_msg.twist.linear.z = x_dir  * sF * C; 
+        teleop_msg.twist.linear.y  = y_dir  * sF * C;
+        teleop_msg.twist.linear.x = - z_dir * sF * C;  
+        teleop_msg.twist.angular.z 	= yaw  * sF * C; 
+        cmdVelPub_->publish(teleop_msg); 
     }
     else{
         teleop_msg.twist.linear.x = 0;
         teleop_msg.twist.linear.y = 0;
-        teleop_msg.twist.linear.z = 0;
+        teleop_msg.twist.linear.z = 0; 
         teleop_msg.twist.angular.z = 0;
-        teleop_msg.twist.angular.y = 0;
-        teleop_msg.twist.angular.x = 0;
-	    cmdVelPub_->publish(teleop_msg);
-
-        joint_msg.joint_names.clear();
-        joint_msg.velocities.push_back(0.0);
-        joint_pub_->publish(joint_msg); 
+	cmdVelPub_->publish(teleop_msg); 
     }
 
 
 }
 
 // Methods that set scale factor 
-void JoyCtl::setScaleFactor(float value)
+void JoyCtl::setScaleFactor(int value)
 {
     scale_factor = value; 
 }
 
-float JoyCtl::getScaleFactor() const
+int JoyCtl::getScaleFactor() const
 {
     return scale_factor; 
 }
@@ -295,18 +175,4 @@ void JoyCtl::setEnableJoy(bool val)
 bool JoyCtl::getEnableJoy() const
 {
     return enableJoy_; 
-}
-
-void JoyCtl::send_gripper_command(double position)
-{
-    if (!gripper_client_->wait_for_action_server(std::chrono::seconds(5))) {
-        RCLCPP_ERROR(this->get_logger(), "Gripper action server not available!");
-        return;
-    }
-    auto goal = control_msgs::action::GripperCommand::Goal();
-    goal.command.position = position;
-    goal.command.max_effort = 140.0;
-    
-    auto result = gripper_client_->async_send_goal(goal);
-    RCLCPP_INFO(this->get_logger(), "Sending gripper command");
 }
