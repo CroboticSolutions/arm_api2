@@ -1,16 +1,28 @@
 # arm_api2
 
-:mechanical_arm: API for robotic manipulators based on:
+:mechanical_arm: API for robotic manipulators based on ROS 2 and MoveIt2! 
 
 Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/kinova).
 
-Run arm_api2 easily: 
+### Use prebuilt docker 
+
+Pull and run docker container `arm_api2_cont`: 
 ```
 git clone git@github.com:CroboticsSolutions/docker_files.git 
 cd ./docker_files/ros2/humble/arm_api2
 ./pull_and_run_docker.sh
-kinova_sim (start kinova in simulation)
+<robot>_sim (start robot in simulation)
 ```
+Run move_group for that robot (check [kinova]{#how_to_use_kinova} or [UR]{#how_to_use_UR}. 
+And after that run: 
+```
+ros2 launch arm_api2 moveit_simple_iface.launch.py robot_name:=<robot_name>
+```
+Currently supported robot names are: `ur`, `kinova`, `franka`, `piper`. 
+
+Full instructions how to use interfaces can be found [here]{#how_to_use_api}
+
+### Build your own docker 
 
 In order to build it easily, run following comands: 
 ```
@@ -33,7 +45,7 @@ For building ROS 2 packages and moveit, it is neccessary to use [colcon](https:/
 
 ### Depends on:
 
-- [arm_api2_msgs](https://github.com/edgarwelteKIT/arm_api2_msgs)
+- [arm_api2_msgs](https://github.com/CroboticSolutions/arm_api2_msgs)
 
 Aditional dependencies are (depending on the arm you use):
 
@@ -42,32 +54,7 @@ Aditional dependencies are (depending on the arm you use):
 - [ur](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver)
 - [ur_sim](https://github.com/CroboticSolutions/Universal_Robots_ROS2_GZ_Simulation)
 
-### Aim of the repository
-
-With `arm_api` as precursor, which was intended to provide simple ROS interfacing with
-robot manipulators with the help of MoveIt! and ROS.
-
-This repository `arm_api2` is intended to provide interfacing support for robot manipulators for ROS 2 and MoveIt2!.
-
-### Goals
-
-Create API simple to **run** and **maintain** that supports working with different
-robot manipulators out of the box.
-
-Robot manipulators of interest are:
-
-- Franka Emikarobotic
-- UR
-- Kinova
-- Kuka
-
-Current features:
-- go_to_pose
-- go_to_configuration
-- follow_pose_trajectory
-
-
-### ROS 2 robot interface:
+### How to use arm_api2?
 
 **Change robot state**:
 
@@ -131,11 +118,54 @@ Example service call:
 ros2 service call /arm/set_planonly std_srvs/srv/SetBool "{data: true}"
 ```
 
+### Simple interface (topic)
+
+Run minimal simple interface with: 
+```
+ros2 launch arm_api2 moveit2_simple_iface.launch.py robot_name=<robot>
+```
+
+Simple interface contains topics to command robot pose, path and 
+retrieve arm information. 
+Topic names are defined in the `config/<robot_name>_sim` file. 
+
+
+**Command robot pose**: 
+- name: `arm/cmd/pose`
+- msg: `geometry_msgs/msg/PoseStamped.msg`
+
+```
+ros2 topic pub /arm/cmd/pose geometry_msgs/msg/PoseStamped <wanted_pose>
+```
+
+**Command cartesian path**:   
+- name: `arm/cmd/traj`
+- msg: `arm_api2_msgs/msg/CartesianWaypoints.msg`
+
+**Get current end effector pose**: 
+- name `arm/current/pose`
+- msg: `geometry_msgs/msg/PoseStamped.msg`
+
+```
+ros2 topic echo /arm/current/pose
+```
+
+### Advanced interface (action)
+
+Run advanced interface with: 
+```
+ros2 launch arm_api2 moveit2_iface.launch.py robot_name=<robot>
+```
+
 **Command robot pose**:
 
 A robot pose where the robot should move to can be commanded via ROS2 action.
 - name: `arm/move_to_pose`
 - action: `arm_api2_msgs/action/MoveCartesian.action`
+
+```
+ros2 action send_goal /arm/move_to_pose arm_api_msgs/action/MoveCartesian <wanted_pose>
+```
 
 **Command cartesian path**:
 
@@ -153,9 +183,6 @@ A robot joint position where the robot should move to can be commanded via ROS2 
 <summary><h3>How to build package?</h3></summary>
 
 ### Build
-
-Build in ROS 2 workspace.
-Build just one package with:
 
 Build in ROS 2 workspace.
 Build just one package with:
@@ -221,7 +248,7 @@ Start ur sim with:
 ur_sim
 ```
 
-Start iface by changing `robot_name` argument to `kinova`, `ur` or `franka`. Depending which arm you want to use, when running:
+Start iface by changing `robot_name` argument to `kinova`, `ur`, `franka`, `piper`. Depending which arm you want to use, when running:
 
 ```bash
 ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=<robot_name>
@@ -245,7 +272,16 @@ located in `utils/tmux_configs`. Navigate between
 panes with `Ctrl+B`+(arrows).
 
 <details>
-<summary><h3>How to use Kinova?</summary>
+<summary><h3>How to use Kinova?</summary> {#how_to_use_kinova}
+
+First clone and build kinova repository in your workspace with: 
+```
+cd <ros2_ws>/src
+git clone https://github.com/CroboticSolutions/ros2_kortex
+cd <ros2_ws> 
+colcon build --packages-select ros2_kortex
+source <ros2_ws>/install/setup.bash
+```
 
 You can run kinova in simulation by executing following commands:
 
@@ -282,7 +318,7 @@ How to setup real kinova [here](https://git.initrobots.ca/amercader/kinova-korte
 <details>
 <summary><h3>How to use UR?</summary>
 
-### How to use?
+### How to use? {#how_to_use_ur}
 
 You can run UR in simulation by executing following commands:
 
@@ -403,7 +439,7 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 - [x] Create universal launch file
 - [x] Create standardized joystick class
 - [x] Test on the real robot
-- [ ] Test on the real UR
+- [x] Test on the real UR
 - [ ] Test on the real Franka 
 - [ ] Test on the real Kinova
 - [ ] Test on the real FANUC 
@@ -414,7 +450,7 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 - [x] Add basic documentation
 - [x] Add roadmap
 - [ ] Discuss potential SW patterns that can be used
-- [ ] Add full cartesian following
+- [x] Add full cartesian following
 - [ ] Add roll, pitch, yaw and quaternion conversion
 - [x] Decouple moveit2_iface.cpp and utils.cpp (contains all utils scripts)
 - [x] Create table of supported robot manipulators
@@ -428,7 +464,7 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 | :----------: | ------------- | -------------- | --------- | --- | ---- | -------- |
 | Franka Emika | +             | +              | +         | +   | -    | -        |
 | Kinova       | +             | +              | +         | +   | -    | -        |
-| UR           | +             | +              | +         | +   | -    | -        |
+| UR           | +             | +              | +         | +   | +    | -        |
 | IIWA         | -             | -              | -         | -   | -    | -        |
 | Piper        | -             | +              | +         | -   | +    | -        |
 
