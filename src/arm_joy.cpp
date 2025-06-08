@@ -45,6 +45,9 @@
 #define YAW_I 6
 #define Z_I 7
 
+// TODO: Add config file to modify this values based on the joystick/robot used
+// TODO: Enable joint space and task space control 
+
 JoyCtl::JoyCtl(): Node("joy_ctl")
 {
     init();

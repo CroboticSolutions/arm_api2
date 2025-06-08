@@ -40,17 +40,37 @@ ament_target_dependencies(
   moveit2_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs
 )
 
+# Install moveit2_iface
+install(TARGETS 
+  moveit2_iface
+  DESTINATION lib/${PROJECT_NAME})
+
+# TODO: Build moveit2_simple_iface
+add_executable(moveit2_simple_iface src/moveit2_simple_iface.cpp src/moveit2_simple_iface_node.cpp src/utils.cpp)
+target_include_directories(moveit2_simple_iface 
+PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  PRIVATE
+  include/)
+
+target_compile_features(moveit2_simple_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+ament_target_dependencies(
+  moveit2_simple_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs
+)
+
+# Install moveit2_simple_iface
+install(TARGETS 
+  moveit2_iface
+  DESTINATION lib/${PROJECT_NAME})
+
 # Install launch directory
 install(DIRECTORY 
   launch
   config
+  utils
   DESTINATION share/${PROJECT_NAME}
 )
-
-# joy stuff
-install(TARGETS 
-  moveit2_iface
-  DESTINATION lib/${PROJECT_NAME})
 
 # Install C++ files
 add_executable(joy_ctl src/arm_joy_node.cpp src/arm_joy.cpp)
@@ -62,17 +82,33 @@ target_include_directories(joy_ctl
 
 # python dependencies 
 ament_target_dependencies(joy_ctl
-  rclcpp std_msgs geometry_msgs std_srvs sensor_msgs)
+  rclcpp std_msgs geometry_msgs std_srvs sensor_msgs control_msgs)
 
 install(TARGETS 
 joy_ctl
 DESTINATION lib/${PROJECT_NAME})
 
-# Install Python modules
-ament_python_install_package(${PROJECT_NAME})
+add_executable(keyboard_ctl src/servo_keyboard_input.cpp)
 
-install(PROGRAMS 
-  arm_api2/scripts/trajectory_sender.py
+ament_target_dependencies(keyboard_ctl
+  rclcpp std_msgs geometry_msgs std_srvs sensor_msgs control_msgs rclcpp_action)
+
+install(TARGETS
+  keyboard_ctl
+  DESTINATION lib/${PROJECT_NAME})
+
+# Install Python modules
+#ament_python_install_package(${PROJECT_NAME})
+
+install(PROGRAMS
+  examples/scripts/joint_sender_action_client_async.py
+  examples/scripts/joint_sender_action_client.py
+  examples/scripts/pose_sender_action_client_async.py
+  examples/scripts/pose_sender_action_client.py
+  examples/scripts/trajectory_sender_action_client_async.py
+  examples/scripts/trajectory_sender_action_client.py
+  examples/scripts/servo_twist_sender.py
+  examples/scripts/servo_watchdog.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

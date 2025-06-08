@@ -1,7 +1,7 @@
 /*******************************************************************************
  * BSD 3-Clause License
  *
- * Copyright (c) 2024, Crobotic Solutions d.o.o.
+ * Copyright (c) 2025, Crobotic Solutions d.o.o.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,17 +33,19 @@
 
 /*      Title       : moveit2_iface.cpp
  *      Project     : arm_api2
- *      Created     : 05/10/2024
+ *      Created     : 06/08/2025
  *      Author      : Filip Zoric
- *
+ *      Contributors: Edgar Welte
  *      Description : The core robot manipulator and MoveIt2! ROS 2 interfacing header class.
  */
 
 #include "arm_api2/moveit2_iface.hpp"
+#include <future>
+#include <vector>
 
 m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     : Node("moveit2_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_iface_node")), 
-     executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()) 
+     executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()), gripper(node_) 
 {   
     // USE_SIM_TIME HACK TO TEST SERVO!
     this->set_parameter(rclcpp::Parameter("use_sim_time", false));
@@ -59,6 +61,7 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
 
     // Load arm basically --> two important params
     // Manual param specification --> https://github.com/moveit/moveit2_tutorials/blob/8eaef05bfbabde3f35910ad054a819d79e70d3fc/doc/tutorials/quickstart_in_rviz/launch/demo.launch.py#L105
+    // TODO: Add as reconfigurable ROS 2 params
     config              = init_config(config_path);  
     PLANNING_GROUP      = config["robot"]["arm_name"].as<std::string>(); 
     EE_LINK_NAME        = config["robot"]["ee_link_name"].as<std::string>();
@@ -66,8 +69,13 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     PLANNING_FRAME      = config["robot"]["planning_frame"].as<std::string>(); 
     PLANNING_SCENE      = config["robot"]["planning_scene"].as<std::string>(); 
     MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
-    NUM_CART_PTS        = config["robot"]["num_cart_pts"].as<int>(); 
-    JOINT_STATES        = config["robot"]["joint_states"].as<std::string>(); 
+    JOINT_STATES        = config["robot"]["joint_states"].as<std::string>();
+    WITH_PLANNER        = config["robot"]["with_planner"].as<bool>();
+    INIT_VEL_SCALING    = 0.05; 
+    INIT_ACC_SCALING    = 0.05; 
+    eager_execution     = true; 
+    max_vel_scaling_factor = config["robot"]["max_vel_scaling_factor"].as<float>();
+    max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
     
     // Currently not used :) 
     ns_ = this->get_namespace(); 	
@@ -75,16 +83,13 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     init_subscribers(); 
     init_services(); 
     init_moveit(); 
+    init_actionservers();
     if (enable_servo) {servoPtr = init_servo();}; 
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized node!"); 
 
     // Init anything for the old pose because it is non-existent at the beggining
-    m_oldPoseCmd.pose.position.x = 5.0; 
     nodeInit = true; 
-
-    // TODO: Change gripper based on the config file and the gripper types
-    gripper = RobotiqGripper();
 }
 
 YAML::Node m2Iface::init_config(std::string yaml_path)
@@ -95,33 +100,62 @@ YAML::Node m2Iface::init_config(std::string yaml_path)
 
 void m2Iface::init_publishers()
 {   
-    auto pose_state_name = config["topic"]["pub"]["current_pose"]["name"].as<std::string>(); 
-    pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(ns_ + pose_state_name, 1); 
+    auto pose_state_name    = config["topic"]["pub"]["current_pose"]["name"].as<std::string>();
+    auto robot_state_name   = config["topic"]["pub"]["current_robot_state"]["name"].as<std::string>(); 
+    pose_state_pub_         = this->create_publisher<geometry_msgs::msg::PoseStamped>(ns_ + pose_state_name, 1);
+    robot_state_pub_        = this->create_publisher<std_msgs::msg::String>(ns_ + robot_state_name, 1); 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized publishers!");
 }
 
 void m2Iface::init_subscribers()
 {
-    auto pose_cmd_name = config["topic"]["sub"]["cmd_pose"]["name"].as<std::string>(); 
-    auto cart_traj_cmd_name = config["topic"]["sub"]["cmd_traj"]["name"].as<std::string>(); 
-    auto joint_states_name = config["topic"]["sub"]["joint_states"]["name"].as<std::string>();
-    pose_cmd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(ns_ + pose_cmd_name, 1, std::bind(&m2Iface::pose_cmd_cb, this, _1));
-    ctraj_cmd_sub_ = this->create_subscription<arm_api2_msgs::msg::CartesianWaypoints>(ns_ + cart_traj_cmd_name, 1, std::bind(&m2Iface::cart_poses_cb, this, _1));
-    joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(ns_ + joint_states_name, 1, std::bind(&m2Iface::joint_state_cb, this, _1));
+    auto joint_states_name  = config["topic"]["sub"]["joint_states"]["name"].as<std::string>();
+    joint_state_sub_        = this->create_subscription<sensor_msgs::msg::JointState>(ns_ + joint_states_name, 1, std::bind(&m2Iface::joint_state_cb, this, _1));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
 }
 
 void m2Iface::init_services()
 {
-    auto change_state_name = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
-    auto open_gripper_name = config["srv"]["open_gripper"]["name"].as<std::string>(); 
-    auto close_gripper_name= config["srv"]["close_gripper"]["name"].as<std::string>();
-    change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
-    open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + open_gripper_name, std::bind(&m2Iface::open_gripper_cb, this, _1, _2));
-    close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + close_gripper_name, std::bind(&m2Iface::close_gripper_cb, this, _1, _2));
+    auto change_state_name  = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
+    auto set_vel_acc_name   = config["srv"]["set_vel_acc"]["name"].as<std::string>();
+    auto set_eelink_name    = config["srv"]["set_eelink"]["name"].as<std::string>();
+    auto set_plan_only_name = config["srv"]["set_planonly"]["name"].as<std::string>();
+    change_state_srv_       = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
+    set_vel_acc_srv_        = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2Iface::set_vel_acc_cb, this, _1, _2));
+    set_eelink_srv_         = this->create_service<arm_api2_msgs::srv::SetStringParam>(ns_ + set_eelink_name, std::bind(&m2Iface::set_eelink_cb, this, _1, _2));
+    set_plan_only_srv_      = this->create_service<std_srvs::srv::SetBool>(ns_ + set_plan_only_name, std::bind(&m2Iface::set_plan_only_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
+void m2Iface::init_actionservers()
+{
+    auto move_to_pose_name      = config["action"]["move_to_pose"]["name"].as<std::string>();
+    auto move_to_joint_name     = config["action"]["move_to_joint"]["name"].as<std::string>();
+    auto move_to_pose_path_name = config["action"]["move_to_pose_path"]["name"].as<std::string>();
+    auto gripper_control_name   = config["action"]["gripper_control"]["name"].as<std::string>();
+    move_to_pose_as_    = rclcpp_action::create_server<arm_api2_msgs::action::MoveCartesian>(this,
+                                                                                        ns_ + move_to_pose_name,
+                                                                                        std::bind(&m2Iface::move_to_pose_goal_cb, this, _1, _2),
+                                                                                        std::bind(&m2Iface::move_to_pose_cancel_cb, this, _1),
+                                                                                        std::bind(&m2Iface::move_to_pose_accepted_cb, this, _1));
+    move_to_joint_as_   = rclcpp_action::create_server<arm_api2_msgs::action::MoveJoint>(this,
+                                                                                        ns_ + move_to_joint_name,
+                                                                                        std::bind(&m2Iface::move_to_joint_goal_cb, this, _1, _2),
+                                                                                        std::bind(&m2Iface::move_to_joint_cancel_cb, this, _1),
+                                                                                        std::bind(&m2Iface::move_to_joint_accepted_cb, this, _1));
+    move_to_pose_path_as_ = rclcpp_action::create_server<arm_api2_msgs::action::MoveCartesianPath>(this,
+                                                                                        ns_ + move_to_pose_path_name,
+                                                                                        std::bind(&m2Iface::move_to_pose_path_goal_cb, this, _1, _2),
+                                                                                        std::bind(&m2Iface::move_to_pose_path_cancel_cb, this, _1),
+                                                                                        std::bind(&m2Iface::move_to_pose_path_accepted_cb, this, _1));
+    gripper_control_as_ = rclcpp_action::create_server<control_msgs::action::GripperCommand>(this,
+                                                                                        ns_ + gripper_control_name,
+                                                                                        std::bind(&m2Iface::gripper_control_goal_cb, this, _1, _2),
+                                                                                        std::bind(&m2Iface::gripper_control_cancel_cb, this, _1),
+                                                                                        std::bind(&m2Iface::gripper_control_accepted_cb, this, _1));
+
+    RCLCPP_INFO_STREAM(this->get_logger(), "Initialized action servers!");
+}
 void m2Iface::init_moveit()
 {
 
@@ -143,28 +177,9 @@ std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()
     RCLCPP_INFO_STREAM(this->get_logger(), "ee_frame_name: " << servoParams->ee_frame_name);  
     servoParams->get("moveit_servo", nodeParameters);
 
-
-    //auto servoParamsPtr = std::make_shared<moveit_servo::ServoParameters>(std::move(servoParams));
-    //auto servo_parameters = moveit_servo::ServoParameters::makeServoParameters(node_); 
-    // Servo parameters need to bee constSharedPtr
     auto servo = std::make_unique<moveit_servo::Servo>(node_, servoParams, m_pSceneMonitorPtr); 
     RCLCPP_INFO(this->get_logger(), "Servo initialized!"); 
     return servo;
-}
-
-void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
-{
-    // hardcode this to planning frame to check if it works like that? 
-    m_currPoseCmd.header.frame_id = PLANNING_FRAME; 
-    m_currPoseCmd.pose = msg->pose;
-    if (!utils::comparePose(m_currPoseCmd, m_oldPoseCmd)) recivCmd = true;
-    RCLCPP_INFO_STREAM(this->get_logger(), "recivCmd: " << recivCmd); 
-}
-
-void m2Iface::cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::SharedPtr msg)
-{
-    m_cartesianWaypoints = msg->poses; 
-    recivTraj = true; 
 }
 
 void m2Iface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg)
@@ -175,16 +190,152 @@ void m2Iface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg)
 
 }
 
-void m2Iface::open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
-                              const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+void m2Iface::set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req, const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res)
 {
-    gripper.open();
+    if(req->max_vel < 0 || req->max_acc < 0 || req->max_vel > 1 || req->max_acc > 1)
+    {
+        res->success = false;
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Velocity and acceleration must be in the range [0, 1]!");
+        return;
+    }
+    max_vel_scaling_factor = float(req->max_vel);
+    max_acc_scaling_factor = float(req->max_acc);
+    res->success = true;
+    RCLCPP_INFO_STREAM(this->get_logger(), "Set velocity and acceleration to " << max_vel_scaling_factor << " " << max_acc_scaling_factor);
+
 }
 
-void m2Iface::close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
-                               const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+void m2Iface::set_eelink_cb(const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Request> req, const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Response> res)
 {
-    gripper.close(); 
+    EE_LINK_NAME = req->value;
+    m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME);
+    res->success = true;
+    RCLCPP_INFO_STREAM(this->get_logger(), "Set end effector link to " << req->value);
+}
+
+void m2Iface::set_plan_only_cb(const std::shared_ptr<std_srvs::srv::SetBool::Request> req, const std::shared_ptr<std_srvs::srv::SetBool::Response> res)
+{
+    planOnly = req->data;
+    res->success = true;
+    RCLCPP_INFO_STREAM(this->get_logger(), "Set plan only to " << req->data);
+}
+
+rclcpp_action::GoalResponse m2Iface::move_to_joint_goal_cb(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const arm_api2_msgs::action::MoveJoint::Goal> goal)
+{
+    RCLCPP_INFO_STREAM(this->get_logger(), "Received goal request for joint control! Number of joints: "  << goal->joint_state.position.size());
+    if(robotState != JOINT_TRAJ_CTL)
+    {
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Robot is not in joint control mode!");
+        return rclcpp_action::GoalResponse::REJECT;
+    }
+    if(goal->joint_state.position.size() != m_currJointPosition.size())
+    {
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Number of joint positions does not match the number of joints!");
+        return rclcpp_action::GoalResponse::REJECT;
+    }
+    (void)uuid;
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse m2Iface::move_to_joint_cancel_cb(const std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveJoint>> goal_handle)
+{
+    RCLCPP_INFO_STREAM(this->get_logger(), "Received request to cancel joint control!");
+    (void)goal_handle;
+    m_moveGroupPtr->stop();
+    return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void m2Iface::move_to_joint_accepted_cb(std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveJoint>> goal_handle)
+{
+    m_moveToJointGoalHandle_ = goal_handle;
+    recivCmd = true;
+}
+
+rclcpp_action::GoalResponse m2Iface::move_to_pose_goal_cb(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const arm_api2_msgs::action::MoveCartesian::Goal> goal)
+{
+    RCLCPP_INFO_STREAM(this->get_logger(), "Received goal request for Cartesian control!");
+    if(robotState != CART_TRAJ_CTL)
+    {
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Robot is not in Cartesian control mode!");
+        return rclcpp_action::GoalResponse::REJECT;
+    }
+    if(goal->goal.header.frame_id != PLANNING_FRAME)
+    {
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Pose frame_id is not planning frame! PLANNING_FRAME: " << PLANNING_FRAME);
+        return rclcpp_action::GoalResponse::REJECT;
+    }
+    (void)uuid;
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse m2Iface::move_to_pose_cancel_cb(const std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesian>> goal_handle)
+{
+    RCLCPP_INFO_STREAM(this->get_logger(), "Received request to cancel Cartesian control!");
+    (void)goal_handle;
+    m_moveGroupPtr->stop();
+    return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void m2Iface::move_to_pose_accepted_cb(std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesian>> goal_handle)
+{
+    m_moveToPoseGoalHandle_ = goal_handle;
+    recivCmd = true;
+}
+
+rclcpp_action::GoalResponse m2Iface::move_to_pose_path_goal_cb(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const arm_api2_msgs::action::MoveCartesianPath::Goal> goal)
+{
+    RCLCPP_INFO_STREAM(this->get_logger(), "Received goal request for Cartesian path control!");
+    if(robotState != CART_TRAJ_CTL)
+    {
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Robot is not in Cartesian control mode!");
+        return rclcpp_action::GoalResponse::REJECT;
+    }
+    if(goal->poses.size() < 2)
+    {
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Number of poses in path is less than 2!");
+        return rclcpp_action::GoalResponse::REJECT;
+    }
+    if(goal->poses[0].header.frame_id != PLANNING_FRAME)
+    {
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Path frame_id is not planning frame! PLANNING_FRAME: " << PLANNING_FRAME);
+        return rclcpp_action::GoalResponse::REJECT;
+    }
+    (void)uuid;
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse m2Iface::move_to_pose_path_cancel_cb(const std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesianPath>> goal_handle)
+{
+    RCLCPP_INFO_STREAM(this->get_logger(), "Received request to cancel Cartesian path control!");
+    (void)goal_handle;
+    m_moveGroupPtr->stop();
+    return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void m2Iface::move_to_pose_path_accepted_cb(std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveCartesianPath>> goal_handle)
+{
+    m_moveToPosePathGoalHandle_ = goal_handle;
+    recivTraj = true;
+}
+
+rclcpp_action::GoalResponse m2Iface::gripper_control_goal_cb(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const control_msgs::action::GripperCommand::Goal> goal)
+{
+    RCLCPP_INFO_STREAM(this->get_logger(), "Received goal request for gripper control!");
+    (void)uuid;
+    (void)goal;
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse m2Iface::gripper_control_cancel_cb(const std::shared_ptr<rclcpp_action::ServerGoalHandle<control_msgs::action::GripperCommand>> goal_handle)
+{
+    (void)goal_handle;
+    return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void m2Iface::gripper_control_accepted_cb(std::shared_ptr<rclcpp_action::ServerGoalHandle<control_msgs::action::GripperCommand>> goal_handle)
+{
+    m_gripperControlGoalHandle_ = goal_handle;
+    recivGripperCmd = true;
 }
 
 void m2Iface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
@@ -222,6 +373,10 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
     m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME); 
     m_moveGroupPtr->setGoalPositionTolerance(POS_TOL);
     m_moveGroupPtr->startStateMonitor(); 
+
+    // velocity scaling
+    m_moveGroupPtr->setMaxVelocityScalingFactor(INIT_VEL_SCALING);
+    m_moveGroupPtr->setMaxAccelerationScalingFactor(INIT_ACC_SCALING);
     // executor
     executor_->add_node(node_); 
     executor_thread_ = std::thread([this]() {executor_->spin();});
@@ -269,73 +424,257 @@ bool m2Iface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::stri
     return true; 
 }
 
-void m2Iface::execMove(bool async=false)
+void m2Iface::planAndExecJoint()
 {   
-    m_currPoseCmd = utils::normalizeOrientation(m_currPoseCmd); 
-    m_moveGroupPtr->clearPoseTargets(); 
-    m_moveGroupPtr->setPoseTarget(m_currPoseCmd.pose, EE_LINK_NAME); 
-    geometry_msgs::msg::PoseStamped poseTarget; 
-    poseTarget = m_moveGroupPtr->getPoseTarget(); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << poseTarget.pose.position.x << " " << poseTarget.pose.position.y << " " << poseTarget.pose.position.z); 
-    execPlan(async); 
-    m_oldPoseCmd = m_currPoseCmd; 
-    RCLCPP_INFO_STREAM(this->get_logger(), "Executing commanded path!"); 
+    const auto feedback = std::make_shared<arm_api2_msgs::action::MoveJoint::Feedback>();
+    const auto result = std::make_shared<arm_api2_msgs::action::MoveJoint::Result>();
+    feedback->set__status("planning");
+    m_moveToJointGoalHandle_->publish_feedback(feedback);
 
-}
+    const auto goalJointState = m_moveToJointGoalHandle_->get_goal()->joint_state;
+    m_moveGroupPtr->setJointValueTarget(goalJointState);
+    m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
+    m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
 
-void m2Iface::execPlan(bool async=false)
-{
     moveit::planning_interface::MoveGroupInterface::Plan plan;
-    bool success = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+    const bool success = planWithPlanner(plan, eager_execution);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Planning to joint space goal: " << (success ? "SUCCEEDED" : "FAILED"));
     
-    if (success) {
-        if (async) {m_moveGroupPtr->asyncExecute(plan);}
-        else {m_moveGroupPtr->execute(plan);};  
-    }else {
-        RCLCPP_ERROR(this->get_logger(), "Planning failed!"); 
+    if (success && planOnly) {
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        RCLCPP_INFO_STREAM(this->get_logger(), "                   Plan only mode!");
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        result->success = true;
+        m_moveToJointGoalHandle_->succeed(result);
+    }
+    else if (success) {
+        //addTimestampsToTrajectory(plan.trajectory_);
+        //printTimestamps(plan.trajectory_);
+
+        feedback->set__status("executing");
+        m_moveToJointGoalHandle_->publish_feedback(feedback);
+        auto errorcode = m_moveGroupPtr->execute(plan);
+        if(errorcode == moveit::core::MoveItErrorCode::SUCCESS){
+            RCLCPP_INFO_STREAM(this->get_logger(), "Execution succeeded!");
+            result->success = true;
+            m_moveToJointGoalHandle_->succeed(result);
+        }
+        else{
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Execution failed with error code");
+            result->success = true;
+            m_moveToJointGoalHandle_->abort(result); 
+        }
+    }
+    else {
+        RCLCPP_ERROR(this->get_logger(), "Planning failed!");
+        result->success = false;
+        m_moveToJointGoalHandle_->abort(result); 
     }
 }
 
-void m2Iface::planExecCartesian(bool async=false)
+void m2Iface::planAndExecPose()
 {   
-    // TODO: Move this method to utils.cpp
-    std::vector<geometry_msgs::msg::Pose> cartesianWaypoints = utils::createCartesianWaypoints(m_currPoseState.pose, m_currPoseCmd.pose, NUM_CART_PTS); 
-    // TODO: create Cartesian plan, use as first point currentPose 4 now, and as end point use targetPoint 
+    const auto feedback = std::make_shared<arm_api2_msgs::action::MoveCartesian::Feedback>();
+    const auto result = std::make_shared<arm_api2_msgs::action::MoveCartesian::Result>();
+    feedback->set__status("planning");
+    m_moveToPoseGoalHandle_->publish_feedback(feedback);
+
+    auto goalPose = m_moveToPoseGoalHandle_->get_goal()->goal;
+    RCLCPP_INFO_STREAM(this->get_logger(), "Planning to Cartesian Pose!");
+    RCLCPP_INFO_STREAM(this->get_logger(), "Current pose is: " << m_currPoseState.pose.position.x << " " << m_currPoseState.pose.position.y << " " << m_currPoseState.pose.position.z);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Target pose is: " << goalPose.pose.position.x << " " << goalPose.pose.position.y << " " << goalPose.pose.position.z);
+
+    m_moveGroupPtr->setPoseTarget(goalPose);
+    m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
+    m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
+
+    moveit::planning_interface::MoveGroupInterface::Plan plan;
+    const bool success = planWithPlanner(plan, eager_execution);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Planning to pose goal: " << (success ? "SUCCEEDED" : "FAILED"));
+
+    if (success && planOnly) {
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        RCLCPP_INFO_STREAM(this->get_logger(), "                   Plan only mode!");
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        result->success = true;
+        m_moveToPoseGoalHandle_->succeed(result);
+    }
+    else if(success){
+        //addTimestampsToTrajectory(plan.trajectory_);
+        //printTimestamps(plan.trajectory_);
+
+        feedback->set__status("executing");
+        m_moveToPoseGoalHandle_->publish_feedback(feedback);
+        auto errorcode = m_moveGroupPtr->execute(plan);
+        if(errorcode == moveit::core::MoveItErrorCode::SUCCESS){
+            RCLCPP_INFO_STREAM(this->get_logger(), "Execution succeeded!");
+            result->success = true;
+            m_moveToPoseGoalHandle_->succeed(result);
+        }
+        else{
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Execution failed with error code, time stamps:");
+            printTimestamps(plan.trajectory_);
+            result->success = false;
+            m_moveToPoseGoalHandle_->abort(result); 
+        }
+    }
+    else{
+        RCLCPP_ERROR(this->get_logger(), "Planning failed!");
+        result->success = false;
+        m_moveToPoseGoalHandle_->abort(result); 
+    }
+}
+
+void m2Iface::planAndExecPosePath()
+{   
+    const auto feedback = std::make_shared<arm_api2_msgs::action::MoveCartesianPath::Feedback>();
+    const auto result = std::make_shared<arm_api2_msgs::action::MoveCartesianPath::Result>();
+    feedback->set__status("planning");
+    m_moveToPosePathGoalHandle_->publish_feedback(feedback);
+
+    auto goalPoseStampeds = m_moveToPosePathGoalHandle_->get_goal()->poses;
+    RCLCPP_INFO_STREAM(this->get_logger(), "Planning Cartesian path!");
+    RCLCPP_INFO_STREAM(this->get_logger(), "Current pose is: " << m_currPoseState.pose.position.x << " " << m_currPoseState.pose.position.y << " " << m_currPoseState.pose.position.z);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Target pose is: " << goalPoseStampeds[goalPoseStampeds.size()-1].pose.position.x << " " << goalPoseStampeds[goalPoseStampeds.size()-1].pose.position.y << " " << goalPoseStampeds[goalPoseStampeds.size()-1].pose.position.z);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Creating Cartesian waypoints!");
+    RCLCPP_INFO_STREAM(this->get_logger(), "Number of waypoints in the path: " << goalPoseStampeds.size());
+
+    // extract all poses from the PoseStamped messages
+    std::vector<geometry_msgs::msg::Pose> goalPoses;
+    for (auto pose : goalPoseStampeds)
+    {
+        goalPoses.push_back(pose.pose);
+    }
+
     moveit_msgs::msg::RobotTrajectory trajectory;
     // TODO: Set as params that can be configured in YAML!
     double jumpThr = 0.0; 
     double eefStep = 0.02; 
-    // plan Cartesian path
-    m_moveGroupPtr->computeCartesianPath(cartesianWaypoints, eefStep, jumpThr, trajectory);
-    execTrajectory(trajectory, async); 
-    m_oldPoseCmd = m_currPoseCmd; 
+    bool success = (m_moveGroupPtr->computeCartesianPath(goalPoses, eefStep, jumpThr, trajectory, true) == 1.0);
+
+    if (success && planOnly) {
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        RCLCPP_INFO_STREAM(this->get_logger(), "                   Plan only mode!");
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        result->success = true;
+        m_moveToPosePathGoalHandle_->succeed(result);
+    }
+    else if(success){
+        addTimestampsToTrajectory(trajectory);
+
+        feedback->set__status("executing");
+        m_moveToPosePathGoalHandle_->publish_feedback(feedback);
+        m_moveGroupPtr->execute(trajectory);
+        result->success = true;
+        m_moveToPosePathGoalHandle_->succeed(result);
+    }
+    else{
+        RCLCPP_ERROR(this->get_logger(), "Planning failed!");
+        result->success = false;
+        m_moveToPosePathGoalHandle_->abort(result); 
+    }
+    
+
 }
 
-void m2Iface::execCartesian(bool async=false)
-{   
-    // TODO: create Cartesian plan, use as first point currentPose 4 now, and as end point use targetPoint 
-    moveit_msgs::msg::RobotTrajectory trajectory;
-    // TODO: Set as params that can be configured in YAML!
-    double jumpThr = 0.0; 
-    double eefStep = 0.02; 
-    // plan Cartesian path
-    m_moveGroupPtr->computeCartesianPath(m_cartesianWaypoints, eefStep, jumpThr, trajectory);
-    execTrajectory(trajectory, async); 
-    m_oldPoseCmd = m_currPoseCmd; 
+void m2Iface::printTimestamps(const moveit_msgs::msg::RobotTrajectory &trajectory){
+    trajectory_msgs::msg::JointTrajectory jointTrajectory = trajectory.joint_trajectory;
+    std::vector<std::string> joint_names = jointTrajectory.joint_names;
+    std::vector<trajectory_msgs::msg::JointTrajectoryPoint> points = jointTrajectory.points;
+    for (long unsigned int i = 0; i < points.size(); i++){
+        trajectory_msgs::msg::JointTrajectoryPoint point = points[i];
+        rclcpp::Duration duration = point.time_from_start;
+        RCLCPP_INFO_STREAM(this->get_logger(), "Point " << i << " - time_from_start [s]: " << duration.seconds());
+    } 
 }
 
-void m2Iface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async=false)
-{
-    if (async) {m_moveGroupPtr->asyncExecute(trajectory);}
-    else{m_moveGroupPtr->execute(trajectory);}; 
+void m2Iface::addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory &trajectory){
+    // The trajectory created with computeCartesianPath() needs to be modified so it will include velocities as well.
+    // reference: https://groups.google.com/g/moveit-users/c/MOoFxy2exT4
+    // First to create a RobotTrajectory object
+    robot_trajectory::RobotTrajectory rt(m_moveGroupPtr->getCurrentState()->getRobotModel(), PLANNING_GROUP);
+    // Second get a RobotTrajectory from trajectory
+    rt.setRobotTrajectoryMsg(*m_moveGroupPtr->getCurrentState(), trajectory);
+    // Thrid create a IterativeParabolicTimeParameterization object
+    trajectory_processing::IterativeParabolicTimeParameterization iptp;
+    // Fourth compute computeTimeStamps
+    bool success = iptp.computeTimeStamps(rt, max_vel_scaling_factor, max_acc_scaling_factor);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Computed time stamp " << (success ? "SUCCEEDED" : "FAILED"));
+    // Get RobotTrajectory_msg from RobotTrajectory
+    rt.getRobotTrajectoryMsg(trajectory);
+} 
+
+bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Plan &plan, bool eagerExecution){
+    // Planning priority:
+    // 1. LIN planner from pilz_industrial_motion_planner
+    // 2. EST planner from ompl
+    // 3. PRM planner from ompl
+    // for EST and PRM create three plans and choose the best one 
+    //-----------------------------------------------------------------------------------------------
+    // TODO: Add cuMotion planner to the list of planners
+  
+    std::vector<std::pair<std::string, std::string>> planners = {
+        {"pilz_industrial_motion_planner", "LIN"},
+        {"ompl", "EST"},
+        {"ompl", "PRM"}
+    };
+    std::vector<moveit::planning_interface::MoveGroupInterface::Plan> all_plans; 
+
+    bool success = false;
+    int tries_per_planner = 3;
+    for(int i = 0; i < int(tries_per_planner*planners.size()); i++){
+
+        int planner_index = i / tries_per_planner;
+        int planner_try = i % tries_per_planner;
+
+        m_moveGroupPtr->setPlanningPipelineId(planners[planner_index].first);
+        m_moveGroupPtr->setPlannerId(planners[planner_index].second);
+
+        moveit::planning_interface::MoveGroupInterface::Plan plan_;
+        success = static_cast<bool>(m_moveGroupPtr->plan(plan_));
+
+        if(success){
+            RCLCPP_INFO(this->get_logger(), "%s found plan %d with %d points", 
+                planners[planner_index].second.c_str(), i, int(plan.trajectory_.joint_trajectory.points.size()));
+            if (eagerExecution) // if eager execution is true, return after first successful plan
+            {   // Set local planned path as the plan to be executed
+                plan = plan_; 
+                return true;
+            } 
+            all_plans.push_back(plan_);
+        }
+        else {
+            RCLCPP_INFO(this->get_logger(), "%s failed to find plan %d", 
+                planners[planner_index].second.c_str(), i);
+        }
+
+        if(planner_try == tries_per_planner - 1 && all_plans.size() >= 3){
+            RCLCPP_INFO(this->get_logger(), "Found %d plans, stopping planning", int(all_plans.size()));
+        }
+    }
+
+    if(all_plans.size() == 0){
+        RCLCPP_INFO_STREAM(this->get_logger(), "All planners failed!");
+        return false;
+    }
+    else{
+        RCLCPP_INFO_STREAM(this->get_logger(), "Found " << all_plans.size() << " plans!");
+    }
+
+    // find the best plan from the list of plans
+    auto best_plan = std::min_element(all_plans.begin(), all_plans.end(), [](auto const& a, auto const& b){
+        return a.trajectory_.joint_trajectory.points.size() < b.trajectory_.joint_trajectory.points.size();
+    });
+
+    plan = *best_plan;
+    RCLCPP_INFO(this->get_logger(), "Best plan selected with %d points.", int(best_plan->trajectory_.joint_trajectory.points.size()));
+    return true;
 }
 
 void m2Iface::getArmState() 
 {   
     const moveit::core::JointModelGroup* joint_model_group = m_robotStatePtr->getJointModelGroup(PLANNING_GROUP);
-    const std::vector<std::string>& joint_names = m_robotStatePtr->getVariableNames();
-    std::vector<double> joint_values;
-    m_robotStatePtr->copyJointGroupPositions(joint_model_group, joint_values);
+    m_robotStatePtr->copyJointGroupPositions(joint_model_group, m_currJointPosition);
     // get current ee pose
     m_currPoseState = m_moveGroupPtr->getCurrentPose(EE_LINK_NAME); 
     // current_state_monitor
@@ -345,6 +684,8 @@ void m2Iface::getArmState()
     
     Eigen::Isometry3d currentPose_ = m_moveGroupPtr->getCurrentState()->getFrameTransform(EE_LINK_NAME);
     m_currPoseState = utils::convertIsometryToMsg(currentPose_);
+    auto frame_id = m_moveGroupPtr->getPlanningFrame().c_str();
+    m_currPoseState.header.frame_id = frame_id;
 }
 
 bool m2Iface::run()
@@ -354,6 +695,9 @@ bool m2Iface::run()
 
     getArmState(); 
     pose_state_pub_->publish(m_currPoseState);
+    std_msgs::msg::String stateMsg;
+    stateMsg.data = stateNames[robotState];
+    robot_state_pub_->publish(stateMsg);
 
     rclcpp::Clock steady_clock; 
     int LOG_STATE_TIMEOUT=10000; 
@@ -373,7 +717,7 @@ bool m2Iface::run()
     if (robotState == JOINT_TRAJ_CTL)
     {
        if (recivCmd) {
-           execMove(async);
+           planAndExecJoint();
            recivCmd = false; 
        } 
     }
@@ -382,12 +726,12 @@ bool m2Iface::run()
     {   
         // TODO: Beware if both are true at the same time, shouldn't occur, 
         if (recivCmd) {
-            planExecCartesian(async);
+            planAndExecPose();
             recivCmd = false; 
         } 
 
         if (recivTraj){
-            execCartesian(async);
+            planAndExecPosePath();
             recivTraj = false; 
         }
     }
@@ -400,6 +744,32 @@ bool m2Iface::run()
             servoPtr->start(); 
             servoEntered = true; 
         }
+    }
+
+    if(recivGripperCmd){
+    
+        auto goal = m_gripperControlGoalHandle_->get_goal();
+        float position = goal->command.position;
+        float effort = goal->command.max_effort;
+
+        auto result = std::make_shared<control_msgs::action::GripperCommand::Result>();
+        bool success = gripper.send_gripper_command(position, effort);
+
+        if(success){
+            // TODO: Wrap this in methods
+            RCLCPP_INFO_STREAM(this->get_logger(), "Gripper command succeeded!");
+            result->position = gripper.get_position();
+            result->effort = gripper.get_effort();
+            result->stalled = gripper.is_stalled();
+            result->reached_goal = gripper.reached_goal();
+            m_gripperControlGoalHandle_->succeed(result);
+        }
+        else{
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Gripper command failed!");
+            result->reached_goal = gripper.reached_goal();
+            m_gripperControlGoalHandle_->abort(result);
+        }
+        recivGripperCmd = false;
     }
 
     return true;     

@@ -14,6 +14,8 @@
   <depend>moveit_ros_planning_interface</depend>
   <depend>moveit_ros</depend>
   <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>rclcpp_components</depend>
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>moveit_visual_tools</depend>
@@ -21,8 +23,10 @@
   <depend>moveit_servo</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>control_msgs</depend>
   <depend>tf2</depend>
   <depend>std_srvs</depend>
+  <depend>python3</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
