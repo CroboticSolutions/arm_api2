@@ -1,6 +1,6 @@
 robot:
-  arm_name: manipulator
-  ee_link_name: tcp
+  arm_name: ur_manipulator
+  ee_link_name: tool0
   robot_desc: robot_description
   move_group_ns:
   planning_scene: planning_scene

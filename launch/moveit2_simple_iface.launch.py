@@ -16,7 +16,11 @@
  #
  # * Neither the name of the copyright holder nor the names of its
  #   contributors may be used to endorse or promote products derived from
- #   this software without specific prior written permission.Need document name?RTICULAR PURPOSE
+ #   this software without specific prior written permission.
+ #
+ # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  # ARE
  # DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
  # FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
@@ -27,12 +31,12 @@
  # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ######################################################################
 
- #      Title       : moveit2_iface.launch.py
+ #      Title       : moveit2_simple_iface.launch.py
  #      Project     : arm_api2
- #      Created     : 06/08/2025
+ #      Created     : 05/10/2024
  #      Author      : Filip Zoric
  #
- #      Description : Launch file for moveit2_iface
+ #      Description : Launch file for moveit2_simple_iface
  #
 
 from ament_index_python.packages import get_package_share_directory
@@ -55,9 +59,7 @@ def launch_setup(context, *args, **kwargs):
 
     launch_nodes_ = []
     arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
-    arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))
-    arg_launch_servo_watchdog = context.perform_substitution(LaunchConfiguration('launch_servo_watchdog', default=True))
-    print("arg_launch_joy: ", arg_launch_joy)   
+    arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))   
 
     # TODO: Swap between sim and real arg depending on the robot type
     robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
@@ -85,7 +87,6 @@ def launch_setup(context, *args, **kwargs):
     launch_move_group = Node(
         package='arm_api2',
         executable='moveit2_iface',
-        #prefix=['gdbserver localhost:3000'], # Used for debugging
         parameters=[{"use_sim_time": use_sim_time},
                     {"enable_servo": use_servo},
                     {"dt": dt},
@@ -95,24 +96,27 @@ def launch_setup(context, *args, **kwargs):
     )
 
     launch_nodes_.append(launch_move_group)
-    
-    if str(arg_launch_joy).lower() == "true": # To avoid pkg not found 
+
+    if arg_launch_joy: 
+
         # https://index.ros.org/p/joy/ --> joy node as joystick (Create subscriber that takes cmd_vel)
+        # Example of demo joint_jog
         joy_node = Node(
             package='joy', 
             executable="joy_node", 
             output="screen", 
-            arguments={'device_name':"js0"}.items()
+            arguments={'device_name':'js0'}.items()
         )
         launch_nodes_.append(joy_node)
-    
-    if str(arg_launch_servo_watchdog).lower() == "true":
-        launch_servo_watchdog = Node(
-            package='arm_api2',
-            executable="servo_watchdog.py",
-            output='screen'
+
+        joy_ctl_node = Node(
+            package="arm_api2", 
+            executable="joy_ctl", 
+            output="screen", 
+            parameters = [{"use_sim_time": use_sim_time}]
         )
-        launch_nodes_.append(launch_servo_watchdog)
+
+        launch_nodes_.append(joy_ctl_node)
 
     return launch_nodes_
 
@@ -131,12 +135,6 @@ def generate_launch_description():
         DeclareLaunchArgument(name='launch_joy', 
                               default_value='true', 
                               description='launch joystick')
-    )
-    
-    declared_arguments.append(
-        DeclareLaunchArgument(name='launch_servo_watchdog', 
-                              default_value='true', 
-                              description='launch servo_watchdog node')
     )
 
     declared_arguments.append(

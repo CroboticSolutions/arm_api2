@@ -1,7 +1,7 @@
 /*******************************************************************************
  * BSD 3-Clause License
  *
- * Copyright (c) 2024, Crobotic Solutions d.o.o.
+ * Copyright (c) 2025, Crobotic Solutions d.o.o.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,7 @@
 
 /*      Title       : moveit2_iface.cpp
  *      Project     : arm_api2
- *      Created     : 05/10/2024
+ *      Created     : 06/08/2025
  *      Author      : Filip Zoric
  *      Contributors: Edgar Welte
  *      Description : The core robot manipulator and MoveIt2! ROS 2 interfacing header class.
@@ -61,6 +61,7 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
 
     // Load arm basically --> two important params
     // Manual param specification --> https://github.com/moveit/moveit2_tutorials/blob/8eaef05bfbabde3f35910ad054a819d79e70d3fc/doc/tutorials/quickstart_in_rviz/launch/demo.launch.py#L105
+    // TODO: Add as reconfigurable ROS 2 params
     config              = init_config(config_path);  
     PLANNING_GROUP      = config["robot"]["arm_name"].as<std::string>(); 
     EE_LINK_NAME        = config["robot"]["ee_link_name"].as<std::string>();
@@ -72,6 +73,7 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     WITH_PLANNER        = config["robot"]["with_planner"].as<bool>();
     INIT_VEL_SCALING    = 0.05; 
     INIT_ACC_SCALING    = 0.05; 
+    eager_execution     = true; 
     max_vel_scaling_factor = config["robot"]["max_vel_scaling_factor"].as<float>();
     max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
     
@@ -98,45 +100,45 @@ YAML::Node m2Iface::init_config(std::string yaml_path)
 
 void m2Iface::init_publishers()
 {   
-    auto pose_state_name = config["topic"]["pub"]["current_pose"]["name"].as<std::string>();
-    auto robot_state_name = config["topic"]["pub"]["current_robot_state"]["name"].as<std::string>(); 
-    pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(ns_ + pose_state_name, 1);
-    robot_state_pub_ = this->create_publisher<std_msgs::msg::String>(ns_ + robot_state_name, 1); 
+    auto pose_state_name    = config["topic"]["pub"]["current_pose"]["name"].as<std::string>();
+    auto robot_state_name   = config["topic"]["pub"]["current_robot_state"]["name"].as<std::string>(); 
+    pose_state_pub_         = this->create_publisher<geometry_msgs::msg::PoseStamped>(ns_ + pose_state_name, 1);
+    robot_state_pub_        = this->create_publisher<std_msgs::msg::String>(ns_ + robot_state_name, 1); 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized publishers!");
 }
 
 void m2Iface::init_subscribers()
 {
-    auto joint_states_name = config["topic"]["sub"]["joint_states"]["name"].as<std::string>();
-    joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(ns_ + joint_states_name, 1, std::bind(&m2Iface::joint_state_cb, this, _1));
+    auto joint_states_name  = config["topic"]["sub"]["joint_states"]["name"].as<std::string>();
+    joint_state_sub_        = this->create_subscription<sensor_msgs::msg::JointState>(ns_ + joint_states_name, 1, std::bind(&m2Iface::joint_state_cb, this, _1));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
 }
 
 void m2Iface::init_services()
 {
-    auto change_state_name = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
-    auto set_vel_acc_name = config["srv"]["set_vel_acc"]["name"].as<std::string>();
-    auto set_eelink_name = config["srv"]["set_eelink"]["name"].as<std::string>();
+    auto change_state_name  = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
+    auto set_vel_acc_name   = config["srv"]["set_vel_acc"]["name"].as<std::string>();
+    auto set_eelink_name    = config["srv"]["set_eelink"]["name"].as<std::string>();
     auto set_plan_only_name = config["srv"]["set_planonly"]["name"].as<std::string>();
-    change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
-    set_vel_acc_srv_ = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2Iface::set_vel_acc_cb, this, _1, _2));
-    set_eelink_srv_ = this->create_service<arm_api2_msgs::srv::SetStringParam>(ns_ + set_eelink_name, std::bind(&m2Iface::set_eelink_cb, this, _1, _2));
-    set_plan_only_srv_ = this->create_service<std_srvs::srv::SetBool>(ns_ + set_plan_only_name, std::bind(&m2Iface::set_plan_only_cb, this, _1, _2));
+    change_state_srv_       = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
+    set_vel_acc_srv_        = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2Iface::set_vel_acc_cb, this, _1, _2));
+    set_eelink_srv_         = this->create_service<arm_api2_msgs::srv::SetStringParam>(ns_ + set_eelink_name, std::bind(&m2Iface::set_eelink_cb, this, _1, _2));
+    set_plan_only_srv_      = this->create_service<std_srvs::srv::SetBool>(ns_ + set_plan_only_name, std::bind(&m2Iface::set_plan_only_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
 void m2Iface::init_actionservers()
 {
-    auto move_to_pose_name = config["action"]["move_to_pose"]["name"].as<std::string>();
-    auto move_to_joint_name = config["action"]["move_to_joint"]["name"].as<std::string>();
+    auto move_to_pose_name      = config["action"]["move_to_pose"]["name"].as<std::string>();
+    auto move_to_joint_name     = config["action"]["move_to_joint"]["name"].as<std::string>();
     auto move_to_pose_path_name = config["action"]["move_to_pose_path"]["name"].as<std::string>();
-    auto gripper_control_name = config["action"]["gripper_control"]["name"].as<std::string>();
-    move_to_pose_as_ = rclcpp_action::create_server<arm_api2_msgs::action::MoveCartesian>(this,
+    auto gripper_control_name   = config["action"]["gripper_control"]["name"].as<std::string>();
+    move_to_pose_as_    = rclcpp_action::create_server<arm_api2_msgs::action::MoveCartesian>(this,
                                                                                         ns_ + move_to_pose_name,
                                                                                         std::bind(&m2Iface::move_to_pose_goal_cb, this, _1, _2),
                                                                                         std::bind(&m2Iface::move_to_pose_cancel_cb, this, _1),
                                                                                         std::bind(&m2Iface::move_to_pose_accepted_cb, this, _1));
-    move_to_joint_as_ = rclcpp_action::create_server<arm_api2_msgs::action::MoveJoint>(this,
+    move_to_joint_as_   = rclcpp_action::create_server<arm_api2_msgs::action::MoveJoint>(this,
                                                                                         ns_ + move_to_joint_name,
                                                                                         std::bind(&m2Iface::move_to_joint_goal_cb, this, _1, _2),
                                                                                         std::bind(&m2Iface::move_to_joint_cancel_cb, this, _1),
@@ -435,7 +437,7 @@ void m2Iface::planAndExecJoint()
     m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
 
     moveit::planning_interface::MoveGroupInterface::Plan plan;
-    const bool success = planWithPlanner(plan);
+    const bool success = planWithPlanner(plan, eager_execution);
     RCLCPP_INFO_STREAM(this->get_logger(), "Planning to joint space goal: " << (success ? "SUCCEEDED" : "FAILED"));
     
     if (success && planOnly) {
@@ -487,7 +489,7 @@ void m2Iface::planAndExecPose()
     m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
 
     moveit::planning_interface::MoveGroupInterface::Plan plan;
-    const bool success = planWithPlanner(plan);
+    const bool success = planWithPlanner(plan, eager_execution);
     RCLCPP_INFO_STREAM(this->get_logger(), "Planning to pose goal: " << (success ? "SUCCEEDED" : "FAILED"));
 
     if (success && planOnly) {
@@ -602,7 +604,7 @@ void m2Iface::addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory &traje
     rt.getRobotTrajectoryMsg(trajectory);
 } 
 
-bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Plan &plan){
+bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Plan &plan, bool eagerExecution){
     // Planning priority:
     // 1. LIN planner from pilz_industrial_motion_planner
     // 2. EST planner from ompl
@@ -628,13 +630,18 @@ bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Pl
         m_moveGroupPtr->setPlanningPipelineId(planners[planner_index].first);
         m_moveGroupPtr->setPlannerId(planners[planner_index].second);
 
-        moveit::planning_interface::MoveGroupInterface::Plan plan;
-        success = static_cast<bool>(m_moveGroupPtr->plan(plan));
+        moveit::planning_interface::MoveGroupInterface::Plan plan_;
+        success = static_cast<bool>(m_moveGroupPtr->plan(plan_));
 
         if(success){
             RCLCPP_INFO(this->get_logger(), "%s found plan %d with %d points", 
                 planners[planner_index].second.c_str(), i, int(plan.trajectory_.joint_trajectory.points.size()));
-            all_plans.push_back(plan);
+            if (eagerExecution) // if eager execution is true, return after first successful plan
+            {   // Set local planned path as the plan to be executed
+                plan = plan_; 
+                return true;
+            } 
+            all_plans.push_back(plan_);
         }
         else {
             RCLCPP_INFO(this->get_logger(), "%s failed to find plan %d", 

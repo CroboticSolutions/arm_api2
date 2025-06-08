@@ -40,6 +40,30 @@ ament_target_dependencies(
   moveit2_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs
 )
 
+# Install moveit2_iface
+install(TARGETS 
+  moveit2_iface
+  DESTINATION lib/${PROJECT_NAME})
+
+# TODO: Build moveit2_simple_iface
+add_executable(moveit2_simple_iface src/moveit2_simple_iface.cpp src/moveit2_simple_iface_node.cpp src/utils.cpp)
+target_include_directories(moveit2_simple_iface 
+PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  PRIVATE
+  include/)
+
+target_compile_features(moveit2_simple_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+ament_target_dependencies(
+  moveit2_simple_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs
+)
+
+# Install moveit2_simple_iface
+install(TARGETS 
+  moveit2_iface
+  DESTINATION lib/${PROJECT_NAME})
+
 # Install launch directory
 install(DIRECTORY 
   launch
@@ -47,11 +71,6 @@ install(DIRECTORY
   utils
   DESTINATION share/${PROJECT_NAME}
 )
-
-# joy stuff
-install(TARGETS 
-  moveit2_iface
-  DESTINATION lib/${PROJECT_NAME})
 
 # Install C++ files
 add_executable(joy_ctl src/arm_joy_node.cpp src/arm_joy.cpp)
