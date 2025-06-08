@@ -13,14 +13,14 @@ cd ./docker_files/ros2/humble/arm_api2
 ./pull_and_run_docker.sh
 <robot>_sim (start robot in simulation)
 ```
-Run move_group for that robot (see for [kinova](#kinovause) or [UR](#uruse)). 
+Run move_group for that robot (see particular instructions for supported arms in How to use section). 
 And after that run: 
 ```
 ros2 launch arm_api2 moveit_simple_iface.launch.py robot_name:=<robot_name>
 ```
 Currently supported robot names are: `ur`, `kinova`, `franka`, `piper`. 
 
-Full instructions how to use interfaces can be found [here]{#how_to_use_api}
+For full instructions check section How to use arm_api2?
 
 ### Build your own docker 
 
@@ -160,7 +160,7 @@ ros2 launch arm_api2 moveit2_iface.launch.py robot_name=<robot>
 **Command robot pose**:
 
 A robot pose where the robot should move to can be commanded via ROS2 action.
-- name: `arm/move_to_pose`
+- name: `arm/move_to_pose`<<
 - action: `arm_api2_msgs/action/MoveCartesian.action`
 
 ```
@@ -272,7 +272,7 @@ located in `utils/tmux_configs`. Navigate between
 panes with `Ctrl+B`+(arrows).
 
 <details>
-<summary><h3>How to use Kinova? {#kinovause}</summary> 
+<summary><h3>How to use Kinova? </summary> 
 
 First clone and build kinova repository in your workspace with: 
 ```
@@ -317,8 +317,6 @@ How to setup real kinova [here](https://git.initrobots.ca/amercader/kinova-korte
 
 <details>
 <summary><h3>How to use UR?</summary>
-
-### How to use? {#uruse}
 
 You can run UR in simulation by executing following commands:
 
