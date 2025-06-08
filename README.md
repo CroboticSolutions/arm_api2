@@ -13,7 +13,7 @@ cd ./docker_files/ros2/humble/arm_api2
 ./pull_and_run_docker.sh
 <robot>_sim (start robot in simulation)
 ```
-Run move_group for that robot (check [kinova]{#how_to_use_kinova} or [UR]{#how_to_use_UR}. 
+Run move_group for that robot (see for [kinova](#kinovause) or [UR](#uruse)). 
 And after that run: 
 ```
 ros2 launch arm_api2 moveit_simple_iface.launch.py robot_name:=<robot_name>
@@ -75,7 +75,7 @@ Currently implemented and available robot states are:
 - `JOINT_TRAJ_CTL`, which is used for joint control
 - `CART_TRAJ_CTL`, which is used for cartesian control
 - `SERVO_CTL`, which is used for the end effector servoing
-  
+
 **Set max velocity and acceleration scaling factor**:
 
 Set velocity and acceleration scaling factors via service call:
@@ -272,7 +272,7 @@ located in `utils/tmux_configs`. Navigate between
 panes with `Ctrl+B`+(arrows).
 
 <details>
-<summary><h3>How to use Kinova?</summary> {#how_to_use_kinova}
+<summary><h3>How to use Kinova? {#kinovause}</summary> 
 
 First clone and build kinova repository in your workspace with: 
 ```
@@ -318,7 +318,7 @@ How to setup real kinova [here](https://git.initrobots.ca/amercader/kinova-korte
 <details>
 <summary><h3>How to use UR?</summary>
 
-### How to use? {#how_to_use_ur}
+### How to use? {#uruse}
 
 You can run UR in simulation by executing following commands:
 
