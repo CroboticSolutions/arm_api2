@@ -8,7 +8,7 @@ Docker for building required environment can be found [here](https://github.com/
 
 Pull and run docker container `arm_api2_cont`: 
 ```
-git clone git@github.com:CroboticsSolutions/docker_files.git 
+git clone git@github.com:CroboticSolutions/docker_files.git 
 cd ./docker_files/ros2/humble/arm_api2
 ./pull_and_run_docker.sh
 <robot>_sim (start robot in simulation)
