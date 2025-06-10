@@ -6,7 +6,7 @@ Docker for building required environment can be found [here](https://github.com/
 
 Run arm_api2 easily: 
 ```
-git clone git@github.com:CroboticsSolutions/docker_files.git 
+git clone git@github.com:CroboticSolutions/docker_files.git 
 cd ./docker_files/ros2/humble/arm_api2
 ./pull_and_run_docker.sh
 kinova_sim (start kinova in simulation)
