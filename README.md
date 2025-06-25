@@ -2,7 +2,7 @@
 
 :mechanical_arm: API for robotic manipulators based on ROS 2 and MoveIt2! 
 
-Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/kinova).
+Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/arm_api2).
 
 ### Use prebuilt docker 
 
