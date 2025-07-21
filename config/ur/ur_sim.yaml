@@ -12,11 +12,17 @@ robot:
   with_planner: true
 topic:
   sub:
+    cmd_pose:
+      name: arm/cmd/pose
+      queue: 1
+    cmd_traj:
+      name: arm/cmd/traj
+      queue: 1
     cmd_tool_orientation:
       name: tool/cmd/orient
       queue: 1
     cmd_delta_pose:
-      name: arm/cmd/deta_pose
+      name: arm/cmd/delta_pose
       queue: 1
     joint_states:
       name: joint_states
@@ -44,6 +50,10 @@ srv:
     name: arm/set_eelink
   set_planonly:
     name: arm/set_planonly
+  open_gripper: 
+    name: arm/gripper/open
+  close_gripper: 
+    name: arm/gripper/close 
 
 action:
   move_to_pose:

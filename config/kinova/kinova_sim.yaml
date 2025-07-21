@@ -12,6 +12,12 @@ robot:
   with_planner: true
 topic:
   sub:
+    cmd_pose:
+      name: arm/cmd/pose
+      queue: 1
+    cmd_traj:
+      name: arm/cmd/traj
+      queue: 1
     cmd_tool_orientation:
       name: tool/cmd/orient
       queue: 1
