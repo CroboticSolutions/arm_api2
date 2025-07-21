@@ -16,7 +16,7 @@ cd ./docker_files/ros2/humble/arm_api2
 Run move_group for that robot (see particular instructions for supported arms in How to use section). 
 And after that run: 
 ```
-ros2 launch arm_api2 moveit_simple_iface.launch.py robot_name:=<robot_name>
+ros2 launch arm_api2 moveit2_simple_iface.launch.py robot_name:=<robot_name>
 ```
 Currently supported robot names are: `ur`, `kinova`, `franka`, `piper`. 
 

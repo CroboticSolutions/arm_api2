@@ -22,7 +22,7 @@ topic:
       name: tool/cmd/orient
       queue: 1
     cmd_delta_pose:
-      name: arm/cmd/deta_pose
+      name: arm/cmd/delta_pose
       queue: 1
     joint_states:
       name: joint_states
@@ -59,4 +59,3 @@ action:
     name: arm/move_to_pose_path
   gripper_control:
     name: arm/gripper_control
-
