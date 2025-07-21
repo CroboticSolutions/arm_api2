@@ -26,6 +26,7 @@ find_package(std_srvs REQUIRED)
 # include headers
 include_directories(include)
 
+# Build moveit2_iface
 add_executable(moveit2_iface src/moveit2_iface.cpp src/moveit2_iface_node.cpp src/utils.cpp)
 target_include_directories(moveit2_iface 
 PUBLIC
@@ -34,7 +35,7 @@ PUBLIC
   PRIVATE
   include/)
 
-# TODO: Build moveit2_iface
+# Build moveit2_iface
 target_compile_features(moveit2_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
   moveit2_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs
@@ -45,7 +46,7 @@ install(TARGETS
   moveit2_iface
   DESTINATION lib/${PROJECT_NAME})
 
-# TODO: Build moveit2_simple_iface
+# Build moveit2_simple_iface
 add_executable(moveit2_simple_iface src/moveit2_simple_iface.cpp src/moveit2_simple_iface_node.cpp src/utils.cpp)
 target_include_directories(moveit2_simple_iface 
 PUBLIC
@@ -61,7 +62,7 @@ ament_target_dependencies(
 
 # Install moveit2_simple_iface
 install(TARGETS 
-  moveit2_iface
+  moveit2_simple_iface
   DESTINATION lib/${PROJECT_NAME})
 
 # Install launch directory
