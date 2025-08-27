@@ -69,7 +69,7 @@ m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
     NUM_CART_PTS        = config["robot"]["num_cart_pts"].as<int>(); 
     JOINT_STATES        = config["robot"]["joint_states"].as<std::string>(); 
     
-    // Currently not used :) 
+    // Currently not used :) [ns]
     ns_ = this->get_namespace(); 	
     init_publishers(); 
     init_subscribers(); 
