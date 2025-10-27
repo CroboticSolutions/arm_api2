@@ -71,6 +71,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
+#include "std_msgs/msg/string.hpp"
 #include "arm_api2_msgs/msg/cartesian_waypoints.hpp"
 #include "moveit_msgs/msg/collision_object.hpp"
 #include "shape_msgs/msg/solid_primitive.hpp"
@@ -155,6 +156,7 @@ class m2SimpleIface: public rclcpp::Node
 
         /* pubs */
         rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr       pose_state_pub_;
+        rclcpp::Publisher<std_msgs::msg::String>::SharedPtr                 robot_state_pub_;
 
         /* srvs */
         rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
@@ -186,6 +188,9 @@ class m2SimpleIface: public rclcpp::Node
 
         /* getters */
         void getArmState();  
+
+        /* publishers */
+        void publishRobotState();
 
         /* funcs */
         void execPlan(bool async); 
@@ -223,7 +228,7 @@ class m2SimpleIface: public rclcpp::Node
         bool recivCmd           = false; 
         bool recivTraj          = false; 
         bool servoEntered       = false; 
-        bool async              = false; 
+        bool async              = true; 
 
         /* ros vars */
         geometry_msgs::msg::PoseStamped m_currPoseCmd; 

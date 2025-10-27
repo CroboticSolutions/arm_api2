@@ -94,7 +94,9 @@ YAML::Node m2SimpleIface::init_config(std::string yaml_path)
 void m2SimpleIface::init_publishers()
 {   
     auto pose_state_name = config["topic"]["pub"]["current_pose"]["name"].as<std::string>(); 
-    pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(ns_ + pose_state_name, 1); 
+    auto robot_state_name = config["topic"]["pub"]["current_robot_state"]["name"].as<std::string>();
+    pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(ns_ + pose_state_name, 1);
+    robot_state_pub_ = this->create_publisher<std_msgs::msg::String>(ns_ + robot_state_name, 1);
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized publishers!");
 }
 
@@ -278,6 +280,7 @@ void m2SimpleIface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::Ch
     {
         int wantedIndex_ = std::distance(stateNames, itr); 
         robotState  = (state)wantedIndex_; 
+        publishRobotState();  // Publish the new state
         RCLCPP_INFO_STREAM(this->get_logger(), "Switching state!");
         res->success = true;  
     }else{
@@ -430,6 +433,13 @@ void m2SimpleIface::getArmState()
     m_currPoseState = utils::convertIsometryToMsg(currentPose_);
 }
 
+void m2SimpleIface::publishRobotState()
+{
+    std_msgs::msg::String state_msg;
+    state_msg.data = stateNames[robotState];
+    robot_state_pub_->publish(state_msg);
+}
+
 bool m2SimpleIface::run()
 {
     if(!nodeInit)       {RCLCPP_ERROR(this->get_logger(), "Node not fully initialized!"); return false;} 
@@ -437,6 +447,7 @@ bool m2SimpleIface::run()
 
     getArmState(); 
     pose_state_pub_->publish(m_currPoseState);
+    publishRobotState();  // Publish current robot state
 
     rclcpp::Clock steady_clock; 
     int LOG_STATE_TIMEOUT=10000; 
@@ -453,6 +464,7 @@ bool m2SimpleIface::run()
     // Check if servo active, to deactivate before sending to another pose 
     if (robotState != SERVO_CTL && servoEntered) {servoPtr->setPaused(true); servoEntered=false;} 
 
+    // TODO: Maybe check for the Cmd change should be preformed here? 
     if (robotState == JOINT_TRAJ_CTL)
     {
        if (recivCmd) {

@@ -74,6 +74,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
+#include "std_msgs/msg/string.hpp"
 #include "arm_api2_msgs/msg/cartesian_waypoints.hpp"
 #include "moveit_msgs/msg/collision_object.hpp"
 #include "shape_msgs/msg/solid_primitive.hpp"
@@ -241,6 +242,9 @@ class m2Iface: public rclcpp::Node
 
         /* getters */
         void getArmState();  
+
+        /* publishers */
+        void publishRobotState();
 
         /* funcs */
         void planAndExecJoint();

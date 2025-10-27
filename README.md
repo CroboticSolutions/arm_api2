@@ -433,7 +433,7 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 - [x] Add orientation normalization
 - [x] Add contributing
 - [x] Add gripper abstract class
-- [ ] Add correct inheritance for the gripper abstract class
+- [x] Add correct inheritance for the gripper abstract class
 - [x] Create universal launch file
 - [x] Create standardized joystick class
 - [x] Test on the real robot
@@ -441,6 +441,7 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 - [ ] Test on the real Franka 
 - [ ] Test on the real Kinova
 - [ ] Test on the real FANUC 
+- [ ] Fix breaking in the async mode 
 
 ### TODO [Low priority]:
 

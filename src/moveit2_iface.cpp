@@ -416,6 +416,7 @@ void m2Iface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeSt
     {
         int wantedIndex_ = std::distance(stateNames, itr); 
         robotState  = (state)wantedIndex_; 
+        publishRobotState();  // Publish the new state
         RCLCPP_INFO_STREAM(this->get_logger(), "Switching state!");
         res->success = true;  
     }else{
@@ -757,6 +758,13 @@ void m2Iface::getArmState()
     m_currPoseState.header.frame_id = frame_id;
 }
 
+void m2Iface::publishRobotState()
+{
+    std_msgs::msg::String state_msg;
+    state_msg.data = stateNames[robotState];
+    robot_state_pub_->publish(state_msg);
+}
+
 bool m2Iface::run()
 {
     if(!nodeInit)       {RCLCPP_ERROR(this->get_logger(), "Node not fully initialized!"); return false;} 
@@ -764,9 +772,7 @@ bool m2Iface::run()
 
     getArmState(); 
     pose_state_pub_->publish(m_currPoseState);
-    std_msgs::msg::String stateMsg;
-    stateMsg.data = stateNames[robotState];
-    robot_state_pub_->publish(stateMsg);
+    publishRobotState();  // Publish current robot state
 
     rclcpp::Clock steady_clock; 
     int LOG_STATE_TIMEOUT=10000; 
