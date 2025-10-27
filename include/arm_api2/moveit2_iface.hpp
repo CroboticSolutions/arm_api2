@@ -75,9 +75,12 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "arm_api2_msgs/msg/cartesian_waypoints.hpp"
+#include "moveit_msgs/msg/collision_object.hpp"
+#include "shape_msgs/msg/solid_primitive.hpp"
 
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
+#include "arm_api2_msgs/srv/add_collision_object.hpp"
 #include "arm_api2_msgs/srv/set_vel_acc.hpp"
 #include "arm_api2_msgs/srv/set_string_param.hpp"
 #include "control_msgs/action/gripper_command.hpp"
@@ -173,6 +176,7 @@ class m2Iface: public rclcpp::Node
         rclcpp::Service<arm_api2_msgs::srv::SetVelAcc>::SharedPtr                set_vel_acc_srv_;
         rclcpp::Service<arm_api2_msgs::srv::SetStringParam>::SharedPtr           set_eelink_srv_;
         rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr                      set_plan_only_srv_;
+        rclcpp::Service<arm_api2_msgs::srv::AddCollisionObject>::SharedPtr      add_collision_object_srv_;
 
         /* actions */
         rclcpp_action::Server<arm_api2_msgs::action::MoveJoint>::SharedPtr              move_to_joint_as_;
@@ -192,6 +196,8 @@ class m2Iface: public rclcpp::Node
                             const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Response> res);
         void set_plan_only_cb(const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
                                const std::shared_ptr<std_srvs::srv::SetBool::Response> res);
+        void add_collision_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Request> req,
+                                      const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Response> res);
 
         /* action callbacks */
         rclcpp_action::GoalResponse move_to_joint_goal_cb(
@@ -293,6 +299,7 @@ class m2Iface: public rclcpp::Node
         moveit::core::RobotModelPtr kinematic_model; 
         std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> m_pSceneMonitorPtr; 
         std::unique_ptr<moveit_servo::Servo> servoPtr; 
+        moveit::planning_interface::PlanningSceneInterfacePtr m_planningSceneInterface; 
 
 }; 
 

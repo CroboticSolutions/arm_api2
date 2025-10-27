@@ -124,6 +124,7 @@ void m2Iface::init_services()
     set_vel_acc_srv_        = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2Iface::set_vel_acc_cb, this, _1, _2));
     set_eelink_srv_         = this->create_service<arm_api2_msgs::srv::SetStringParam>(ns_ + set_eelink_name, std::bind(&m2Iface::set_eelink_cb, this, _1, _2));
     set_plan_only_srv_      = this->create_service<std_srvs::srv::SetBool>(ns_ + set_plan_only_name, std::bind(&m2Iface::set_plan_only_cb, this, _1, _2));
+    add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(ns_ + "add_collision_object", std::bind(&m2Iface::add_collision_object_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
@@ -167,6 +168,8 @@ void m2Iface::init_moveit()
     moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP, MOVE_GROUP_NS); 
     pSceneMonitorInit   = setPlanningSceneMonitor(node_, ROBOT_DESC);
     robotModelInit      = setRobotModel(node_);
+    m_planningSceneInterface = std::make_shared<moveit::planning_interface::PlanningSceneInterface>(MOVE_GROUP_NS);
+    RCLCPP_INFO(this->get_logger(), "PlanningSceneInterface initialized!");
 }
 
 // TODO: Try to replace with auto
@@ -218,6 +221,72 @@ void m2Iface::set_plan_only_cb(const std::shared_ptr<std_srvs::srv::SetBool::Req
     planOnly = req->data;
     res->success = true;
     RCLCPP_INFO_STREAM(this->get_logger(), "Set plan only to " << req->data);
+}
+
+void m2Iface::add_collision_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Request> req,
+                                       const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Response> res)
+{
+    RCLCPP_INFO(this->get_logger(), "Adding collision object: %s", req->id.c_str());
+
+    // Validate primitive type
+    if (req->primitive_type < 1 || req->primitive_type > 3) {
+        res->success = false;
+        res->message = "Invalid primitive type. Use 1 for BOX, 2 for SPHERE, 3 for CYLINDER";
+        RCLCPP_ERROR(this->get_logger(), "%s", res->message.c_str());
+        return;
+    }
+
+    // Validate dimensions based on primitive type
+    if (req->primitive_type == shape_msgs::msg::SolidPrimitive::BOX && req->dimensions.size() != 3) {
+        res->success = false;
+        res->message = "BOX requires 3 dimensions [x, y, z]";
+        RCLCPP_ERROR(this->get_logger(), "%s", res->message.c_str());
+        return;
+    }
+    if (req->primitive_type == shape_msgs::msg::SolidPrimitive::SPHERE && req->dimensions.size() != 1) {
+        res->success = false;
+        res->message = "SPHERE requires 1 dimension [radius]";
+        RCLCPP_ERROR(this->get_logger(), "%s", res->message.c_str());
+        return;
+    }
+    if (req->primitive_type == shape_msgs::msg::SolidPrimitive::CYLINDER && req->dimensions.size() != 2) {
+        res->success = false;
+        res->message = "CYLINDER requires 2 dimensions [height, radius]";
+        RCLCPP_ERROR(this->get_logger(), "%s", res->message.c_str());
+        return;
+    }
+
+    // Create collision object
+    moveit_msgs::msg::CollisionObject collision_object;
+    collision_object.header.frame_id = m_moveGroupPtr->getPlanningFrame();
+    collision_object.id = req->id;
+
+    // Define primitive shape
+    shape_msgs::msg::SolidPrimitive primitive;
+    primitive.type = req->primitive_type;
+    // Copy dimensions from vector to bounded vector
+    primitive.dimensions.clear();
+    for (const auto& dim : req->dimensions) {
+        primitive.dimensions.push_back(dim);
+    }
+
+    // Define pose
+    geometry_msgs::msg::Pose box_pose;
+    box_pose.position = req->position;
+    box_pose.orientation = req->orientation;
+
+    collision_object.primitives.push_back(primitive);
+    collision_object.primitive_poses.push_back(box_pose);
+    collision_object.operation = collision_object.ADD;
+
+    // Add to planning scene
+    std::vector<moveit_msgs::msg::CollisionObject> collision_objects;
+    collision_objects.push_back(collision_object);
+    m_planningSceneInterface->addCollisionObjects(collision_objects);
+
+    res->success = true;
+    res->message = "Collision object added successfully";
+    RCLCPP_INFO(this->get_logger(), "Collision object '%s' added to planning scene", req->id.c_str());
 }
 
 rclcpp_action::GoalResponse m2Iface::move_to_joint_goal_cb(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const arm_api2_msgs::action::MoveJoint::Goal> goal)

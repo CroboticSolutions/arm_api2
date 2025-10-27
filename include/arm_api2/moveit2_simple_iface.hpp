@@ -72,9 +72,12 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "arm_api2_msgs/msg/cartesian_waypoints.hpp"
+#include "moveit_msgs/msg/collision_object.hpp"
+#include "shape_msgs/msg/solid_primitive.hpp"
 
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
+#include "arm_api2_msgs/srv/add_collision_object.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
 // utils
@@ -156,7 +159,8 @@ class m2SimpleIface: public rclcpp::Node
         /* srvs */
         rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       open_gripper_srv_; 
-        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       close_gripper_srv_; 
+        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       close_gripper_srv_;
+        rclcpp::Service<arm_api2_msgs::srv::AddCollisionObject>::SharedPtr       add_collision_object_srv_; 
 
         /* topic callbacks */
         void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
@@ -169,7 +173,9 @@ class m2SimpleIface: public rclcpp::Node
         void open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
                              const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
         void close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
-                             const std::shared_ptr<std_srvs::srv::Trigger::Response> res); 
+                             const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
+        void add_collision_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Request> req,
+                                     const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Response> res); 
 
         bool run(); 
 
@@ -231,7 +237,8 @@ class m2SimpleIface: public rclcpp::Node
         moveit::planning_interface::MoveGroupInterfacePtr m_moveGroupPtr; 
         moveit::core::RobotStatePtr m_robotStatePtr;  
         moveit::core::RobotModelPtr kinematic_model; 
-        std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> m_pSceneMonitorPtr; 
+        std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> m_pSceneMonitorPtr;
+        moveit::planning_interface::PlanningSceneInterface m_planningSceneInterface;
         std::unique_ptr<moveit_servo::Servo> servoPtr; 
 
 }; 
