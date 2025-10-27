@@ -1,6 +1,6 @@
 robot: 
   arm_name: manipulator  
-  ee_link_name: tool0
+  ee_link_name: gripper_base
   robot_desc: robot_description
   move_group_ns: 
   planning_scene: planning_scene

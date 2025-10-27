@@ -117,6 +117,7 @@ void m2SimpleIface::init_services()
     change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2SimpleIface::change_state_cb, this, _1, _2)); 
     open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + open_gripper_name, std::bind(&m2SimpleIface::open_gripper_cb, this, _1, _2));
     close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + close_gripper_name, std::bind(&m2SimpleIface::close_gripper_cb, this, _1, _2));
+    add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(ns_ + "add_collision_object", std::bind(&m2SimpleIface::add_collision_object_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
@@ -185,6 +186,89 @@ void m2SimpleIface::close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigge
     gripper.close(); 
 }
 
+void m2SimpleIface::add_collision_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Request> req,
+                                            const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Response> res)
+{
+    RCLCPP_INFO(this->get_logger(), "Adding collision object to planning scene");
+    
+    // Create a collision object message
+    moveit_msgs::msg::CollisionObject collision_object;
+    collision_object.header.frame_id = PLANNING_FRAME;
+    collision_object.id = req->id;
+    
+    // Define primitive based on type
+    shape_msgs::msg::SolidPrimitive primitive;
+    primitive.type = req->primitive_type;
+    
+    // Set dimensions based on type
+    if (req->primitive_type == shape_msgs::msg::SolidPrimitive::BOX) {
+        if (req->dimensions.size() != 3) {
+            RCLCPP_ERROR(this->get_logger(), "BOX requires 3 dimensions [x, y, z]");
+            res->success = false;
+            res->message = "BOX requires 3 dimensions [x, y, z]";
+            return;
+        }
+        primitive.dimensions.resize(3);
+        primitive.dimensions[shape_msgs::msg::SolidPrimitive::BOX_X] = req->dimensions[0];
+        primitive.dimensions[shape_msgs::msg::SolidPrimitive::BOX_Y] = req->dimensions[1];
+        primitive.dimensions[shape_msgs::msg::SolidPrimitive::BOX_Z] = req->dimensions[2];
+    }
+    else if (req->primitive_type == shape_msgs::msg::SolidPrimitive::SPHERE) {
+        if (req->dimensions.size() != 1) {
+            RCLCPP_ERROR(this->get_logger(), "SPHERE requires 1 dimension [radius]");
+            res->success = false;
+            res->message = "SPHERE requires 1 dimension [radius]";
+            return;
+        }
+        primitive.dimensions.resize(1);
+        primitive.dimensions[shape_msgs::msg::SolidPrimitive::SPHERE_RADIUS] = req->dimensions[0];
+    }
+    else if (req->primitive_type == shape_msgs::msg::SolidPrimitive::CYLINDER) {
+        if (req->dimensions.size() != 2) {
+            RCLCPP_ERROR(this->get_logger(), "CYLINDER requires 2 dimensions [height, radius]");
+            res->success = false;
+            res->message = "CYLINDER requires 2 dimensions [height, radius]";
+            return;
+        }
+        primitive.dimensions.resize(2);
+        primitive.dimensions[shape_msgs::msg::SolidPrimitive::CYLINDER_HEIGHT] = req->dimensions[0];
+        primitive.dimensions[shape_msgs::msg::SolidPrimitive::CYLINDER_RADIUS] = req->dimensions[1];
+    }
+    else {
+        RCLCPP_ERROR(this->get_logger(), "Unsupported primitive type: %d", req->primitive_type);
+        res->success = false;
+        res->message = "Unsupported primitive type";
+        return;
+    }
+    
+    // Define pose of the object
+    geometry_msgs::msg::Pose object_pose;
+    object_pose.position = req->position;
+    object_pose.orientation = req->orientation;
+    
+    // If orientation is zero (default), set to identity
+    if (object_pose.orientation.w == 0.0 && 
+        object_pose.orientation.x == 0.0 && 
+        object_pose.orientation.y == 0.0 && 
+        object_pose.orientation.z == 0.0) {
+        object_pose.orientation.w = 1.0;
+    }
+    
+    collision_object.primitives.push_back(primitive);
+    collision_object.primitive_poses.push_back(object_pose);
+    collision_object.operation = collision_object.ADD;
+    
+    // Add the collision object to the scene
+    std::vector<moveit_msgs::msg::CollisionObject> collision_objects;
+    collision_objects.push_back(collision_object);
+    
+    m_planningSceneInterface.addCollisionObjects(collision_objects);
+    
+    RCLCPP_INFO(this->get_logger(), "Added collision object '%s' to planning scene", req->id.c_str());
+    res->success = true;
+    res->message = "Collision object added successfully";
+}
+
 void m2SimpleIface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
                                     const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res)
 {
@@ -241,6 +325,7 @@ bool m2SimpleIface::setRobotModel(rclcpp::Node::SharedPtr nodePtr)
     return true;
 }
 
+// TODO: Add service to add collision objects to the scene 
 bool m2SimpleIface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::string name)
 {
     // https://moveit.picknik.ai/main/doc/examples/planning_scene_ros_api/planning_scene_ros_api_tutorial.html
@@ -379,12 +464,12 @@ bool m2SimpleIface::run()
     if (robotState == CART_TRAJ_CTL)
     {   
         // TODO: Beware if both are true at the same time, shouldn't occur, 
-        if (recivCmd) {
+        if (recivCmd && !recivTraj) {
             planExecCartesian(async);
             recivCmd = false; 
         } 
 
-        if (recivTraj){
+        if (recivTraj && !recivCmd){
             execCartesian(async);
             recivTraj = false; 
         }
