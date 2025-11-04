@@ -71,6 +71,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
+#include "std_msgs/msg/string.hpp"
 #include "arm_api2_msgs/msg/cartesian_waypoints.hpp"
 #include "moveit_msgs/msg/collision_object.hpp"
 #include "shape_msgs/msg/solid_primitive.hpp"
@@ -112,6 +113,9 @@ class m2SimpleIface: public rclcpp::Node
         rclcpp::Node::SharedPtr node_;
         rclcpp::Executor::SharedPtr executor_;
         std::thread executor_thread_;
+        
+        /* Thread safety */
+        std::mutex pose_cmd_mutex_;
 
         /* gripper */
         RobotiqGripper gripper; 
@@ -155,6 +159,7 @@ class m2SimpleIface: public rclcpp::Node
 
         /* pubs */
         rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr       pose_state_pub_;
+        rclcpp::Publisher<std_msgs::msg::String>::SharedPtr                 robot_state_pub_;
 
         /* srvs */
         rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
@@ -223,7 +228,8 @@ class m2SimpleIface: public rclcpp::Node
         bool recivCmd           = false; 
         bool recivTraj          = false; 
         bool servoEntered       = false; 
-        bool async              = false; 
+        bool async              = true; 
+        bool asyncExecuting     = false;
 
         /* ros vars */
         geometry_msgs::msg::PoseStamped m_currPoseCmd; 
@@ -231,8 +237,11 @@ class m2SimpleIface: public rclcpp::Node
         geometry_msgs::msg::PoseStamped m_oldPoseCmd; 
         geometry_msgs::msg::PoseStamped m_currPoseState;
         sensor_msgs::msg::JointState    m_currJointState;  
-        std::vector<geometry_msgs::msg::Pose> m_cartesianWaypoints; 
+        std::vector<geometry_msgs::msg::Pose> m_cartesianWaypoints;
         
+        // Store plan and trajectory for async execution to prevent premature destruction
+        std::shared_ptr<moveit::planning_interface::MoveGroupInterface::Plan> m_async_plan_ptr;
+        std::shared_ptr<moveit_msgs::msg::RobotTrajectory> m_async_trajectory_ptr;
 
         moveit::planning_interface::MoveGroupInterfacePtr m_moveGroupPtr; 
         moveit::core::RobotStatePtr m_robotStatePtr;  

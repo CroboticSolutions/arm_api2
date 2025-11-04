@@ -35,7 +35,7 @@ topic:
       name: arm/state/current_pose
       queue: 1
     current_robot_state:
-      name: arm/state/current_state
+      name: arm/state/ctl_state
       queue: 1
 srv:
   disable_collision:

@@ -59,7 +59,8 @@ def launch_setup(context, *args, **kwargs):
 
     launch_nodes_ = []
     arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
-    arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))   
+    arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))
+    arg_use_gdb         = context.perform_substitution(LaunchConfiguration('use_gdb', default=False))
 
     # TODO: Swap between sim and real arg depending on the robot type
     robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
@@ -84,7 +85,12 @@ def launch_setup(context, *args, **kwargs):
     # Load kinematic params
     kinematic_params = load_yaml("arm_api2", kinematics_yaml)
 
-    launch_move_group = Node(
+    # Configure GDB prefix if debugging is enabled
+    prefix_cmd = []
+    if arg_use_gdb.lower() == 'true':
+        prefix_cmd =['xterm -e gdb -ex run --args']
+
+    launch_arm_api2 = Node(
         package='arm_api2',
         executable='moveit2_simple_iface',
         parameters=[{"use_sim_time": use_sim_time},
@@ -92,10 +98,12 @@ def launch_setup(context, *args, **kwargs):
                     {"dt": dt},
                     {"config_path": config_path},
                     kinematic_params,
-                    servo_params,]
+                    servo_params,],
+        prefix=prefix_cmd,
+        output='screen'
     )
 
-    launch_nodes_.append(launch_move_group)
+    launch_nodes_.append(launch_arm_api2)
 
     if arg_launch_joy: 
 
@@ -147,6 +155,12 @@ def generate_launch_description():
         DeclareLaunchArgument(name='use_sim_time', 
                               default_value='false', 
                               description='use simulation time')
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(name='use_gdb',
+                              default_value='false',
+                              description='Run node with GDB debugger')
     )
 
     return LaunchDescription(declared_arguments + [OpaqueFunction(function=launch_setup)])

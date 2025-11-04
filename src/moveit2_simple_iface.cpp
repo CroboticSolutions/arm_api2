@@ -95,6 +95,8 @@ void m2SimpleIface::init_publishers()
 {   
     auto pose_state_name = config["topic"]["pub"]["current_pose"]["name"].as<std::string>(); 
     pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(ns_ + pose_state_name, 1); 
+    auto current_robot_state_name = config["topic"]["pub"]["current_robot_state"]["name"].as<std::string>(); 
+    robot_state_pub_ = this->create_publisher<std_msgs::msg::String>(ns_ + current_robot_state_name, 1);
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized publishers!");
 }
 
@@ -153,6 +155,10 @@ std::unique_ptr<moveit_servo::Servo> m2SimpleIface::init_servo()
 
 void m2SimpleIface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
+   
+    // Thread-safe access to m_currPoseCmd
+    std::lock_guard<std::mutex> lock(pose_cmd_mutex_);
+    
     // hardcode this to planning frame to check if it works like that? 
     m_currPoseCmd.header.frame_id = PLANNING_FRAME; 
     m_currPoseCmd.pose = msg->pose;
@@ -162,6 +168,7 @@ void m2SimpleIface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr
 
 void m2SimpleIface::cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::SharedPtr msg)
 {
+    // TODO: Maybe implement same check for as the pose_cmd
     m_cartesianWaypoints = msg->poses; 
     recivTraj = true; 
 }
@@ -354,14 +361,25 @@ bool m2SimpleIface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std
 
 void m2SimpleIface::execMove(bool async=false)
 {   
-    m_currPoseCmd = utils::normalizeOrientation(m_currPoseCmd); 
+    // Thread-safe copy of commanded pose
+    geometry_msgs::msg::PoseStamped cmdPose_;
+    {
+        std::lock_guard<std::mutex> lock(pose_cmd_mutex_);
+        cmdPose_ = m_currPoseCmd;
+    }
+    
+    geometry_msgs::msg::PoseStamped cmdPose = utils::normalizeOrientation(cmdPose_); 
     m_moveGroupPtr->clearPoseTargets(); 
-    m_moveGroupPtr->setPoseTarget(m_currPoseCmd.pose, EE_LINK_NAME); 
-    geometry_msgs::msg::PoseStamped poseTarget; 
-    poseTarget = m_moveGroupPtr->getPoseTarget(); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << poseTarget.pose.position.x << " " << poseTarget.pose.position.y << " " << poseTarget.pose.position.z); 
+    m_moveGroupPtr->setPoseTarget(cmdPose.pose, EE_LINK_NAME); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << cmdPose.pose.position.x << " " << cmdPose.pose.position.y << " " << cmdPose.pose.position.z); 
     execPlan(async); 
-    m_oldPoseCmd = m_currPoseCmd; 
+    
+    // Thread-safe update of old pose
+    {
+        std::lock_guard<std::mutex> lock(pose_cmd_mutex_);
+        m_oldPoseCmd = cmdPose_;
+    }
+    
     RCLCPP_INFO_STREAM(this->get_logger(), "Executing commanded path!"); 
 
 }
@@ -372,8 +390,14 @@ void m2SimpleIface::execPlan(bool async=false)
     bool success = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
     
     if (success) {
-        if (async) {m_moveGroupPtr->asyncExecute(plan);}
-        else {m_moveGroupPtr->execute(plan);};  
+        if (async) {
+            // Store plan as member variable to keep it alive during async execution
+            m_async_plan_ptr = std::make_shared<moveit::planning_interface::MoveGroupInterface::Plan>(plan);
+            m_moveGroupPtr->asyncExecute(m_async_plan_ptr->trajectory_);
+        }
+        else {
+            m_moveGroupPtr->execute(plan);
+        }
     }else {
         RCLCPP_ERROR(this->get_logger(), "Planning failed!"); 
     }
@@ -409,25 +433,43 @@ void m2SimpleIface::execCartesian(bool async=false)
 
 void m2SimpleIface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async=false)
 {
-    if (async) {m_moveGroupPtr->asyncExecute(trajectory);}
-    else{m_moveGroupPtr->execute(trajectory);}; 
+    if (async) {
+        // Store trajectory as member variable to keep it alive during async execution
+        m_async_trajectory_ptr = std::make_shared<moveit_msgs::msg::RobotTrajectory>(trajectory);
+        m_moveGroupPtr->asyncExecute(*m_async_trajectory_ptr);
+        RCLCPP_INFO_STREAM(this->get_logger(), "Executing trajectory asynchronously!");
+    }
+    else{
+        m_moveGroupPtr->execute(trajectory);
+    }
 }
 
 void m2SimpleIface::getArmState() 
 {   
+    if (!m_robotStatePtr) {
+        RCLCPP_WARN(this->get_logger(), "Robot state pointer is null!");
+        return;
+    }
+    
     const moveit::core::JointModelGroup* joint_model_group = m_robotStatePtr->getJointModelGroup(PLANNING_GROUP);
     const std::vector<std::string>& joint_names = m_robotStatePtr->getVariableNames();
     std::vector<double> joint_values;
     m_robotStatePtr->copyJointGroupPositions(joint_model_group, joint_values);
-    // get current ee pose
-    m_currPoseState = m_moveGroupPtr->getCurrentPose(EE_LINK_NAME); 
-    // current_state_monitor
-    m_robotStatePtr = m_moveGroupPtr->getCurrentState();
+    
+    // Get current state with timeout to prevent blocking
+    m_robotStatePtr = m_moveGroupPtr->getCurrentState(0.1); // 100ms timeout
+    if (!m_robotStatePtr) {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Failed to get current state");
+        return;
+    }
+    
     // by default timeout is 10 secs
     m_robotStatePtr->update();
     
-    Eigen::Isometry3d currentPose_ = m_moveGroupPtr->getCurrentState()->getFrameTransform(EE_LINK_NAME);
+    Eigen::Isometry3d currentPose_ = m_robotStatePtr->getFrameTransform(EE_LINK_NAME);
     m_currPoseState = utils::convertIsometryToMsg(currentPose_);
+    m_currPoseState.header.stamp = this->now();
+    m_currPoseState.header.frame_id = PLANNING_FRAME;
 }
 
 bool m2SimpleIface::run()
@@ -437,6 +479,7 @@ bool m2SimpleIface::run()
 
     getArmState(); 
     pose_state_pub_->publish(m_currPoseState);
+    robot_state_pub_->publish(utils::stateToMsg(robotState));
 
     rclcpp::Clock steady_clock; 
     int LOG_STATE_TIMEOUT=10000; 
@@ -457,7 +500,7 @@ bool m2SimpleIface::run()
     {
        if (recivCmd) {
            execMove(async);
-           recivCmd = false; 
+           recivCmd = false;
        } 
     }
 
@@ -466,12 +509,13 @@ bool m2SimpleIface::run()
         // TODO: Beware if both are true at the same time, shouldn't occur, 
         if (recivCmd && !recivTraj) {
             planExecCartesian(async);
-            recivCmd = false; 
         } 
 
-        if (recivTraj && !recivCmd){
+        if (recivTraj && !recivCmd && !asyncExecuting){
+            if (async) asyncExecuting = true;
             execCartesian(async);
-            recivTraj = false; 
+            recivTraj = false;
+            if (!async) asyncExecuting = false;
         }
     }
 
