@@ -78,6 +78,7 @@
 
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
+#include "arm_api2_msgs/srv/set_vel_acc.hpp"
 #include "arm_api2_msgs/srv/add_collision_object.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
@@ -138,6 +139,8 @@ class m2SimpleIface: public rclcpp::Node
         std::string                                                         config_path; 
         bool                                                                enable_servo; 
         float                                                               dt; 
+        float                                                               max_vel_scaling_factor;
+        float                                                               max_acc_scaling_factor;
         
         /* config_file */
         YAML::Node config; 
@@ -163,6 +166,7 @@ class m2SimpleIface: public rclcpp::Node
 
         /* srvs */
         rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
+        rclcpp::Service<arm_api2_msgs::srv::SetVelAcc>::SharedPtr                set_vel_acc_srv_;
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       open_gripper_srv_; 
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       close_gripper_srv_;
         rclcpp::Service<arm_api2_msgs::srv::AddCollisionObject>::SharedPtr       add_collision_object_srv_; 
@@ -175,6 +179,8 @@ class m2SimpleIface: public rclcpp::Node
         /* srv callbacks*/
         void change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
                              const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res);
+        void set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req, 
+                            const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res);
         void open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
                              const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
         void close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 

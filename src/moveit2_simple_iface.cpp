@@ -68,6 +68,8 @@ m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
     MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
     NUM_CART_PTS        = config["robot"]["num_cart_pts"].as<int>(); 
     JOINT_STATES        = config["robot"]["joint_states"].as<std::string>(); 
+    max_vel_scaling_factor = config["robot"]["max_vel_scaling_factor"].as<float>();
+    max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
     
     // Currently not used :) [ns]
     ns_ = this->get_namespace(); 	
@@ -114,9 +116,11 @@ void m2SimpleIface::init_subscribers()
 void m2SimpleIface::init_services()
 {
     auto change_state_name = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
+    auto set_vel_acc_name  = config["srv"]["set_vel_acc"]["name"].as<std::string>();
     auto open_gripper_name = config["srv"]["open_gripper"]["name"].as<std::string>(); 
     auto close_gripper_name= config["srv"]["close_gripper"]["name"].as<std::string>();
     change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2SimpleIface::change_state_cb, this, _1, _2)); 
+    set_vel_acc_srv_  = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2SimpleIface::set_vel_acc_cb, this, _1, _2));
     open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + open_gripper_name, std::bind(&m2SimpleIface::open_gripper_cb, this, _1, _2));
     close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + close_gripper_name, std::bind(&m2SimpleIface::close_gripper_cb, this, _1, _2));
     add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(ns_ + "add_collision_object", std::bind(&m2SimpleIface::add_collision_object_cb, this, _1, _2));
@@ -188,6 +192,21 @@ void m2SimpleIface::close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigge
                                      const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
 {
     gripper.close(); 
+}
+
+void m2SimpleIface::set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req, 
+                                   const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res)
+{
+    if(req->max_vel < 0 || req->max_acc < 0 || req->max_vel > 1 || req->max_acc > 1)
+    {
+        res->success = false;
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Velocity and acceleration must be in the range [0, 1]!");
+        return;
+    }
+    max_vel_scaling_factor = float(req->max_vel);
+    max_acc_scaling_factor = float(req->max_acc);
+    res->success = true;
+    RCLCPP_INFO_STREAM(this->get_logger(), "Set velocity and acceleration to " << max_vel_scaling_factor << " " << max_acc_scaling_factor);
 }
 
 void m2SimpleIface::add_collision_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Request> req,
@@ -376,6 +395,9 @@ void m2SimpleIface::execMove(bool async=false)
 
 void m2SimpleIface::execPlan(bool async=false)
 {
+    m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
+    m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
+    
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     bool success = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
     
@@ -401,6 +423,9 @@ void m2SimpleIface::execPlan(bool async=false)
 
 void m2SimpleIface::planExecCartesian(bool async=false)
 {   
+    m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
+    m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
+    
     // TODO: Move this method to utils.cpp
     std::vector<geometry_msgs::msg::Pose> cartesianWaypoints = utils::createCartesianWaypoints(m_currPoseState.pose, m_currPoseCmd.pose, NUM_CART_PTS); 
     // TODO: create Cartesian plan, use as first point currentPose 4 now, and as end point use targetPoint 
@@ -416,6 +441,9 @@ void m2SimpleIface::planExecCartesian(bool async=false)
 
 void m2SimpleIface::execCartesian(bool async=false)
 {   
+    m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
+    m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
+    
     // TODO: create Cartesian plan, use as first point currentPose 4 now, and as end point use targetPoint 
     moveit_msgs::msg::RobotTrajectory trajectory;
     // TODO: Set as params that can be configured in YAML!
