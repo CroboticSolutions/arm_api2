@@ -156,9 +156,6 @@ std::unique_ptr<moveit_servo::Servo> m2SimpleIface::init_servo()
 void m2SimpleIface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
    
-    // Thread-safe access to m_currPoseCmd
-    std::lock_guard<std::mutex> lock(pose_cmd_mutex_);
-    
     // hardcode this to planning frame to check if it works like that? 
     m_currPoseCmd.header.frame_id = PLANNING_FRAME; 
     m_currPoseCmd.pose = msg->pose;
@@ -361,17 +358,10 @@ bool m2SimpleIface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std
 
 void m2SimpleIface::execMove(bool async=false)
 {   
-    // Thread-safe copy of commanded pose
-    geometry_msgs::msg::PoseStamped cmdPose_;
-    {
-        std::lock_guard<std::mutex> lock(pose_cmd_mutex_);
-        cmdPose_ = m_currPoseCmd;
-    }
-    
-    geometry_msgs::msg::PoseStamped cmdPose = utils::normalizeOrientation(cmdPose_); 
+    geometry_msgs::msg::PoseStamped cmdPose_ = utils::normalizeOrientation(m_currPoseCmd);    
     m_moveGroupPtr->clearPoseTargets(); 
-    m_moveGroupPtr->setPoseTarget(cmdPose.pose, EE_LINK_NAME); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << cmdPose.pose.position.x << " " << cmdPose.pose.position.y << " " << cmdPose.pose.position.z); 
+    m_moveGroupPtr->setPoseTarget(cmdPose_.pose, EE_LINK_NAME); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << cmdPose_.pose.position.x << " " << cmdPose_.pose.position.y << " " << cmdPose_.pose.position.z); 
     execPlan(async); 
     
     // Thread-safe update of old pose
@@ -393,7 +383,13 @@ void m2SimpleIface::execPlan(bool async=false)
         if (async) {
             // Store plan as member variable to keep it alive during async execution
             m_async_plan_ptr = std::make_shared<moveit::planning_interface::MoveGroupInterface::Plan>(plan);
-            m_moveGroupPtr->asyncExecute(m_async_plan_ptr->trajectory_);
+            // Make a shared_ptr copy of the trajectory to ensure it stays alive
+            auto trajectory_copy = std::make_shared<moveit_msgs::msg::RobotTrajectory>(m_async_plan_ptr->trajectory_);
+            RCLCPP_INFO(this->get_logger(), "Starting async execution, plan at: %p, trajectory at: %p", 
+                        static_cast<void*>(m_async_plan_ptr.get()), static_cast<void*>(trajectory_copy.get()));
+            m_moveGroupPtr->asyncExecute(*trajectory_copy);
+            // Keep trajectory_copy alive by storing it
+            m_async_trajectory_ptr = trajectory_copy;
         }
         else {
             m_moveGroupPtr->execute(plan);
@@ -436,6 +432,7 @@ void m2SimpleIface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory,
     if (async) {
         // Store trajectory as member variable to keep it alive during async execution
         m_async_trajectory_ptr = std::make_shared<moveit_msgs::msg::RobotTrajectory>(trajectory);
+        RCLCPP_INFO(this->get_logger(), "Starting async trajectory execution, storing at: %p", static_cast<void*>(m_async_trajectory_ptr.get()));
         m_moveGroupPtr->asyncExecute(*m_async_trajectory_ptr);
         RCLCPP_INFO_STREAM(this->get_logger(), "Executing trajectory asynchronously!");
     }
@@ -452,7 +449,6 @@ void m2SimpleIface::getArmState()
     }
     
     const moveit::core::JointModelGroup* joint_model_group = m_robotStatePtr->getJointModelGroup(PLANNING_GROUP);
-    const std::vector<std::string>& joint_names = m_robotStatePtr->getVariableNames();
     std::vector<double> joint_values;
     m_robotStatePtr->copyJointGroupPositions(joint_model_group, joint_values);
     
@@ -501,21 +497,20 @@ bool m2SimpleIface::run()
        if (recivCmd) {
            execMove(async);
            recivCmd = false;
-       } 
+       }
     }
 
     if (robotState == CART_TRAJ_CTL)
     {   
         // TODO: Beware if both are true at the same time, shouldn't occur, 
-        if (recivCmd && !recivTraj) {
+        if (recivCmd) {
             planExecCartesian(async);
-        } 
+            recivCmd = false;
+        }
 
-        if (recivTraj && !recivCmd && !asyncExecuting){
-            if (async) asyncExecuting = true;
+        if (recivTraj) {
             execCartesian(async);
             recivTraj = false;
-            if (!async) asyncExecuting = false;
         }
     }
 

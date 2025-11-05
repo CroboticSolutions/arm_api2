@@ -229,7 +229,6 @@ class m2SimpleIface: public rclcpp::Node
         bool recivTraj          = false; 
         bool servoEntered       = false; 
         bool async              = true; 
-        bool asyncExecuting     = false;
 
         /* ros vars */
         geometry_msgs::msg::PoseStamped m_currPoseCmd; 
