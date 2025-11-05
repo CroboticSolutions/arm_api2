@@ -117,10 +117,12 @@ void m2SimpleIface::init_services()
 {
     auto change_state_name = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
     auto set_vel_acc_name  = config["srv"]["set_vel_acc"]["name"].as<std::string>();
+    auto set_planner_name  = config["srv"]["set_planner"]["name"].as<std::string>();
     auto open_gripper_name = config["srv"]["open_gripper"]["name"].as<std::string>(); 
     auto close_gripper_name= config["srv"]["close_gripper"]["name"].as<std::string>();
     change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2SimpleIface::change_state_cb, this, _1, _2)); 
     set_vel_acc_srv_  = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2SimpleIface::set_vel_acc_cb, this, _1, _2));
+    set_planner_srv_  = this->create_service<arm_api2_msgs::srv::SetStringParam>(ns_ + set_planner_name, std::bind(&m2SimpleIface::set_planner_cb, this, _1, _2));
     open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + open_gripper_name, std::bind(&m2SimpleIface::open_gripper_cb, this, _1, _2));
     close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + close_gripper_name, std::bind(&m2SimpleIface::close_gripper_cb, this, _1, _2));
     add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(ns_ + "add_collision_object", std::bind(&m2SimpleIface::add_collision_object_cb, this, _1, _2));
@@ -207,6 +209,59 @@ void m2SimpleIface::set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::Set
     max_acc_scaling_factor = float(req->max_acc);
     res->success = true;
     RCLCPP_INFO_STREAM(this->get_logger(), "Set velocity and acceleration to " << max_vel_scaling_factor << " " << max_acc_scaling_factor);
+}
+
+void m2SimpleIface::set_planner_cb(const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Request> req,
+                                   const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Response> res)
+{
+    std::string planner_string = req->value;
+    
+    // Parse the planner string (format: "planner_id_type", e.g., "pilz_LIN", "ompl_RRT")
+    size_t underscore_pos = planner_string.find('_');
+    if (underscore_pos == std::string::npos)
+    {
+        res->success = false;
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Invalid planner format. Expected 'planner_type' (e.g., 'pilz_LIN', 'ompl_RRT')");
+        return;
+    }
+    
+    std::string planner_prefix = planner_string.substr(0, underscore_pos);
+    std::string planner_type = planner_string.substr(underscore_pos + 1);
+    
+    // Map short names to full planner IDs
+    std::string planner_id;
+    if (planner_prefix == "pilz")
+    {
+        planner_id = "pilz_industrial_motion_planner";
+    }
+    else if (planner_prefix == "ompl")
+    {
+        planner_id = "ompl";
+    }
+    else
+    {
+        res->success = false;
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Unknown planner: " << planner_prefix << ". Supported: 'pilz', 'ompl'");
+        return;
+    }
+    
+    // Set the planner
+    try
+    {
+        m_moveGroupPtr->setPlanningPipelineId(planner_id);
+        m_moveGroupPtr->setPlannerId(planner_type);
+        
+        current_planner_id_ = planner_id;
+        current_planner_type_ = planner_type;
+        
+        res->success = true;
+        RCLCPP_INFO_STREAM(this->get_logger(), "Successfully set planner to: " << planner_id << " / " << planner_type);
+    }
+    catch (const std::exception& e)
+    {
+        res->success = false;
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to set planner: " << e.what());
+    }
 }
 
 void m2SimpleIface::add_collision_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Request> req,

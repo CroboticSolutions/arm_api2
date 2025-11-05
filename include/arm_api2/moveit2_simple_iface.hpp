@@ -66,6 +66,8 @@
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
+#include <moveit/planning_interface/planning_interface.h>
+#include <pluginlib/class_loader.hpp>
 
 //* msgs
 #include "geometry_msgs/msg/pose_stamped.hpp"
@@ -79,6 +81,7 @@
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
 #include "arm_api2_msgs/srv/set_vel_acc.hpp"
+#include "arm_api2_msgs/srv/set_string_param.hpp"
 #include "arm_api2_msgs/srv/add_collision_object.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
@@ -167,10 +170,10 @@ class m2SimpleIface: public rclcpp::Node
         /* srvs */
         rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
         rclcpp::Service<arm_api2_msgs::srv::SetVelAcc>::SharedPtr                set_vel_acc_srv_;
+        rclcpp::Service<arm_api2_msgs::srv::SetStringParam>::SharedPtr           set_planner_srv_;
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       open_gripper_srv_; 
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       close_gripper_srv_;
-        rclcpp::Service<arm_api2_msgs::srv::AddCollisionObject>::SharedPtr       add_collision_object_srv_; 
-
+        rclcpp::Service<arm_api2_msgs::srv::AddCollisionObject>::SharedPtr       add_collision_object_srv_;
         /* topic callbacks */
         void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
         void cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::SharedPtr msg); 
@@ -181,13 +184,14 @@ class m2SimpleIface: public rclcpp::Node
                              const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res);
         void set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req, 
                             const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res);
+        void set_planner_cb(const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Request> req,
+                            const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Response> res);
         void open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
                              const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
         void close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
                              const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
         void add_collision_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Request> req,
-                                     const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Response> res); 
-
+                                     const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Response> res);
         bool run(); 
 
         /* setters */
@@ -235,6 +239,10 @@ class m2SimpleIface: public rclcpp::Node
         bool recivTraj          = false; 
         bool servoEntered       = false; 
         bool async              = true; 
+
+        /* planner info */
+        std::string current_planner_id_ = "pilz_industrial_motion_planner";
+        std::string current_planner_type_ = "LIN";
 
         /* ros vars */
         geometry_msgs::msg::PoseStamped m_currPoseCmd; 
