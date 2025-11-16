@@ -151,3 +151,17 @@ geometry_msgs::msg::PoseStamped utils::convertIsometryToMsg(Eigen::Isometry3d po
     p.pose.orientation.w = q.w(); 
     return p; 
 }
+
+std_msgs::msg::String utils::stateToMsg(int state)
+{
+    const char* stateNames[4] = {"IDLE", "JOINT_TRAJ_CTL", "CART_TRAJ_CTL", "SERVO_CTL"};
+    std_msgs::msg::String msg;
+    
+    if (state >= 0 && state < 4) {
+        msg.data = stateNames[state];
+    } else {
+        msg.data = "UNKNOWN";
+    }
+    
+    return msg;
+}

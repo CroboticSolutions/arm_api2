@@ -50,6 +50,7 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
+#include "std_msgs/msg/string.hpp"
 
 namespace utils {
 
@@ -58,7 +59,8 @@ namespace utils {
     bool                                            comparePose                 (geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2);
     std::vector<geometry_msgs::msg::Pose>           createCartesianWaypoints    (geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2, int n); 
     geometry_msgs::msg::PoseStamped                 normalizeOrientation        (geometry_msgs::msg::PoseStamped p);
-    geometry_msgs::msg::PoseStamped                 convertIsometryToMsg       (Eigen::Isometry3d pose);
+    geometry_msgs::msg::PoseStamped                 convertIsometryToMsg        (Eigen::Isometry3d pose);
+    std_msgs::msg::String                           stateToMsg                  (int state);
 
 } // namespace utils
 

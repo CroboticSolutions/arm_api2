@@ -69,6 +69,8 @@
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
 #include <moveit/trajectory_processing/iterative_time_parameterization.h>
+#include <moveit/planning_interface/planning_interface.h>
+#include <pluginlib/class_loader.hpp>
 
 //* msgs
 #include "geometry_msgs/msg/pose_stamped.hpp"
@@ -150,9 +152,12 @@ class m2Iface: public rclcpp::Node
         float                                                               max_vel_scaling_factor;
         float                                                               max_acc_scaling_factor;
         
+        /* planner info */
+        std::string current_planner_id_ = "pilz_industrial_motion_planner";
+        std::string current_planner_type_ = "LIN";
+        
         /* config_file */
-        YAML::Node config; 
-
+        YAML::Node config;
         /*config*/
         YAML::Node init_config(std::string yaml_path);
 
@@ -174,6 +179,7 @@ class m2Iface: public rclcpp::Node
         /* srvs */
         rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
         rclcpp::Service<arm_api2_msgs::srv::SetVelAcc>::SharedPtr                set_vel_acc_srv_;
+        rclcpp::Service<arm_api2_msgs::srv::SetStringParam>::SharedPtr           set_planner_srv_;
         rclcpp::Service<arm_api2_msgs::srv::SetStringParam>::SharedPtr           set_eelink_srv_;
         rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr                      set_plan_only_srv_;
         rclcpp::Service<arm_api2_msgs::srv::AddCollisionObject>::SharedPtr      add_collision_object_srv_;
@@ -192,6 +198,8 @@ class m2Iface: public rclcpp::Node
                              const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res);
         void set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req,
                              const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res);
+        void set_planner_cb(const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Request> req,
+                            const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Response> res);
         void set_eelink_cb(const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Request> req,
                             const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Response> res);
         void set_plan_only_cb(const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
