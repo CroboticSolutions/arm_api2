@@ -61,7 +61,7 @@ ament_target_dependencies(
 
 # Install moveit2_simple_iface
 install(TARGETS 
-  moveit2_iface
+  moveit2_simple_iface
   DESTINATION lib/${PROJECT_NAME})
 
 # Install launch directory
