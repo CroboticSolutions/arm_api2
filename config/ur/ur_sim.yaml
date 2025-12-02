@@ -24,6 +24,12 @@ topic:
     cmd_delta_pose:
       name: arm/cmd/delta_pose
       queue: 1
+    cmd_pose:
+      name: arm/cmd/pose
+      queue: 1
+    cmd_traj:
+      name: arm/cmd/traj
+      queue: 1
     joint_states:
       name: joint_states
       queue: 1
