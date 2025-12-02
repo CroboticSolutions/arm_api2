@@ -12,11 +12,17 @@ robot:
   with_planner: true
 topic:
   sub:
+    cmd_pose:
+      name: arm/cmd/pose
+      queue: 1
+    cmd_traj:
+      name: arm/cmd/traj
+      queue: 1
     cmd_tool_orientation:
       name: tool/cmd/orient
       queue: 1
     cmd_delta_pose:
-      name: arm/cmd/deta_pose
+      name: arm/cmd/delta_pose
       queue: 1
     joint_states:
       name: joint_states
@@ -29,7 +35,7 @@ topic:
       name: arm/state/current_pose
       queue: 1
     current_robot_state:
-      name: arm/state/current_state
+      name: arm/state/ctl_state
       queue: 1
 srv:
   disable_collision:
@@ -40,10 +46,16 @@ srv:
     name: arm/change_state
   set_vel_acc:
     name: arm/set_vel_acc
+  set_planner:
+    name: arm/set_planner
   set_eelink:
     name: arm/set_eelink
   set_planonly:
     name: arm/set_planonly
+  open_gripper: 
+    name: arm/open_gripper
+  close_gripper:
+    name: arm/close_gripper
 action:
   move_to_pose:
     name: arm/move_to_pose
@@ -53,4 +65,3 @@ action:
     name: arm/move_to_pose_path
   gripper_control:
     name: arm/gripper_control
-
