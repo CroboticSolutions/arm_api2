@@ -1,0 +1,6 @@
+# Servo configuration for SO-ARM100
+use_gazebo: false
+status_topic: /servo_status
+command_in_topic: /servo_cmd
+command_out_topic: /joint_trajectory_controller/joint_trajectory
+drift_dimensions: [false, false, false, false, false, false]
