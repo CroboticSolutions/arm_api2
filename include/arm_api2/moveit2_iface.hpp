@@ -1,3 +1,4 @@
+#define DISABLE_MOVEIT_SERVO 1
 
 /*******************************************************************************
 *
@@ -59,8 +60,12 @@
 #include "tf2/LinearMath/Matrix3x3.h"
 
 //* moveit
+#ifndef DISABLE_MOVEIT_SERVO
 #include <moveit_servo/servo.h>
+#endif
+#ifndef DISABLE_MOVEIT_SERVO
 #include <moveit_servo/servo_parameters.h>
+#endif
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <moveit/planning_scene/planning_scene.h>
@@ -68,7 +73,7 @@
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
-#include <moveit/trajectory_processing/iterative_time_parameterization.h>
+#include <moveit/trajectory_processing/time_optimal_trajectory_generation.hpp>
 #include <moveit/planning_interface/planning_interface.h>
 #include <pluginlib/class_loader.hpp>
 
@@ -167,7 +172,9 @@ class m2Iface: public rclcpp::Node
         void init_services();
         void init_actionservers();
         void init_moveit(); 
-        std::unique_ptr<moveit_servo::Servo> init_servo(); 
+        #ifndef DISABLE_MOVEIT_SERVO
+        std::unique_ptr<moveit_servo::Servo> init_servo();
+        #endif
         
         /* subs */
         rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr           joint_state_sub_;
@@ -303,10 +310,12 @@ class m2Iface: public rclcpp::Node
         
 
         moveit::planning_interface::MoveGroupInterfacePtr m_moveGroupPtr; 
+        moveit::core::RobotModelPtr kinematic_model;
         moveit::core::RobotStatePtr m_robotStatePtr;  
-        moveit::core::RobotModelPtr kinematic_model; 
+        #ifndef DISABLE_MOVEIT_SERVO
+        std::unique_ptr<moveit_servo::Servo> servoPtr;
+        #endif
         std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> m_pSceneMonitorPtr; 
-        std::unique_ptr<moveit_servo::Servo> servoPtr; 
         moveit::planning_interface::PlanningSceneInterfacePtr m_planningSceneInterface; 
 
 }; 

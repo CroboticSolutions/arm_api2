@@ -1,3 +1,4 @@
+#define DISABLE_MOVEIT_SERVO 1
 /*******************************************************************************
  * BSD 3-Clause License
  *
@@ -77,7 +78,9 @@ m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
     init_subscribers(); 
     init_services(); 
     init_moveit(); 
-    if (enable_servo) {servoPtr = init_servo();}; 
+    #ifndef DISABLE_MOVEIT_SERVO
+    if (enable_servo) {servoPtr = init_servo();};
+    #endif
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized node!"); 
 
@@ -143,6 +146,7 @@ void m2SimpleIface::init_moveit()
 }
 
 // TODO: Try to replace with auto
+#ifndef DISABLE_MOVEIT_SERVO
 std::unique_ptr<moveit_servo::Servo> m2SimpleIface::init_servo()
 {   
     auto nodeParameters = node_->get_node_parameters_interface(); 
@@ -159,6 +163,7 @@ std::unique_ptr<moveit_servo::Servo> m2SimpleIface::init_servo()
     return servo;
 }
 
+#endif
 void m2SimpleIface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
    
@@ -461,7 +466,7 @@ void m2SimpleIface::execPlan(bool async=false)
             // Store plan as member variable to keep it alive during async execution
             m_async_plan_ptr = std::make_shared<moveit::planning_interface::MoveGroupInterface::Plan>(plan);
             // Make a shared_ptr copy of the trajectory to ensure it stays alive
-            auto trajectory_copy = std::make_shared<moveit_msgs::msg::RobotTrajectory>(m_async_plan_ptr->trajectory_);
+            auto trajectory_copy = std::make_shared<moveit_msgs::msg::RobotTrajectory>(m_async_plan_ptr->trajectory);
             RCLCPP_INFO(this->get_logger(), "Starting async execution, plan at: %p, trajectory at: %p", 
                         static_cast<void*>(m_async_plan_ptr.get()), static_cast<void*>(trajectory_copy.get()));
             m_moveGroupPtr->asyncExecute(*trajectory_copy);
@@ -573,7 +578,9 @@ bool m2SimpleIface::run()
     }
 
     // Check if servo active, to deactivate before sending to another pose 
-    if (robotState != SERVO_CTL && servoEntered) {servoPtr->setPaused(true); servoEntered=false;} 
+    #ifndef DISABLE_MOVEIT_SERVO
+    if (robotState != SERVO_CTL && servoEntered) {servoPtr->setPaused(true); servoEntered=false;}
+    #endif
 
     if (robotState == JOINT_TRAJ_CTL)
     {
@@ -597,6 +604,7 @@ bool m2SimpleIface::run()
         }
     }
 
+#ifndef DISABLE_MOVEIT_SERVO
     if (robotState == SERVO_CTL)
     {   
         if (!servoEntered)
@@ -607,6 +615,7 @@ bool m2SimpleIface::run()
         }
     }
 
+#endif
     return true;     
 }
 

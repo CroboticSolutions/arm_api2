@@ -1,3 +1,5 @@
+#define DISABLE_CONTROL_MSGS_ACTION 1
+#define DISABLE_MOVEIT_SERVO 1
 /*******************************************************************************
  * BSD 3-Clause License
  *
@@ -84,7 +86,9 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     init_services(); 
     init_moveit(); 
     init_actionservers();
-    if (enable_servo) {servoPtr = init_servo();}; 
+    #ifndef DISABLE_MOVEIT_SERVO
+    if (enable_servo) {servoPtr = init_servo();};
+    #endif
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized node!"); 
 
@@ -173,6 +177,7 @@ void m2Iface::init_moveit()
     m_planningSceneInterface = std::make_shared<moveit::planning_interface::PlanningSceneInterface>(MOVE_GROUP_NS);
     RCLCPP_INFO(this->get_logger(), "PlanningSceneInterface initialized!");
 }
+#ifndef DISABLE_MOVEIT_SERVO
 
 // TODO: Try to replace with auto
 std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()
@@ -187,6 +192,7 @@ std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()
     return servo;
 }
 
+#endif
 void m2Iface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg)
 {   
     std::vector<std::string> jointNames = msg->name;
@@ -572,8 +578,8 @@ void m2Iface::planAndExecJoint()
         m_moveToJointGoalHandle_->succeed(result);
     }
     else if (success) {
-        //addTimestampsToTrajectory(plan.trajectory_);
-        //printTimestamps(plan.trajectory_);
+        //addTimestampsToTrajectory(plan.trajectory);
+        //printTimestamps(plan.trajectory);
 
         feedback->set__status("executing");
         m_moveToJointGoalHandle_->publish_feedback(feedback);
@@ -624,8 +630,8 @@ void m2Iface::planAndExecPose()
         m_moveToPoseGoalHandle_->succeed(result);
     }
     else if(success){
-        //addTimestampsToTrajectory(plan.trajectory_);
-        //printTimestamps(plan.trajectory_);
+        //addTimestampsToTrajectory(plan.trajectory);
+        //printTimestamps(plan.trajectory);
 
         feedback->set__status("executing");
         m_moveToPoseGoalHandle_->publish_feedback(feedback);
@@ -637,7 +643,7 @@ void m2Iface::planAndExecPose()
         }
         else{
             RCLCPP_ERROR_STREAM(this->get_logger(), "Execution failed with error code, time stamps:");
-            printTimestamps(plan.trajectory_);
+            printTimestamps(plan.trajectory);
             result->success = false;
             m_moveToPoseGoalHandle_->abort(result); 
         }
@@ -719,8 +725,8 @@ void m2Iface::addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory &traje
     robot_trajectory::RobotTrajectory rt(m_moveGroupPtr->getCurrentState()->getRobotModel(), PLANNING_GROUP);
     // Second get a RobotTrajectory from trajectory
     rt.setRobotTrajectoryMsg(*m_moveGroupPtr->getCurrentState(), trajectory);
-    // Thrid create a IterativeParabolicTimeParameterization object
-    trajectory_processing::IterativeParabolicTimeParameterization iptp;
+    // Thrid create a TimeOptimalTrajectoryGeneration object
+    trajectory_processing::TimeOptimalTrajectoryGeneration iptp;
     // Fourth compute computeTimeStamps
     bool success = iptp.computeTimeStamps(rt, max_vel_scaling_factor, max_acc_scaling_factor);
     RCLCPP_INFO_STREAM(this->get_logger(), "Computed time stamp " << (success ? "SUCCEEDED" : "FAILED"));
@@ -759,7 +765,7 @@ bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Pl
 
         if(success){
             RCLCPP_INFO(this->get_logger(), "%s found plan %d with %d points", 
-                planners[planner_index].second.c_str(), i, int(plan.trajectory_.joint_trajectory.points.size()));
+                planners[planner_index].second.c_str(), i, int(plan.trajectory.joint_trajectory.points.size()));
             if (eagerExecution) // if eager execution is true, return after first successful plan
             {   // Set local planned path as the plan to be executed
                 plan = plan_; 
@@ -787,11 +793,11 @@ bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Pl
 
     // find the best plan from the list of plans
     auto best_plan = std::min_element(all_plans.begin(), all_plans.end(), [](auto const& a, auto const& b){
-        return a.trajectory_.joint_trajectory.points.size() < b.trajectory_.joint_trajectory.points.size();
+        return a.trajectory.joint_trajectory.points.size() < b.trajectory.joint_trajectory.points.size();
     });
 
     plan = *best_plan;
-    RCLCPP_INFO(this->get_logger(), "Best plan selected with %d points.", int(best_plan->trajectory_.joint_trajectory.points.size()));
+    RCLCPP_INFO(this->get_logger(), "Best plan selected with %d points.", int(best_plan->trajectory.joint_trajectory.points.size()));
     return true;
 }
 
@@ -836,7 +842,9 @@ bool m2Iface::run()
     }
 
     // Check if servo active, to deactivate before sending to another pose 
-    if (robotState != SERVO_CTL && servoEntered) {servoPtr->setPaused(true); servoEntered=false;} 
+    #ifndef DISABLE_MOVEIT_SERVO
+    if (robotState != SERVO_CTL && servoEntered) {servoPtr->setPaused(true); servoEntered=false;}
+    #endif
 
     if (robotState == JOINT_TRAJ_CTL)
     {
@@ -860,6 +868,7 @@ bool m2Iface::run()
         }
     }
 
+#ifndef DISABLE_MOVEIT_SERVO
     if (robotState == SERVO_CTL)
     {   
         if (!servoEntered)
@@ -870,8 +879,10 @@ bool m2Iface::run()
         }
     }
 
+#ifndef DISABLE_CONTROL_MSGS_ACTION
     if(recivGripperCmd){
     
+#endif
         auto goal = m_gripperControlGoalHandle_->get_goal();
         float position = goal->command.position;
         float effort = goal->command.max_effort;
@@ -895,6 +906,7 @@ bool m2Iface::run()
         }
         recivGripperCmd = false;
     }
+#endif
 
     return true;     
 }
