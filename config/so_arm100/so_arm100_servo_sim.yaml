@@ -1,0 +1,57 @@
+###############################################
+# SO-ARM100 Servo Configuration for arm_api2
+###############################################
+
+use_gazebo: false
+is_primary_planning_scene_monitor: false
+
+## Properties of outgoing commands
+publish_period: 0.05  # 20Hz
+low_latency_mode: false
+publish_joint_positions: true
+publish_joint_velocities: true
+publish_joint_accelerations: false
+
+## Plugins for smoothing outgoing commands
+use_smoothing: false
+
+## MoveIt properties
+move_group_name: manipulator
+planning_frame: base
+ee_frame_name: wrist_2_link
+robot_link_command_frame: wrist_2_link
+
+## Incoming command settings
+command_in_type: unitless  # unitless or speed_units
+scale:
+  linear: 0.3    # Max Cartesian linear velocity (m/s)
+  rotational: 0.5  # Max Cartesian angular velocity (rad/s)
+  joint: 0.5  # Max joint velocity scaling factor
+
+## Command handling
+incoming_command_timeout: 0.25  # Timeout for incoming commands (s)
+command_out_type: trajectory_msgs/JointTrajectory
+
+## Joint limits
+override_velocity_scaling_factor: 0.0  # 0 = use MoveIt limits
+
+## Collision checking
+check_collisions: true
+collision_check_rate: 10.0  # Hz
+self_collision_proximity_threshold: 0.01
+scene_collision_proximity_threshold: 0.02
+collision_distance_safety_factor: 1000.0
+collision_check_type: threshold_distance
+
+## Singularity handling
+lower_singularity_threshold: 30.0
+hard_stop_singularity_threshold: 60.0
+leaving_singularity_threshold_multiplier: 2.0
+
+## Joint position limits margin
+joint_limit_margins: [0.01, 0.01, 0.01, 0.01, 0.01]
+
+## Topic/service configuration
+status_topic: ~/status
+command_out_topic: /joint_trajectory_controller/joint_trajectory
+joint_topic: /joint_states

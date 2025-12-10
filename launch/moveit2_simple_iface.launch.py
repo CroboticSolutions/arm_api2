@@ -44,6 +44,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription, LaunchContext
 from launch.actions import OpaqueFunction, DeclareLaunchArgument, IncludeLaunchDescription
 from launch_ros.actions import Node
+from launch_ros.descriptions import ParameterFile
 from launch_param_builder import ParameterBuilder
 from launch.substitutions import LaunchConfiguration
 
@@ -51,7 +52,7 @@ import yaml
 import os
 
 # TODO: Make this changeable without ERROR for wrong param type
-use_sim_time = True
+use_sim_time = False
 use_servo = True
 dt = 0.1
 
@@ -61,10 +62,12 @@ def launch_setup(context, *args, **kwargs):
     arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
     arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))
     arg_use_gdb         = context.perform_substitution(LaunchConfiguration('use_gdb', default=False))
+    arg_params_file     = context.perform_substitution(LaunchConfiguration('params_file'))
+
 
     # TODO: Swap between sim and real arg depending on the robot type
-    robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
-    servo_yaml = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
+    robot_yaml = "{0}/{1}_config.yaml".format(arg_robot_name, arg_robot_name)
+    servo_yaml = "{0}/{1}_servo_config.yaml".format(arg_robot_name, arg_robot_name)
     kinematics_yaml = "config/{0}/{1}_kinematics.yaml".format(arg_robot_name, arg_robot_name)
     
     # Arm params (ctl, servo) --> sent just as path
@@ -85,6 +88,10 @@ def launch_setup(context, *args, **kwargs):
     # Load kinematic params
     kinematic_params = load_yaml("arm_api2", kinematics_yaml)
 
+    extra_params = []
+    if arg_params_file:
+        extra_params.append(ParameterFile(arg_params_file, allow_substs=True))
+
     # Configure GDB prefix if debugging is enabled
     prefix_cmd = []
     if arg_use_gdb.lower() == 'true':
@@ -93,12 +100,12 @@ def launch_setup(context, *args, **kwargs):
     launch_arm_api2 = Node(
         package='arm_api2',
         executable='moveit2_simple_iface',
-        parameters=[{"use_sim_time": use_sim_time},
+        parameters=[{"use_sim_time": LaunchConfiguration('use_sim_time')},
                     {"enable_servo": use_servo},
                     {"dt": dt},
                     {"config_path": config_path},
                     kinematic_params,
-                    servo_params,],
+                    servo_params] + extra_params,
         prefix=prefix_cmd,
         output='screen'
     )
@@ -121,7 +128,7 @@ def launch_setup(context, *args, **kwargs):
             package="arm_api2", 
             executable="joy_ctl", 
             output="screen", 
-            parameters = [{"use_sim_time": use_sim_time}]
+            parameters = [{"use_sim_time": LaunchConfiguration('use_sim_time')}]
         )
 
         launch_nodes_.append(joy_ctl_node)
@@ -161,6 +168,12 @@ def generate_launch_description():
         DeclareLaunchArgument(name='use_gdb',
                               default_value='false',
                               description='Run node with GDB debugger')
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(name='params_file',
+                              default_value='',
+                              description='Optional params file (e.g., move_group dump with robot_description[_semantic])')
     )
 
     return LaunchDescription(declared_arguments + [OpaqueFunction(function=launch_setup)])

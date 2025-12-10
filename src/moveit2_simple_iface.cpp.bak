@@ -77,7 +77,7 @@ m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
     init_subscribers(); 
     init_services(); 
     init_moveit(); 
-    // SERVO DISABLED: if (enable_servo) {servoPtr = init_servo();}; 
+    if (enable_servo) {servoPtr = init_servo();}; 
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized node!"); 
 
@@ -143,22 +143,22 @@ void m2SimpleIface::init_moveit()
 }
 
 // TODO: Try to replace with auto
-// SERVO DISABLED: std::unique_ptr<moveit_servo::Servo> m2SimpleIface::init_servo()
-// SERVO DISABLED: {   
-// SERVO DISABLED:     auto nodeParameters = node_->get_node_parameters_interface(); 
-// SERVO DISABLED:     auto servoParams = moveit_servo::ServoParameters::makeServoParameters(node_); 
-// SERVO DISABLED:     RCLCPP_INFO_STREAM(this->get_logger(), "ee_frame_name: " << servoParams->ee_frame_name);  
-// SERVO DISABLED:     servoParams->get("moveit_servo", nodeParameters);
-// SERVO DISABLED: 
-// SERVO DISABLED: 
-// SERVO DISABLED:     //auto servoParamsPtr = std::make_shared<moveit_servo::ServoParameters>(std::move(servoParams));
-// SERVO DISABLED:     //auto servo_parameters = moveit_servo::ServoParameters::makeServoParameters(node_); 
-// SERVO DISABLED:     // Servo parameters need to bee constSharedPtr
-// SERVO DISABLED:     auto servo = std::make_unique<moveit_servo::Servo>(node_, servoParams, m_pSceneMonitorPtr); 
-// SERVO DISABLED:     RCLCPP_INFO(this->get_logger(), "Servo initialized!"); 
-// SERVO DISABLED:     return servo;
-// SERVO DISABLED: }
-// SERVO DISABLED: 
+std::unique_ptr<moveit_servo::Servo> m2SimpleIface::init_servo()
+{   
+    auto nodeParameters = node_->get_node_parameters_interface(); 
+    auto servoParams = moveit_servo::ServoParameters::makeServoParameters(node_); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "ee_frame_name: " << servoParams->ee_frame_name);  
+    servoParams->get("moveit_servo", nodeParameters);
+
+
+    //auto servoParamsPtr = std::make_shared<moveit_servo::ServoParameters>(std::move(servoParams));
+    //auto servo_parameters = moveit_servo::ServoParameters::makeServoParameters(node_); 
+    // Servo parameters need to bee constSharedPtr
+    auto servo = std::make_unique<moveit_servo::Servo>(node_, servoParams, m_pSceneMonitorPtr); 
+    RCLCPP_INFO(this->get_logger(), "Servo initialized!"); 
+    return servo;
+}
+
 void m2SimpleIface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
    
@@ -461,7 +461,7 @@ void m2SimpleIface::execPlan(bool async=false)
             // Store plan as member variable to keep it alive during async execution
             m_async_plan_ptr = std::make_shared<moveit::planning_interface::MoveGroupInterface::Plan>(plan);
             // Make a shared_ptr copy of the trajectory to ensure it stays alive
-            auto trajectory_copy = std::make_shared<moveit_msgs::msg::RobotTrajectory>(m_async_plan_ptr->trajectory);
+            auto trajectory_copy = std::make_shared<moveit_msgs::msg::RobotTrajectory>(m_async_plan_ptr->trajectory_);
             RCLCPP_INFO(this->get_logger(), "Starting async execution, plan at: %p, trajectory at: %p", 
                         static_cast<void*>(m_async_plan_ptr.get()), static_cast<void*>(trajectory_copy.get()));
             m_moveGroupPtr->asyncExecute(*trajectory_copy);
@@ -573,7 +573,7 @@ bool m2SimpleIface::run()
     }
 
     // Check if servo active, to deactivate before sending to another pose 
-// SERVO DISABLED:     if (robotState != SERVO_CTL && servoEntered) {servoPtr->setPaused(true); servoEntered=false;} 
+    if (robotState != SERVO_CTL && servoEntered) {servoPtr->setPaused(true); servoEntered=false;} 
 
     if (robotState == JOINT_TRAJ_CTL)
     {
@@ -597,14 +597,16 @@ bool m2SimpleIface::run()
         }
     }
 
-// SERVO DISABLED:     if (robotState == SERVO_CTL)
-// SERVO DISABLED:     {   
-// SERVO DISABLED:         if (!servoEntered)
-// SERVO DISABLED:         {   
-// SERVO DISABLED:             // Moveit servo status codes: https://github.com/moveit/moveit2/blob/main/moveit_ros/moveit_servo/include/moveit_servo/utils/datatypes.hpp
-// SERVO DISABLED:             servoPtr->start(); 
-// SERVO DISABLED:             servoEntered = true; 
-// SERVO DISABLED:         }
+    if (robotState == SERVO_CTL)
+    {   
+        if (!servoEntered)
+        {   
+            // Moveit servo status codes: https://github.com/moveit/moveit2/blob/main/moveit_ros/moveit_servo/include/moveit_servo/utils/datatypes.hpp
+            servoPtr->start(); 
+            servoEntered = true; 
+        }
+    }
+
     return true;     
 }
 

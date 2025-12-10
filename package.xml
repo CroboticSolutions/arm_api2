@@ -12,7 +12,7 @@
   <buildtool_depend>rosidl_default_generators</buildtool_depend>
 
   <depend>moveit_ros_planning_interface</depend>
-  <depend>moveit_ros</depend>
+  <depend>moveit_ros_planning</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_action</depend>
   <depend>rclcpp_components</depend>
@@ -20,7 +20,6 @@
   <depend>std_msgs</depend>
   <depend>moveit_visual_tools</depend>
   <depend>arm_api2_msgs</depend>
-  <depend>moveit_servo</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>control_msgs</depend>

@@ -57,8 +57,6 @@
 #include "tf2/LinearMath/Matrix3x3.h"
 
 //* moveit
-#include <moveit_servo/servo.h>
-#include <moveit_servo/servo_parameters.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <moveit/planning_scene/planning_scene.h>
@@ -156,7 +154,7 @@ class m2SimpleIface: public rclcpp::Node
         void init_publishers(); 
         void init_services(); 
         void init_moveit(); 
-        std::unique_ptr<moveit_servo::Servo> init_servo(); 
+        // SERVO DISABLED: std::unique_ptr<moveit_servo::Servo> init_servo(); 
         
         /* subs */
         rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr        pose_cmd_sub_;
@@ -261,7 +259,7 @@ class m2SimpleIface: public rclcpp::Node
         moveit::core::RobotModelPtr kinematic_model; 
         std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> m_pSceneMonitorPtr;
         moveit::planning_interface::PlanningSceneInterface m_planningSceneInterface;
-        std::unique_ptr<moveit_servo::Servo> servoPtr; 
+        // SERVO DISABLED: std::unique_ptr<moveit_servo::Servo> servoPtr; 
 
 }; 
 
