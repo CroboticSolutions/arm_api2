@@ -3,28 +3,6 @@
  #
  # Copyright (c) 2024, Crobotic Solutions d.o.o.
  # All rights reserved.
- #
- # Redistribution and use in source and binary forms, with or without
- # modification, are permitted provided that the following conditions are met:
- #
- # * Redistributions of source code must retain the above copyright notice, this
- #   list of conditions and the following disclaimer.
- #
- # * Redistributions in binary form must reproduce the above copyright notice,
- #   this list of conditions and the following disclaimer in the documentation
- #   and/or other materials provided with the distribution.
- #
- # * Neither the name of the copyright holder nor the names of its
- #   contributors may be used to endorse or promote products derived from
- #   this software without specific prior written permission.Need document name?RTICULAR PURPOSE
- # ARE
- # DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- # FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- # DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- # SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ######################################################################
 
  #      Title       : moveit2_iface.launch.py
@@ -48,8 +26,15 @@ import os
 
 # TODO: Make this changeable without ERROR for wrong param type
 use_sim_time = True
-use_servo = True
+use_servo = False
 dt = 0.1
+
+def get_moveit_configs(robot_name):
+    """Load MoveIt configs for supported robots."""
+    if robot_name == "so_arm100":
+        from so_arm100_description.launch_utils import MoveItConfigs
+        return MoveItConfigs().to_dict()
+    return {}
 
 def launch_setup(context, *args, **kwargs):
 
@@ -57,6 +42,7 @@ def launch_setup(context, *args, **kwargs):
     arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
     arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))
     arg_launch_servo_watchdog = context.perform_substitution(LaunchConfiguration('launch_servo_watchdog', default=True))
+    arg_use_sim_time    = context.perform_substitution(LaunchConfiguration('use_sim_time', default='false'))
     print("arg_launch_joy: ", arg_launch_joy)   
 
     # TODO: Swap between sim and real arg depending on the robot type
@@ -65,7 +51,6 @@ def launch_setup(context, *args, **kwargs):
     kinematics_yaml = "config/{0}/{1}_kinematics.yaml".format(arg_robot_name, arg_robot_name)
     
     # Arm params (ctl, servo) --> sent just as path
-    # 3 different ways of loading and using yaml files, DISGUSTING [FIX ASAP]
     config_path = os.path.join(
         get_package_share_directory('arm_api2'),
         "config",
@@ -73,31 +58,52 @@ def launch_setup(context, *args, **kwargs):
     )
 
     # Servo params created with the help of ParameterBuilder
-    servo_params = {
-        "moveit_servo": ParameterBuilder("arm_api2") 
-        .yaml(f"config/{servo_yaml}")
-        .to_dict()
-    }
+    servo_params = {}
+    try:
+        servo_params = {
+            "moveit_servo": ParameterBuilder("arm_api2") 
+            .yaml(f"config/{servo_yaml}")
+            .to_dict()
+        }
+    except Exception as e:
+        print(f"Warning: Could not load servo params: {e}")
     
     # Load kinematic params
-    kinematic_params = load_yaml("arm_api2", kinematics_yaml)
+    kinematic_params = load_yaml("arm_api2", kinematics_yaml) or {}
+
+    # Load MoveIt configs for the robot (robot_description, robot_description_semantic, etc.)
+    moveit_configs = get_moveit_configs(arg_robot_name)
+
+    # Build parameter list
+    node_params = [
+        {"use_sim_time": arg_use_sim_time.lower() == 'true'},
+        {"enable_servo": use_servo},
+        {"dt": dt},
+        {"config_path": config_path},
+    ]
+    
+    # Add MoveIt configs if available
+    if moveit_configs:
+        node_params.append(moveit_configs)
+    
+    # Add kinematic params if available
+    if kinematic_params:
+        node_params.append(kinematic_params)
+    
+    # Add servo params if available
+    if servo_params:
+        node_params.append(servo_params)
 
     launch_move_group = Node(
         package='arm_api2',
         executable='moveit2_iface',
-        #prefix=['gdbserver localhost:3000'], # Used for debugging
-        parameters=[{"use_sim_time": use_sim_time},
-                    {"enable_servo": use_servo},
-                    {"dt": dt},
-                    {"config_path": config_path},
-                    kinematic_params,
-                    servo_params,]
+        output='screen',
+        parameters=node_params
     )
 
     launch_nodes_.append(launch_move_group)
     
-    if str(arg_launch_joy).lower() == "true": # To avoid pkg not found 
-        # https://index.ros.org/p/joy/ --> joy node as joystick (Create subscriber that takes cmd_vel)
+    if str(arg_launch_joy).lower() == "true":
         joy_node = Node(
             package='joy', 
             executable="joy_node", 
@@ -116,7 +122,6 @@ def launch_setup(context, *args, **kwargs):
 
     return launch_nodes_
 
-#https://answers.ros.org/question/396345/ros2-launch-file-how-to-convert-launchargument-to-string/
 def generate_launch_description(): 
 
     declared_arguments = []
@@ -126,16 +131,15 @@ def generate_launch_description():
                               default_value='kinova',
                               description='robot name')
     )
-    # TODO: THIS IS NOT CONVERTED TO FALSE WHEN SETUP! FIX IT!
     declared_arguments.append(
         DeclareLaunchArgument(name='launch_joy', 
-                              default_value='true', 
+                              default_value='false', 
                               description='launch joystick')
     )
     
     declared_arguments.append(
         DeclareLaunchArgument(name='launch_servo_watchdog', 
-                              default_value='true', 
+                              default_value='false', 
                               description='launch servo_watchdog node')
     )
 
@@ -155,19 +159,13 @@ def generate_launch_description():
 
 
 def load_yaml(package_name: str, file_path: str):
-    """
-    Load yaml configuration based on package name and file path relative to its share.
-    """
-
+    """Load yaml configuration based on package name and file path relative to its share."""
     package_path = get_package_share_directory(package_name)
     absolute_file_path = os.path.join(package_path, file_path)
     return parse_yaml(absolute_file_path)
 
 def parse_yaml(absolute_file_path: str):
-    """
-    Parse yaml from file, given its absolute file path.
-    """
-
+    """Parse yaml from file, given its absolute file path."""
     try:
         with open(absolute_file_path, "r") as file:
             return yaml.safe_load(file)

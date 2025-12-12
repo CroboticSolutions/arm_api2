@@ -1,0 +1,51 @@
+###############################################
+# Servo parameters for SO-ARM100
+###############################################
+
+publish_period: 0.05
+low_latency_mode: false
+
+command_in_type: "speed_units"
+scale:
+  linear: 0.4
+  rotational: 0.8
+  joint: 0.5
+
+command_out_type: trajectory_msgs/JointTrajectory
+
+publish_joint_positions: true
+publish_joint_velocities: true
+publish_joint_accelerations: false
+
+use_smoothing: true
+smoothing_filter_plugin_name: "online_signal_smoothing::ButterworthFilterPlugin"
+
+is_primary_planning_scene_monitor: false
+check_octomap_collisions: false
+
+move_group_name: manipulator
+planning_frame: base
+
+ee_frame_name: wrist_2_link
+robot_link_command_frame: base
+
+incoming_command_timeout: 0.25
+num_outgoing_halt_msgs_to_publish: 1
+
+lower_singularity_threshold: 20.0
+hard_stop_singularity_threshold: 50.0
+joint_limit_margin: 0.087267
+
+cartesian_command_in_topic: ~/delta_twist_cmds
+joint_command_in_topic: ~/delta_joint_cmds
+joint_topic: /joint_states
+status_topic: ~/status
+command_out_topic: /so_arm100_controller/joint_trajectory
+
+check_collisions: true
+collision_check_rate: 10.0
+collision_check_type: threshold_distance
+self_collision_proximity_threshold: 0.03
+scene_collision_proximity_threshold: 0.05
+collision_distance_safety_factor: 10.0
+min_allowable_collision_distance: 0.025

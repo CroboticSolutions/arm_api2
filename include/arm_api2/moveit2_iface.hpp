@@ -59,17 +59,17 @@
 #include "tf2/LinearMath/Matrix3x3.h"
 
 //* moveit
-#include <moveit_servo/servo.h>
-#include <moveit_servo/servo_parameters.h>
-#include <moveit/move_group_interface/move_group_interface.h>
-#include <moveit/planning_scene_monitor/planning_scene_monitor.h>
-#include <moveit/planning_scene/planning_scene.h>
-#include <moveit/planning_scene_interface/planning_scene_interface.h>
-#include <moveit/robot_model_loader/robot_model_loader.h>
-#include <moveit/robot_model/robot_model.h>
-#include <moveit/robot_state/robot_state.h>
-#include <moveit/trajectory_processing/iterative_time_parameterization.h>
-#include <moveit/planning_interface/planning_interface.h>
+#include <moveit_servo/servo.hpp>
+#include <moveit_servo/moveit_servo_lib_parameters.hpp>
+#include <moveit/move_group_interface/move_group_interface.hpp>
+#include <moveit/planning_scene_monitor/planning_scene_monitor.hpp>
+#include <moveit/planning_scene/planning_scene.hpp>
+#include <moveit/planning_scene_interface/planning_scene_interface.hpp>
+#include <moveit/robot_model_loader/robot_model_loader.hpp>
+#include <moveit/robot_model/robot_model.hpp>
+#include <moveit/robot_state/robot_state.hpp>
+#include <moveit/trajectory_processing/time_optimal_trajectory_generation.hpp>
+#include <moveit/planning_interface/planning_interface.hpp>
 #include <pluginlib/class_loader.hpp>
 
 //* msgs
@@ -306,6 +306,7 @@ class m2Iface: public rclcpp::Node
         moveit::core::RobotStatePtr m_robotStatePtr;  
         moveit::core::RobotModelPtr kinematic_model; 
         std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> m_pSceneMonitorPtr; 
+        std::shared_ptr<servo::ParamListener> servo_param_listener_;
         std::unique_ptr<moveit_servo::Servo> servoPtr; 
         moveit::planning_interface::PlanningSceneInterfacePtr m_planningSceneInterface; 
 

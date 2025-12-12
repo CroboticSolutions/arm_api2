@@ -175,14 +175,15 @@ void m2Iface::init_moveit()
 }
 
 // TODO: Try to replace with auto
+// TODO: Try to replace with auto
 std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()
 {   
-    auto nodeParameters = node_->get_node_parameters_interface(); 
-    auto servoParams = moveit_servo::ServoParameters::makeServoParameters(node_); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "ee_frame_name: " << servoParams->ee_frame_name);  
-    servoParams->get("moveit_servo", nodeParameters);
+    // New Jazzy API - use ParamListener instead of ServoParameters
+    servo_param_listener_ = std::make_shared<servo::ParamListener>(node_);
+    auto servo_params = servo_param_listener_->get_params();
+    RCLCPP_INFO_STREAM(this->get_logger(), "Servo move_group_name: " << servo_params.move_group_name);  
 
-    auto servo = std::make_unique<moveit_servo::Servo>(node_, servoParams, m_pSceneMonitorPtr); 
+    auto servo = std::make_unique<moveit_servo::Servo>(node_, servo_param_listener_, m_pSceneMonitorPtr); 
     RCLCPP_INFO(this->get_logger(), "Servo initialized!"); 
     return servo;
 }
@@ -572,8 +573,8 @@ void m2Iface::planAndExecJoint()
         m_moveToJointGoalHandle_->succeed(result);
     }
     else if (success) {
-        //addTimestampsToTrajectory(plan.trajectory_);
-        //printTimestamps(plan.trajectory_);
+        //addTimestampsToTrajectory(plan.trajectory);
+        //printTimestamps(plan.trajectory);
 
         feedback->set__status("executing");
         m_moveToJointGoalHandle_->publish_feedback(feedback);
@@ -624,8 +625,8 @@ void m2Iface::planAndExecPose()
         m_moveToPoseGoalHandle_->succeed(result);
     }
     else if(success){
-        //addTimestampsToTrajectory(plan.trajectory_);
-        //printTimestamps(plan.trajectory_);
+        //addTimestampsToTrajectory(plan.trajectory);
+        //printTimestamps(plan.trajectory);
 
         feedback->set__status("executing");
         m_moveToPoseGoalHandle_->publish_feedback(feedback);
@@ -637,7 +638,7 @@ void m2Iface::planAndExecPose()
         }
         else{
             RCLCPP_ERROR_STREAM(this->get_logger(), "Execution failed with error code, time stamps:");
-            printTimestamps(plan.trajectory_);
+            printTimestamps(plan.trajectory);
             result->success = false;
             m_moveToPoseGoalHandle_->abort(result); 
         }
@@ -719,8 +720,8 @@ void m2Iface::addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory &traje
     robot_trajectory::RobotTrajectory rt(m_moveGroupPtr->getCurrentState()->getRobotModel(), PLANNING_GROUP);
     // Second get a RobotTrajectory from trajectory
     rt.setRobotTrajectoryMsg(*m_moveGroupPtr->getCurrentState(), trajectory);
-    // Thrid create a IterativeParabolicTimeParameterization object
-    trajectory_processing::IterativeParabolicTimeParameterization iptp;
+    // Thrid create a TimeOptimalTrajectoryGeneration object
+    trajectory_processing::TimeOptimalTrajectoryGeneration iptp;
     // Fourth compute computeTimeStamps
     bool success = iptp.computeTimeStamps(rt, max_vel_scaling_factor, max_acc_scaling_factor);
     RCLCPP_INFO_STREAM(this->get_logger(), "Computed time stamp " << (success ? "SUCCEEDED" : "FAILED"));
@@ -759,7 +760,7 @@ bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Pl
 
         if(success){
             RCLCPP_INFO(this->get_logger(), "%s found plan %d with %d points", 
-                planners[planner_index].second.c_str(), i, int(plan.trajectory_.joint_trajectory.points.size()));
+                planners[planner_index].second.c_str(), i, int(plan.trajectory.joint_trajectory.points.size()));
             if (eagerExecution) // if eager execution is true, return after first successful plan
             {   // Set local planned path as the plan to be executed
                 plan = plan_; 
@@ -787,11 +788,11 @@ bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Pl
 
     // find the best plan from the list of plans
     auto best_plan = std::min_element(all_plans.begin(), all_plans.end(), [](auto const& a, auto const& b){
-        return a.trajectory_.joint_trajectory.points.size() < b.trajectory_.joint_trajectory.points.size();
+        return a.trajectory.joint_trajectory.points.size() < b.trajectory.joint_trajectory.points.size();
     });
 
     plan = *best_plan;
-    RCLCPP_INFO(this->get_logger(), "Best plan selected with %d points.", int(best_plan->trajectory_.joint_trajectory.points.size()));
+    RCLCPP_INFO(this->get_logger(), "Best plan selected with %d points.", int(best_plan->trajectory.joint_trajectory.points.size()));
     return true;
 }
 
@@ -836,7 +837,7 @@ bool m2Iface::run()
     }
 
     // Check if servo active, to deactivate before sending to another pose 
-    if (robotState != SERVO_CTL && servoEntered) {servoPtr->setPaused(true); servoEntered=false;} 
+    if (robotState != SERVO_CTL && servoEntered) {servoPtr->setCollisionChecking(false); servoEntered=false;} // New API: no setPaused 
 
     if (robotState == JOINT_TRAJ_CTL)
     {
@@ -865,7 +866,7 @@ bool m2Iface::run()
         if (!servoEntered)
         {   
             // Moveit servo status codes: https://github.com/moveit/moveit2/blob/main/moveit_ros/moveit_servo/include/moveit_servo/utils/datatypes.hpp
-            servoPtr->start(); 
+            servoPtr->setCollisionChecking(true); // New API: no start(), servo works on-demand 
             servoEntered = true; 
         }
     }

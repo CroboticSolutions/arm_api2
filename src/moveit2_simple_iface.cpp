@@ -143,18 +143,15 @@ void m2SimpleIface::init_moveit()
 }
 
 // TODO: Try to replace with auto
+// TODO: Try to replace with auto
 std::unique_ptr<moveit_servo::Servo> m2SimpleIface::init_servo()
 {   
-    auto nodeParameters = node_->get_node_parameters_interface(); 
-    auto servoParams = moveit_servo::ServoParameters::makeServoParameters(node_); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "ee_frame_name: " << servoParams->ee_frame_name);  
-    servoParams->get("moveit_servo", nodeParameters);
+    // New Jazzy API - use ParamListener instead of ServoParameters
+    servo_param_listener_ = std::make_shared<servo::ParamListener>(node_);
+    auto servo_params = servo_param_listener_->get_params();
+    RCLCPP_INFO_STREAM(this->get_logger(), "Servo move_group_name: " << servo_params.move_group_name);  
 
-
-    //auto servoParamsPtr = std::make_shared<moveit_servo::ServoParameters>(std::move(servoParams));
-    //auto servo_parameters = moveit_servo::ServoParameters::makeServoParameters(node_); 
-    // Servo parameters need to bee constSharedPtr
-    auto servo = std::make_unique<moveit_servo::Servo>(node_, servoParams, m_pSceneMonitorPtr); 
+    auto servo = std::make_unique<moveit_servo::Servo>(node_, servo_param_listener_, m_pSceneMonitorPtr); 
     RCLCPP_INFO(this->get_logger(), "Servo initialized!"); 
     return servo;
 }
@@ -461,7 +458,7 @@ void m2SimpleIface::execPlan(bool async=false)
             // Store plan as member variable to keep it alive during async execution
             m_async_plan_ptr = std::make_shared<moveit::planning_interface::MoveGroupInterface::Plan>(plan);
             // Make a shared_ptr copy of the trajectory to ensure it stays alive
-            auto trajectory_copy = std::make_shared<moveit_msgs::msg::RobotTrajectory>(m_async_plan_ptr->trajectory_);
+            auto trajectory_copy = std::make_shared<moveit_msgs::msg::RobotTrajectory>(m_async_plan_ptr->trajectory);
             RCLCPP_INFO(this->get_logger(), "Starting async execution, plan at: %p, trajectory at: %p", 
                         static_cast<void*>(m_async_plan_ptr.get()), static_cast<void*>(trajectory_copy.get()));
             m_moveGroupPtr->asyncExecute(*trajectory_copy);
@@ -573,7 +570,7 @@ bool m2SimpleIface::run()
     }
 
     // Check if servo active, to deactivate before sending to another pose 
-    if (robotState != SERVO_CTL && servoEntered) {servoPtr->setPaused(true); servoEntered=false;} 
+    if (robotState != SERVO_CTL && servoEntered) {servoPtr->setCollisionChecking(false); servoEntered=false;} // New API: no setPaused 
 
     if (robotState == JOINT_TRAJ_CTL)
     {
@@ -602,7 +599,7 @@ bool m2SimpleIface::run()
         if (!servoEntered)
         {   
             // Moveit servo status codes: https://github.com/moveit/moveit2/blob/main/moveit_ros/moveit_servo/include/moveit_servo/utils/datatypes.hpp
-            servoPtr->start(); 
+            servoPtr->setCollisionChecking(true); // New API: no start(), servo works on-demand 
             servoEntered = true; 
         }
     }
