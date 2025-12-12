@@ -111,6 +111,12 @@ void m2Iface::init_subscribers()
 {
     auto joint_states_name  = config["topic"]["sub"]["joint_states"]["name"].as<std::string>();
     joint_state_sub_        = this->create_subscription<sensor_msgs::msg::JointState>(ns_ + joint_states_name, 1, std::bind(&m2Iface::joint_state_cb, this, _1));
+    // Servo twist subscriber
+    servo_twist_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
+        "~/servo_twist_cmd", 10, std::bind(&m2Iface::servo_twist_cb, this, _1));
+    // Servo trajectory output publisher
+    servo_trajectory_pub_ = this->create_publisher<trajectory_msgs::msg::JointTrajectory>(
+        "/joint_trajectory_controller/joint_trajectory", 10);
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
 }
 
@@ -179,7 +185,7 @@ void m2Iface::init_moveit()
 std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()
 {   
     // New Jazzy API - use ParamListener instead of ServoParameters
-    servo_param_listener_ = std::make_shared<servo::ParamListener>(node_);
+    servo_param_listener_ = std::make_shared<servo::ParamListener>(node_, "moveit_servo");
     auto servo_params = servo_param_listener_->get_params();
     RCLCPP_INFO_STREAM(this->get_logger(), "Servo move_group_name: " << servo_params.move_group_name);  
 
@@ -195,6 +201,86 @@ void m2Iface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg)
     if(robotModelInit) {m_robotStatePtr->setVariablePositions(jointNames, jointPositions);}; 
 
 }
+
+void m2Iface::servo_twist_cb(const geometry_msgs::msg::TwistStamped::SharedPtr msg)
+{
+    latest_twist_cmd_ = *msg;
+    new_twist_cmd_ = true;
+}
+
+void m2Iface::processServoCommand()
+{
+    if (!servoPtr || !new_twist_cmd_ || !m_moveGroupPtr) return;
+    
+    new_twist_cmd_ = false;
+    
+    try {
+        // Create TwistCommand for servo
+        moveit_servo::TwistCommand twist_cmd;
+        twist_cmd.frame_id = latest_twist_cmd_.header.frame_id.empty() ? EE_LINK_NAME : latest_twist_cmd_.header.frame_id;
+        twist_cmd.velocities[0] = latest_twist_cmd_.twist.linear.x;
+        twist_cmd.velocities[1] = latest_twist_cmd_.twist.linear.y;
+        twist_cmd.velocities[2] = latest_twist_cmd_.twist.linear.z;
+        twist_cmd.velocities[3] = latest_twist_cmd_.twist.angular.x;
+        twist_cmd.velocities[4] = latest_twist_cmd_.twist.angular.y;
+        twist_cmd.velocities[5] = latest_twist_cmd_.twist.angular.z;
+        
+        // Get current robot state
+        auto current_state = m_moveGroupPtr->getCurrentState(1.0);
+        if (!current_state) {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
+                "Could not get current robot state");
+            return;
+        }
+        
+        // Set command type
+        servoPtr->setCommandType(moveit_servo::CommandType::TWIST);
+        
+        // Get next joint state from servo
+        moveit_servo::KinematicState next_state = servoPtr->getNextJointState(current_state, twist_cmd);
+        
+        // Check servo status
+        auto status = servoPtr->getStatus();
+        if (status == moveit_servo::StatusCode::INVALID || 
+            status == moveit_servo::StatusCode::HALT_FOR_SINGULARITY ||
+            status == moveit_servo::StatusCode::HALT_FOR_COLLISION) {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
+                "Servo status: %s", servoPtr->getStatusMessage().c_str());
+            return;
+        }
+        
+        // Check if we got valid output
+        if (next_state.joint_names.empty() || next_state.positions.size() == 0) {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
+                "Servo returned empty state");
+            return;
+        }
+        
+        // Create and publish trajectory
+        trajectory_msgs::msg::JointTrajectory traj_msg;
+        traj_msg.header.stamp = this->now();
+        traj_msg.header.frame_id = PLANNING_FRAME;
+        traj_msg.joint_names = next_state.joint_names;
+        
+        trajectory_msgs::msg::JointTrajectoryPoint point;
+        for (size_t i = 0; i < next_state.positions.size(); ++i) {
+            point.positions.push_back(next_state.positions[i]);
+            if (i < next_state.velocities.size()) {
+                point.velocities.push_back(next_state.velocities[i]);
+            }
+        }
+        point.time_from_start = rclcpp::Duration::from_seconds(0.1);
+        traj_msg.points.push_back(point);
+        
+        servo_trajectory_pub_->publish(traj_msg);
+        last_servo_state_ = next_state;
+        
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+            "Servo command processing failed: %s", e.what());
+    }
+}
+
 
 void m2Iface::set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req, const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res)
 {
@@ -861,14 +947,18 @@ bool m2Iface::run()
         }
     }
 
-    if (robotState == SERVO_CTL)
+    if (robotState == SERVO_CTL && servoPtr)
     {   
         if (!servoEntered)
         {   
             // Moveit servo status codes: https://github.com/moveit/moveit2/blob/main/moveit_ros/moveit_servo/include/moveit_servo/utils/datatypes.hpp
-            servoPtr->setCollisionChecking(true); // New API: no start(), servo works on-demand 
-            servoEntered = true; 
+            try { servoPtr->setCollisionChecking(true); } catch (const std::exception& e) { RCLCPP_ERROR(this->get_logger(), "Servo setCollisionChecking failed: %s", e.what()); }
+            RCLCPP_INFO(this->get_logger(), "Servo mode activated! Send twist commands to ~/servo_twist_cmd"); 
+            servoEntered = true;
         }
+        // Process servo commands every cycle
+        processServoCommand();
+
     }
 
     if(recivGripperCmd){

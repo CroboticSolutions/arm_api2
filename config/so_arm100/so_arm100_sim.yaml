@@ -10,6 +10,7 @@ robot:
   max_vel_scaling_factor: 0.3
   max_acc_scaling_factor: 0.3
   with_planner: true
+  enable_servo: true
 topic:
   sub:
     cmd_pose:

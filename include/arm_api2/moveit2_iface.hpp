@@ -61,6 +61,10 @@
 //* moveit
 #include <moveit_servo/servo.hpp>
 #include <moveit_servo/moveit_servo_lib_parameters.hpp>
+#include <moveit_servo/utils/datatypes.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
+#include <trajectory_msgs/msg/joint_trajectory.hpp>
+#include <control_msgs/msg/joint_jog.hpp>
 #include <moveit/move_group_interface/move_group_interface.hpp>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.hpp>
 #include <moveit/planning_scene/planning_scene.hpp>
@@ -171,6 +175,8 @@ class m2Iface: public rclcpp::Node
         
         /* subs */
         rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr           joint_state_sub_;
+        rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr       servo_twist_sub_;
+        rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr     servo_trajectory_pub_;
 
         /* pubs */
         rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr       pose_state_pub_;
@@ -192,6 +198,8 @@ class m2Iface: public rclcpp::Node
 
         /* topic callbacks */
         void joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg);
+        void servo_twist_cb(const geometry_msgs::msg::TwistStamped::SharedPtr msg);
+        void processServoCommand();
         
         /* srv callbacks*/
         void change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
@@ -287,6 +295,9 @@ class m2Iface: public rclcpp::Node
         bool recivTraj          = false; 
         bool recivGripperCmd    = false;
         bool servoEntered       = false; 
+        geometry_msgs::msg::TwistStamped latest_twist_cmd_;
+        std::atomic<bool> new_twist_cmd_{false};
+        moveit_servo::KinematicState last_servo_state_;
         bool async              = false;
         bool planOnly           = false; 
 

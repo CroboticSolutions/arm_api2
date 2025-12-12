@@ -2,8 +2,9 @@
 # Servo parameters for SO-ARM100
 ###############################################
 
-publish_period: 0.05
+publish_period: 0.02
 low_latency_mode: false
+max_expected_latency: 0.1
 
 command_in_type: "speed_units"
 scale:

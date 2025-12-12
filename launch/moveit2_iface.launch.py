@@ -26,7 +26,7 @@ import os
 
 # TODO: Make this changeable without ERROR for wrong param type
 use_sim_time = True
-use_servo = False
+use_servo = True
 dt = 0.1
 
 def get_moveit_configs(robot_name):
