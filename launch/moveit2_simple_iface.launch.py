@@ -55,12 +55,21 @@ use_sim_time = True
 use_servo = True
 dt = 0.1
 
+def get_moveit_configs(robot_name):
+    """Load MoveIt configs for supported robots."""
+    if robot_name == "so_arm100":
+        from so_arm100_description.launch_utils import MoveItConfigs
+        return MoveItConfigs().to_dict()
+    return {}
+
 def launch_setup(context, *args, **kwargs):
 
     launch_nodes_ = []
     arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
     arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))
     arg_use_gdb         = context.perform_substitution(LaunchConfiguration('use_gdb', default=False))
+    arg_use_sim_time    = context.perform_substitution(LaunchConfiguration('use_sim_time', default='false'))
+
 
     # TODO: Swap between sim and real arg depending on the robot type
     robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
@@ -85,6 +94,32 @@ def launch_setup(context, *args, **kwargs):
     # Load kinematic params
     kinematic_params = load_yaml("arm_api2", kinematics_yaml)
 
+        # Load MoveIt configs for the robot (robot_description, robot_description_semantic, etc.)
+    moveit_configs = get_moveit_configs(arg_robot_name)
+
+    print(moveit_configs)
+
+    # Build parameter list
+    node_params = [
+        {"use_sim_time": arg_use_sim_time.lower() == 'true'},
+        {"enable_servo": use_servo},
+        {"dt": dt},
+        {"config_path": config_path},
+    ]
+    
+    # Add MoveIt configs if available
+    if moveit_configs:
+        node_params.append(moveit_configs)
+    
+    # Add kinematic params if available
+    if kinematic_params:
+        node_params.append(kinematic_params)
+    
+    # Add servo params if available
+    if servo_params:
+        node_params.append(servo_params)
+
+
     # Configure GDB prefix if debugging is enabled
     prefix_cmd = []
     if arg_use_gdb.lower() == 'true':
@@ -93,12 +128,7 @@ def launch_setup(context, *args, **kwargs):
     launch_arm_api2 = Node(
         package='arm_api2',
         executable='moveit2_simple_iface',
-        parameters=[{"use_sim_time": use_sim_time},
-                    {"enable_servo": use_servo},
-                    {"dt": dt},
-                    {"config_path": config_path},
-                    kinematic_params,
-                    servo_params,],
+        parameters=node_params,
         prefix=prefix_cmd,
         output='screen'
     )
