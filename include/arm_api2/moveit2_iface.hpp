@@ -85,6 +85,7 @@
 #include "arm_api2_msgs/srv/add_collision_object.hpp"
 #include "arm_api2_msgs/srv/set_vel_acc.hpp"
 #include "arm_api2_msgs/srv/set_string_param.hpp"
+#include "arm_api2_msgs/srv/add_grasped_object.hpp"
 #include "control_msgs/action/gripper_command.hpp"
 #include "arm_api2_msgs/action/move_cartesian.hpp"
 #include "arm_api2_msgs/action/move_joint.hpp"
@@ -181,8 +182,9 @@ class m2Iface: public rclcpp::Node
         rclcpp::Service<arm_api2_msgs::srv::SetVelAcc>::SharedPtr                set_vel_acc_srv_;
         rclcpp::Service<arm_api2_msgs::srv::SetStringParam>::SharedPtr           set_planner_srv_;
         rclcpp::Service<arm_api2_msgs::srv::SetStringParam>::SharedPtr           set_eelink_srv_;
-        rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr                      set_plan_only_srv_;
-        rclcpp::Service<arm_api2_msgs::srv::AddCollisionObject>::SharedPtr      add_collision_object_srv_;
+        rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr                       set_plan_only_srv_;
+        rclcpp::Service<arm_api2_msgs::srv::AddCollisionObject>::SharedPtr       add_collision_object_srv_;
+        rclcpp::Service<arm_api2_msgs::srv::AddGraspedObject>::SharedPtr         add_grasped_object_srv_;
 
         /* actions */
         rclcpp_action::Server<arm_api2_msgs::action::MoveJoint>::SharedPtr              move_to_joint_as_;
@@ -205,7 +207,9 @@ class m2Iface: public rclcpp::Node
         void set_plan_only_cb(const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
                                const std::shared_ptr<std_srvs::srv::SetBool::Response> res);
         void add_collision_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Request> req,
-                                      const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Response> res);
+                                     const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Response> res);
+        void add_grasped_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddGraspedObject::Request> req,
+                                   const std::shared_ptr<arm_api2_msgs::srv::AddGraspedObject::Response> res);
 
         /* action callbacks */
         rclcpp_action::GoalResponse move_to_joint_goal_cb(

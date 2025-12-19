@@ -127,6 +127,7 @@ void m2Iface::init_services()
     set_eelink_srv_         = this->create_service<arm_api2_msgs::srv::SetStringParam>(ns_ + set_eelink_name, std::bind(&m2Iface::set_eelink_cb, this, _1, _2));
     set_plan_only_srv_      = this->create_service<std_srvs::srv::SetBool>(ns_ + set_plan_only_name, std::bind(&m2Iface::set_plan_only_cb, this, _1, _2));
     add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(ns_ + "add_collision_object", std::bind(&m2Iface::add_collision_object_cb, this, _1, _2));
+    add_grasped_object_srv_ = this->create_service<arm_api2_msgs::srv::AddGraspedObject>(ns_ + "add_grasped_object", std::bind(&m2Iface::add_grasped_object_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
@@ -342,6 +343,21 @@ void m2Iface::add_collision_object_cb(const std::shared_ptr<arm_api2_msgs::srv::
     res->success = true;
     res->message = "Collision object added successfully";
     RCLCPP_INFO(this->get_logger(), "Collision object '%s' added to planning scene", req->id.c_str());
+}
+
+void m2Iface::add_grasped_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddGraspedObject::Request> req,
+                                    const std::shared_ptr<arm_api2_msgs::srv::AddGraspedObject::Response> res)
+{
+
+    moveit_msgs::msg::AttachedCollisionObject attached_object; 
+    attached_object.link_name = req->attach_object.link_name;
+    // Does this make sense at all? 
+    attached_object.object = req->grasped_object; 
+    attached_object.touch_links = req->attach_object.touch_links;
+    attached_object.object.operation = attached_object.object.ADD;
+    m_planningSceneInterface->applyAttachedCollisionObject(attached_object);
+    res->success = true;
+    RCLCPP_INFO(this->get_logger(), "Attached collision object to the end effector.");
 }
 
 rclcpp_action::GoalResponse m2Iface::move_to_joint_goal_cb(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const arm_api2_msgs::action::MoveJoint::Goal> goal)
