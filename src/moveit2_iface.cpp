@@ -578,7 +578,7 @@ bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupNam
             "robot_description",
             moveNs));
 
-    double POS_TOL = 0.0000001; 
+    double POS_TOL = 0.001; 
     // set move group stuff
     m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME); 
     m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME); 
