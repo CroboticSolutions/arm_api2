@@ -88,7 +88,7 @@ def launch_setup(context, *args, **kwargs):
     
     # Add kinematic params if available
     if kinematic_params:
-        node_params.append(kinematic_params)
+        node_params.append({"robot_description_kinematics": kinematic_params})
     
     # Add servo params if available
     if servo_params:
