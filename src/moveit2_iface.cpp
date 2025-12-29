@@ -117,6 +117,9 @@ void m2Iface::init_subscribers()
     // Servo trajectory output publisher
     servo_trajectory_pub_ = this->create_publisher<trajectory_msgs::msg::JointTrajectory>(
         "/joint_trajectory_controller/joint_trajectory", 10);
+    // Servo status publisher
+    servo_status_pub_ = this->create_publisher<moveit_msgs::msg::ServoStatus>(
+        "~/status", 10);
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
 }
 
@@ -259,13 +262,21 @@ void m2Iface::processServoCommand()
         // Get next joint state from servo
         moveit_servo::KinematicState next_state = servoPtr->getNextJointState(current_state, twist_cmd);
         
-        // Check servo status
+        // Check servo status and publish it
         auto status = servoPtr->getStatus();
-        if (status == moveit_servo::StatusCode::INVALID || 
+        auto status_msg_str = servoPtr->getStatusMessage();
+
+        // Publish ServoStatus
+        moveit_msgs::msg::ServoStatus status_msg;
+        status_msg.code = static_cast<int8_t>(status);
+        status_msg.message = status_msg_str;
+        servo_status_pub_->publish(status_msg);
+
+        if (status == moveit_servo::StatusCode::INVALID ||
             status == moveit_servo::StatusCode::HALT_FOR_SINGULARITY ||
             status == moveit_servo::StatusCode::HALT_FOR_COLLISION) {
-            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
-                "Servo status: %s", servoPtr->getStatusMessage().c_str());
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                "Servo status: %s", status_msg_str.c_str());
             return;
         }
         

@@ -82,6 +82,7 @@
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "arm_api2_msgs/msg/cartesian_waypoints.hpp"
 #include "moveit_msgs/msg/collision_object.hpp"
+#include "moveit_msgs/msg/servo_status.hpp"
 #include "shape_msgs/msg/solid_primitive.hpp"
 
 //* srvs
@@ -177,6 +178,7 @@ class m2Iface: public rclcpp::Node
         rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr           joint_state_sub_;
         rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr       servo_twist_sub_;
         rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr     servo_trajectory_pub_;
+        rclcpp::Publisher<moveit_msgs::msg::ServoStatus>::SharedPtr            servo_status_pub_;
 
         /* pubs */
         rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr       pose_state_pub_;
