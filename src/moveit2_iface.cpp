@@ -176,7 +176,9 @@ void m2Iface::init_moveit()
     moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP, MOVE_GROUP_NS); 
     pSceneMonitorInit   = setPlanningSceneMonitor(node_, ROBOT_DESC);
     robotModelInit      = setRobotModel(node_);
-    m_planningSceneInterface = std::make_shared<moveit::planning_interface::PlanningSceneInterface>(MOVE_GROUP_NS);
+    // Sanitize the namespace string. If "null", use empty string (root/default).
+    std::string interface_ns = (MOVE_GROUP_NS == "null") ? "" : MOVE_GROUP_NS;
+    m_planningSceneInterface = std::make_shared<moveit::planning_interface::PlanningSceneInterface>(interface_ns);
     RCLCPP_INFO(this->get_logger(), "PlanningSceneInterface initialized!");
 }
 
