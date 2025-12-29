@@ -213,9 +213,27 @@ void m2Iface::servo_twist_cb(const geometry_msgs::msg::TwistStamped::SharedPtr m
 void m2Iface::processServoCommand()
 {
     if (!servoPtr || !new_twist_cmd_ || !m_moveGroupPtr) return;
-    
+
+    // Wait 0.5s after entering servo mode to avoid processing old buffered commands
+    auto time_since_servo_entered = (this->now() - servo_entered_time_).seconds();
+    if (time_since_servo_entered < 0.5) {
+        new_twist_cmd_ = false;
+        return;
+    }
+
     new_twist_cmd_ = false;
-    
+
+    // Ignore commands with all zero velocities to prevent old buffered commands
+    bool all_zero = (std::abs(latest_twist_cmd_.twist.linear.x) < 1e-6 &&
+                     std::abs(latest_twist_cmd_.twist.linear.y) < 1e-6 &&
+                     std::abs(latest_twist_cmd_.twist.linear.z) < 1e-6 &&
+                     std::abs(latest_twist_cmd_.twist.angular.x) < 1e-6 &&
+                     std::abs(latest_twist_cmd_.twist.angular.y) < 1e-6 &&
+                     std::abs(latest_twist_cmd_.twist.angular.z) < 1e-6);
+    if (all_zero) {
+        return;
+    }
+
     try {
         // Create TwistCommand for servo
         moveit_servo::TwistCommand twist_cmd;
@@ -950,12 +968,35 @@ bool m2Iface::run()
     }
 
     if (robotState == SERVO_CTL && servoPtr)
-    {   
+    {
         if (!servoEntered)
-        {   
+        {
+            // Clear any old twist commands
+            latest_twist_cmd_ = geometry_msgs::msg::TwistStamped();
+            latest_twist_cmd_.header.frame_id = "base_link";
+            latest_twist_cmd_.twist.linear.x = 0.0;
+            latest_twist_cmd_.twist.linear.y = 0.0;
+            latest_twist_cmd_.twist.linear.z = 0.0;
+            latest_twist_cmd_.twist.angular.x = 0.0;
+            latest_twist_cmd_.twist.angular.y = 0.0;
+            latest_twist_cmd_.twist.angular.z = 0.0;
+            new_twist_cmd_ = false;
+
             // Moveit servo status codes: https://github.com/moveit/moveit2/blob/main/moveit_ros/moveit_servo/include/moveit_servo/utils/datatypes.hpp
-            try { servoPtr->setCollisionChecking(true); } catch (const std::exception& e) { RCLCPP_ERROR(this->get_logger(), "Servo setCollisionChecking failed: %s", e.what()); }
-            RCLCPP_INFO(this->get_logger(), "Servo mode activated! Send twist commands to ~/servo_twist_cmd"); 
+            try {
+                // Send a zero twist command to servo to clear internal state
+                moveit_servo::TwistCommand zero_twist;
+                zero_twist.frame_id = "base_link";
+                zero_twist.velocities.fill(0.0);
+                auto current_state = m_moveGroupPtr->getCurrentState(1.0);
+                if (current_state) {
+                    servoPtr->setCommandType(moveit_servo::CommandType::TWIST);
+                    servoPtr->getNextJointState(current_state, zero_twist);
+                }
+                servoPtr->setCollisionChecking(true);
+            } catch (const std::exception& e) { RCLCPP_ERROR(this->get_logger(), "Servo initialization failed: %s", e.what()); }
+            RCLCPP_INFO(this->get_logger(), "Servo mode activated! Send twist commands to ~/servo_twist_cmd");
+            servo_entered_time_ = this->now();
             servoEntered = true;
         }
         // Process servo commands every cycle

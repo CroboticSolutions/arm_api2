@@ -294,7 +294,8 @@ class m2Iface: public rclcpp::Node
         bool recivCmd           = false; 
         bool recivTraj          = false; 
         bool recivGripperCmd    = false;
-        bool servoEntered       = false; 
+        bool servoEntered       = false;
+        rclcpp::Time servo_entered_time_;
         geometry_msgs::msg::TwistStamped latest_twist_cmd_;
         std::atomic<bool> new_twist_cmd_{false};
         moveit_servo::KinematicState last_servo_state_;
