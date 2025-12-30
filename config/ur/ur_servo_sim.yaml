@@ -3,11 +3,11 @@
 ###############################################
 
 # Optionally override Servo's internal velocity scaling when near singularity or collision (0.0 = use internal velocity scaling)
-# override_velocity_scaling_factor = 0.0 # valid range [0.0:1.0]
+override_velocity_scaling_factor: 1.0 # valid range [0.0:1.0] - 1.0 = full speed, ignores internal scaling
 
 ## Properties of outgoing commands
-publish_period: 0.005 # 1/Nominal publish rate [seconds]
-low_latency_mode: false  # Set this to true to publish as soon as an incoming Twist command is received (publish_period is ignored)
+publish_period: 0.01 # 1/Nominal publish rate [seconds] - 100Hz for smooth motion
+low_latency_mode: false  # Disable for more consistent timing and smoother motion
 
 command_in_type: speed_units  # "unitless"> in the range [-1:1], as if from joystick. "speed_units"> cmds are in m/s and rad/s
 scale:
@@ -29,6 +29,10 @@ publish_joint_accelerations: false
 ## Plugins for smoothing outgoing commands
 use_smoothing: true # Enables the use of smoothing plugins for joint trajectory smoothing
 smoothing_filter_plugin_name: online_signal_smoothing::ButterworthFilterPlugin
+
+# Butterworth filter parameters for smooth motion
+butterworth_filter_order: 2  # Higher order = smoother but more lag
+butterworth_low_pass_filter_coeff: 30.0  # Lower = smoother but slower response
 
 # If is_primary_planning_scene_monitor is set to true, the Servo server's PlanningScene advertises the /get_planning_scene service,
 # which other nodes can use as a source for information about the planning environment.
@@ -52,8 +56,8 @@ incoming_command_timeout:  0.1  # Stop servoing if X seconds elapse without a ne
 num_outgoing_halt_msgs_to_publish: 4
 
 ## Configure handling of singularities and joint limits
-lower_singularity_threshold: 20.0 # Start decelerating when the condition number hits this (close to singularity)
-hard_stop_singularity_threshold: 50.0 # Stop when the condition number hits this
+lower_singularity_threshold: 50.0 # Start decelerating when the condition number hits this (close to singularity)
+hard_stop_singularity_threshold: 100.0 # Stop when the condition number hits this
 leaving_singularity_threshold_multiplier: 2.0 # Multiply the hard stop limit by this when leaving singularity
 joint_limit_margin: 0.1 # added as a buffer to joint limits [radians]. If moving quickly, make this larger.
 
@@ -72,8 +76,8 @@ collision_check_rate: 10.0 # [Hz] Collision-checking can easily bog down a CPU i
 # "stop_distance" stops if a collision is nearer than the worst-case stopping distance and the distance is decreasing. Requires joint acceleration limits
 collision_check_type: threshold_distance
 # Parameters for "threshold_distance"-type collision checking
-self_collision_proximity_threshold: 0.03 # Start decelerating when a self-collision is this far [m]
-scene_collision_proximity_threshold: 0.05 # Start decelerating when a scene collision is this far [m]
+self_collision_proximity_threshold: 0.01 # Start decelerating when a self-collision is this far [m]
+scene_collision_proximity_threshold: 0.02 # Start decelerating when a scene collision is this far [m]
 # Parameters for "stop_distance"-type collision checking
 collision_distance_safety_factor: 10.0 # Must be >= 1. A large safety factor is recommended to account for latency
 min_allowable_collision_distance: 0.025 # Stop if a collision is closer than this [m]
