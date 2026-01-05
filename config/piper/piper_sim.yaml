@@ -1,6 +1,6 @@
-robot: 
-  arm_name: piper_arm  
-  ee_link_name: piper_tcp
+robot:
+  arm_name: arm
+  ee_link_name: link6
   robot_desc: robot_description
   move_group_ns: 
   planning_scene: planning_scene
