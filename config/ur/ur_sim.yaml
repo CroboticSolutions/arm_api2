@@ -2,7 +2,11 @@ robot:
   arm_name: ur_manipulator  
   ee_link_name: tool0
   robot_desc: robot_description
+<<<<<<< HEAD
   move_group_ns: 
+=======
+  move_group_ns: ""
+>>>>>>> 32b1175 (Fixed CMakeLists.txt to install moveit2_simple_iface and ur_sim.yaml topic and services)
   planning_scene: planning_scene
   planning_frame: world #or base
   num_cart_pts: 20
@@ -23,6 +27,12 @@ topic:
       queue: 1
     cmd_delta_pose:
       name: arm/cmd/delta_pose
+      queue: 1
+    cmd_pose:
+      name: arm/cmd/pose
+      queue: 1
+    cmd_traj:
+      name: arm/cmd/traj
       queue: 1
     joint_states:
       name: joint_states
@@ -52,10 +62,18 @@ srv:
     name: arm/set_eelink
   set_planonly:
     name: arm/set_planonly
+<<<<<<< HEAD
   open_gripper: 
     name: arm/open_gripper
   close_gripper:
     name: arm/close_gripper
+=======
+  open_gripper:
+    name: arm/open_gripper
+  close_gripper:
+    name: arm/close_gripper
+
+>>>>>>> 32b1175 (Fixed CMakeLists.txt to install moveit2_simple_iface and ur_sim.yaml topic and services)
 action:
   move_to_pose:
     name: arm/move_to_pose
