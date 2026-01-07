@@ -44,14 +44,20 @@
 #include <vector>
 
 m2Iface::m2Iface(const rclcpp::NodeOptions &options)
-    : Node("moveit2_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_iface_node")), 
-     executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()), gripper(node_) 
-{   
-    // USE_SIM_TIME HACK TO TEST SERVO!
-    this->set_parameter(rclcpp::Parameter("use_sim_time", false));
+    : Node("moveit2_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_iface_node")),
+     executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()), gripper(node_)
+{
+    // NOTE: use_sim_time is now passed via launch parameters, not hardcoded
+    // this->set_parameter(rclcpp::Parameter("use_sim_time", false));
+
+    // Get use_sim_time parameter and apply it to the internal node
+    bool use_sim_time = false;
+    this->get_parameter("use_sim_time", use_sim_time);
+    node_->set_parameter(rclcpp::Parameter("use_sim_time", use_sim_time));
+
     this->get_parameter("config_path", config_path);
     this->get_parameter("enable_servo", enable_servo);
-    this->get_parameter("dt", dt); 
+    this->get_parameter("dt", dt);
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
 

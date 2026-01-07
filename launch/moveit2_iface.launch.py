@@ -34,6 +34,10 @@ def get_moveit_configs(robot_name):
     if robot_name == "so_arm100":
         from so_arm100_description.launch_utils import MoveItConfigs
         return MoveItConfigs().to_dict()
+    elif robot_name == "piper":
+        from moveit_configs_utils import MoveItConfigsBuilder
+        moveit_config = MoveItConfigsBuilder("piper", package_name="piper_with_gripper_moveit").to_moveit_configs()
+        return moveit_config.to_dict()
     return {}
 
 def launch_setup(context, *args, **kwargs):
