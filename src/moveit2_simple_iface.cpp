@@ -126,6 +126,7 @@ void m2SimpleIface::init_services()
     open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + open_gripper_name, std::bind(&m2SimpleIface::open_gripper_cb, this, _1, _2));
     close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + close_gripper_name, std::bind(&m2SimpleIface::close_gripper_cb, this, _1, _2));
     add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(ns_ + "add_collision_object", std::bind(&m2SimpleIface::add_collision_object_cb, this, _1, _2));
+    add_grasped_object_srv_ = this->create_service<arm_api2_msgs::srv::AddGraspedObject>(ns_ + "add_grasped_object", std::bind(&m2SimpleIface::add_grasped_object_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
@@ -345,6 +346,19 @@ void m2SimpleIface::add_collision_object_cb(const std::shared_ptr<arm_api2_msgs:
     RCLCPP_INFO(this->get_logger(), "Added collision object '%s' to planning scene", req->id.c_str());
     res->success = true;
     res->message = "Collision object added successfully";
+}
+
+void m2SimpleIface::add_grasped_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddGraspedObject::Request> req,
+                                          const std::shared_ptr<arm_api2_msgs::srv::AddGraspedObject::Response> res)
+{
+    moveit_msgs::msg::AttachedCollisionObject attached_object; 
+    attached_object.link_name = req->attach_object.link_name;
+    attached_object.object = req->grasped_object; 
+    attached_object.touch_links = req->attach_object.touch_links;
+    attached_object.object.operation = attached_object.object.ADD;
+    m_planningSceneInterface.applyAttachedCollisionObject(attached_object);
+    res->success = true;
+    RCLCPP_INFO(this->get_logger(), "Attached collision object to the end effector.");
 }
 
 void m2SimpleIface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 

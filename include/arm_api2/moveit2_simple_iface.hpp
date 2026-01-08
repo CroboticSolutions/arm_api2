@@ -83,6 +83,7 @@
 #include "arm_api2_msgs/srv/set_vel_acc.hpp"
 #include "arm_api2_msgs/srv/set_string_param.hpp"
 #include "arm_api2_msgs/srv/add_collision_object.hpp"
+#include "arm_api2_msgs/srv/add_grasped_object.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
 // utils
@@ -174,6 +175,7 @@ class m2SimpleIface: public rclcpp::Node
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       open_gripper_srv_; 
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       close_gripper_srv_;
         rclcpp::Service<arm_api2_msgs::srv::AddCollisionObject>::SharedPtr       add_collision_object_srv_;
+        rclcpp::Service<arm_api2_msgs::srv::AddGraspedObject>::SharedPtr        add_grasped_object_srv_;
         /* topic callbacks */
         void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
         void cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::SharedPtr msg); 
@@ -192,6 +194,8 @@ class m2SimpleIface: public rclcpp::Node
                              const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
         void add_collision_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Request> req,
                                      const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Response> res);
+        void add_grasped_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddGraspedObject::Request> req,
+                                   const std::shared_ptr<arm_api2_msgs::srv::AddGraspedObject::Response> res);
         bool run(); 
 
         /* setters */
