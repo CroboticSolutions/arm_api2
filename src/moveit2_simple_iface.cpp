@@ -147,7 +147,7 @@ void m2SimpleIface::init_moveit()
 std::unique_ptr<moveit_servo::Servo> m2SimpleIface::init_servo()
 {   
     // New Jazzy API - use ParamListener instead of ServoParameters
-    servo_param_listener_ = std::make_shared<servo::ParamListener>(node_);
+    servo_param_listener_ = std::make_shared<servo::ParamListener>(node_, "moveit_servo");
     auto servo_params = servo_param_listener_->get_params();
     RCLCPP_INFO_STREAM(this->get_logger(), "Servo move_group_name: " << servo_params.move_group_name);  
 

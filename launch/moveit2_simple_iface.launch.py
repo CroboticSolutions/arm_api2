@@ -60,6 +60,10 @@ def get_moveit_configs(robot_name):
     if robot_name == "so_arm100":
         from so_arm100_description.launch_utils import MoveItConfigs
         return MoveItConfigs().to_dict()
+    elif robot_name == "piper":
+        from moveit_configs_utils import MoveItConfigsBuilder
+        moveit_config = MoveItConfigsBuilder("piper", package_name="piper_with_gripper_moveit").to_moveit_configs()
+        return moveit_config.to_dict()
     return {}
 
 def launch_setup(context, *args, **kwargs):
@@ -94,7 +98,7 @@ def launch_setup(context, *args, **kwargs):
     # Load kinematic params
     kinematic_params = load_yaml("arm_api2", kinematics_yaml)
 
-        # Load MoveIt configs for the robot (robot_description, robot_description_semantic, etc.)
+    # Load MoveIt configs for the robot (robot_description, robot_description_semantic, etc.)
     moveit_configs = get_moveit_configs(arg_robot_name)
 
     print(moveit_configs)
@@ -113,7 +117,7 @@ def launch_setup(context, *args, **kwargs):
     
     # Add kinematic params if available
     if kinematic_params:
-        node_params.append(kinematic_params)
+        node_params.append({"robot_description_kinematics": kinematic_params})
     
     # Add servo params if available
     if servo_params:
