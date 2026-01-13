@@ -89,14 +89,31 @@ def launch_setup(context, *args, **kwargs):
     )
 
     # Servo params created with the help of ParameterBuilder
-    servo_params = {
-        "moveit_servo": ParameterBuilder("arm_api2") 
-        .yaml(f"config/{servo_yaml}")
-        .to_dict()
-    }
+    servo_params = {}
+    servo_enabled = use_servo
+    try:
+        servo_dict = ParameterBuilder("arm_api2").yaml(f"config/{servo_yaml}").to_dict()
+        # Verify that servo params were actually loaded and contain required parameters
+        if servo_dict and isinstance(servo_dict, dict) and len(servo_dict) > 0:
+            servo_params = {
+                "moveit_servo": servo_dict
+            }
+            # Check if move_group_name is present (required parameter)
+            if "move_group_name" not in servo_dict:
+                print(f"Warning: Servo params missing required 'move_group_name' parameter")
+                servo_enabled = False
+                servo_params = {}
+        else:
+            print(f"Warning: Servo params dictionary is empty or invalid")
+            servo_enabled = False
+            servo_params = {}
+    except Exception as e:
+        print(f"Warning: Could not load servo params: {e}")
+        servo_enabled = False
+        servo_params = {}
     
     # Load kinematic params
-    kinematic_params = load_yaml("arm_api2", kinematics_yaml)
+    kinematic_params = load_yaml("arm_api2", kinematics_yaml) or {}
 
     # Load MoveIt configs for the robot (robot_description, robot_description_semantic, etc.)
     moveit_configs = get_moveit_configs(arg_robot_name)
@@ -106,7 +123,7 @@ def launch_setup(context, *args, **kwargs):
     # Build parameter list
     node_params = [
         {"use_sim_time": arg_use_sim_time.lower() == 'true'},
-        {"enable_servo": use_servo},
+        {"enable_servo": servo_enabled},
         {"dt": dt},
         {"config_path": config_path},
     ]
