@@ -74,8 +74,9 @@ public:
 
     bool send_gripper_command(double position, double max_effort = 140.0)
     {
-        if (!gripper_client_->wait_for_action_server(std::chrono::seconds(5))) {
-            RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Gripper action server not available!");
+        // Wait longer for action server to be available (it might take time to discover)
+        if (!gripper_client_->wait_for_action_server(std::chrono::seconds(10))) {
+            RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Gripper action server not available! Make sure the action server is running.");
             return false;
         }
         auto goal = control_msgs::action::GripperCommand::Goal();

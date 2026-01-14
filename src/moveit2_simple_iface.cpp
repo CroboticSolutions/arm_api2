@@ -184,13 +184,61 @@ void m2SimpleIface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr
 void m2SimpleIface::open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
                                     const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
 {
-    gripper.open();
+    (void)req; // Unused parameter
+    try {
+        // Use MoveIt's gripper planning group with named state "open"
+        auto gripper_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(
+            node_, moveit::planning_interface::MoveGroupInterface::Options("gripper", "robot_description", MOVE_GROUP_NS == "null" ? "" : MOVE_GROUP_NS));
+        
+        gripper_group->setNamedTarget("open");
+        moveit::planning_interface::MoveGroupInterface::Plan plan;
+        bool success = (gripper_group->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+        
+        if (success) {
+            gripper_group->execute(plan);
+            res->success = true;
+            res->message = "Gripper open command executed successfully";
+            RCLCPP_INFO_STREAM(this->get_logger(), "Gripper open command executed successfully");
+        } else {
+            res->success = false;
+            res->message = "Failed to plan gripper open motion";
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to plan gripper open motion");
+        }
+    } catch (const std::exception& e) {
+        res->success = false;
+        res->message = std::string("Failed to open gripper: ") + e.what();
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to open gripper: " << e.what());
+    } 
 }
 
 void m2SimpleIface::close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
                                      const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
 {
-    gripper.close(); 
+    (void)req; // Unused parameter
+    try {
+        // Use MoveIt's gripper planning group with named state "close"
+        auto gripper_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(
+            node_, moveit::planning_interface::MoveGroupInterface::Options("gripper", "robot_description", MOVE_GROUP_NS == "null" ? "" : MOVE_GROUP_NS));
+        
+        gripper_group->setNamedTarget("close");
+        moveit::planning_interface::MoveGroupInterface::Plan plan;
+        bool success = (gripper_group->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+        
+        if (success) {
+            gripper_group->execute(plan);
+            res->success = true;
+            res->message = "Gripper close command executed successfully";
+            RCLCPP_INFO_STREAM(this->get_logger(), "Gripper close command executed successfully");
+        } else {
+            res->success = false;
+            res->message = "Failed to plan gripper close motion";
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to plan gripper close motion");
+        }
+    } catch (const std::exception& e) {
+        res->success = false;
+        res->message = std::string("Failed to close gripper: ") + e.what();
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to close gripper: " << e.what());
+    }
 }
 
 void m2SimpleIface::set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req, 
