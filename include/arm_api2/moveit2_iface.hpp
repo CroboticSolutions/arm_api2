@@ -84,6 +84,7 @@
 #include "moveit_msgs/msg/collision_object.hpp"
 #include "moveit_msgs/msg/servo_status.hpp"
 #include "shape_msgs/msg/solid_primitive.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
@@ -177,7 +178,7 @@ class m2Iface: public rclcpp::Node
         /* subs */
         rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr           joint_state_sub_;
         rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr       servo_twist_sub_;
-        rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr     servo_trajectory_pub_;
+        rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr           servo_position_pub_;
         rclcpp::Publisher<moveit_msgs::msg::ServoStatus>::SharedPtr            servo_status_pub_;
 
         /* pubs */

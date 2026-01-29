@@ -120,9 +120,9 @@ void m2Iface::init_subscribers()
     // Servo twist subscriber
     servo_twist_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
         "~/servo_twist_cmd", 10, std::bind(&m2Iface::servo_twist_cb, this, _1));
-    // Servo trajectory output publisher
-    servo_trajectory_pub_ = this->create_publisher<trajectory_msgs::msg::JointTrajectory>(
-        "/joint_trajectory_controller/joint_trajectory", 10);
+    // Servo position output publisher (Float64MultiArray for forward_position_controller)
+    servo_position_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(
+        "/forward_position_controller/commands", 10);
     // Servo status publisher
     servo_status_pub_ = this->create_publisher<moveit_msgs::msg::ServoStatus>(
         "~/status", 10);
@@ -293,23 +293,14 @@ void m2Iface::processServoCommand()
             return;
         }
         
-        // Create and publish trajectory
-        trajectory_msgs::msg::JointTrajectory traj_msg;
-        traj_msg.header.stamp = this->now();
-        traj_msg.header.frame_id = PLANNING_FRAME;
-        traj_msg.joint_names = next_state.joint_names;
-        
-        trajectory_msgs::msg::JointTrajectoryPoint point;
+        // Create and publish Float64MultiArray for forward_position_controller
+        std_msgs::msg::Float64MultiArray pos_msg;
+        pos_msg.data.reserve(next_state.positions.size());
         for (size_t i = 0; i < next_state.positions.size(); ++i) {
-            point.positions.push_back(next_state.positions[i]);
-            if (i < next_state.velocities.size()) {
-                point.velocities.push_back(next_state.velocities[i]);
-            }
+            pos_msg.data.push_back(next_state.positions[i]);
         }
-        point.time_from_start = rclcpp::Duration::from_seconds(0.1);
-        traj_msg.points.push_back(point);
         
-        servo_trajectory_pub_->publish(traj_msg);
+        servo_position_pub_->publish(pos_msg);
         last_servo_state_ = next_state;
         
     } catch (const std::exception& e) {
