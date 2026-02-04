@@ -27,7 +27,7 @@ import os
 # TODO: Make this changeable without ERROR for wrong param type
 use_sim_time = True
 use_servo = True
-dt = 0.1
+dt = 0.004
 
 def get_moveit_configs(robot_name):
     """Load MoveIt configs for supported robots."""
@@ -149,7 +149,7 @@ def generate_launch_description():
 
     declared_arguments.append(
         DeclareLaunchArgument(name='dt', 
-                              default_value='0.1', 
+                              default_value='0.01', 
                               description='time step')
     )
 
