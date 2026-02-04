@@ -40,7 +40,12 @@
  */
 
 #include "arm_api2/moveit2_iface.hpp"
+#include <atomic>
+#include <chrono>
 #include <future>
+#include <regex>
+#include <stdexcept>
+#include <std_msgs/msg/string.hpp>
 #include <vector>
 
 m2Iface::m2Iface(const rclcpp::NodeOptions &options)
@@ -84,13 +89,33 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
     
     // Currently not used :) 
-    ns_ = this->get_namespace(); 	
-    init_publishers(); 
-    init_subscribers(); 
-    init_services(); 
-    init_moveit(); 
+    ns_ = this->get_namespace();
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] ns_='%s' (length=%zu)", ns_.c_str(), ns_.size());
+
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] Calling init_publishers...");
+    init_publishers();
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] Calling init_subscribers...");
+    init_subscribers();
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] Calling init_services...");
+    init_services();
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] Calling init_moveit...");
+    init_moveit();
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] init_moveit completed. Calling init_actionservers...");
     init_actionservers();
-    if (enable_servo) {servoPtr = init_servo();}; 
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] init_actionservers completed.");
+
+    if (enable_servo) {
+        RCLCPP_INFO(this->get_logger(), "[DEBUG] enable_servo=true, calling init_servo...");
+        try {
+            servoPtr = init_servo();
+            RCLCPP_INFO(this->get_logger(), "[DEBUG] init_servo completed successfully.");
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(this->get_logger(), "[DEBUG] init_servo EXCEPTION: %s", e.what());
+            throw;
+        }
+    } else {
+        RCLCPP_INFO(this->get_logger(), "[DEBUG] enable_servo=false, skipping init_servo.");
+    }
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized node!"); 
 
@@ -151,8 +176,13 @@ void m2Iface::init_actionservers()
     auto move_to_joint_name     = config["action"]["move_to_joint"]["name"].as<std::string>();
     auto move_to_pose_path_name = config["action"]["move_to_pose_path"]["name"].as<std::string>();
     auto gripper_control_name   = config["action"]["gripper_control"]["name"].as<std::string>();
+
+    std::string move_to_pose_full = ns_ + move_to_pose_name;
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] Action names: move_to_pose='%s' (full='%s')",
+                move_to_pose_name.c_str(), move_to_pose_full.c_str());
+
     move_to_pose_as_    = rclcpp_action::create_server<arm_api2_msgs::action::MoveCartesian>(this,
-                                                                                        ns_ + move_to_pose_name,
+                                                                                        move_to_pose_full,
                                                                                         std::bind(&m2Iface::move_to_pose_goal_cb, this, _1, _2),
                                                                                         std::bind(&m2Iface::move_to_pose_cancel_cb, this, _1),
                                                                                         std::bind(&m2Iface::move_to_pose_accepted_cb, this, _1));
@@ -176,15 +206,22 @@ void m2Iface::init_actionservers()
 }
 void m2Iface::init_moveit()
 {
-
-    RCLCPP_INFO_STREAM(this->get_logger(), "robot_description: " << ROBOT_DESC); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "robot_description: " << ROBOT_DESC);
     RCLCPP_INFO_STREAM(this->get_logger(), "planning_group: " << PLANNING_GROUP);
-    RCLCPP_INFO_STREAM(this->get_logger(), "planning_frame: " << PLANNING_FRAME); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "move_group_ns: " << MOVE_GROUP_NS);  
-    // MoveIt related things!
-    moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP, MOVE_GROUP_NS); 
+    RCLCPP_INFO_STREAM(this->get_logger(), "planning_frame: " << PLANNING_FRAME);
+    RCLCPP_INFO_STREAM(this->get_logger(), "move_group_ns: " << MOVE_GROUP_NS);
+
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] init_moveit: fetchAndSetRobotDescription...");
+    if (!fetchAndSetRobotDescription()) {
+        throw std::runtime_error("Failed to fetch robot description. Ensure move_group and robot_state_publisher are running.");
+    }
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] init_moveit: setMoveGroup...");
+    moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP, MOVE_GROUP_NS);
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] init_moveit: setPlanningSceneMonitor...");
     pSceneMonitorInit   = setPlanningSceneMonitor(node_, ROBOT_DESC);
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] init_moveit: setRobotModel...");
     robotModelInit      = setRobotModel(node_);
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] init_moveit: PlanningSceneInterface...");
     // Sanitize the namespace string. If "null", use empty string (root/default).
     std::string interface_ns = (MOVE_GROUP_NS == "null") ? "" : MOVE_GROUP_NS;
     m_planningSceneInterface = std::make_shared<moveit::planning_interface::PlanningSceneInterface>(interface_ns);
@@ -194,14 +231,17 @@ void m2Iface::init_moveit()
 // TODO: Try to replace with auto
 // TODO: Try to replace with auto
 std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()
-{   
+{
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] init_servo: Creating ParamListener for 'moveit_servo'...");
     // New Jazzy API - use ParamListener instead of ServoParameters
     servo_param_listener_ = std::make_shared<servo::ParamListener>(node_, "moveit_servo");
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] init_servo: ParamListener created, calling get_params()...");
     auto servo_params = servo_param_listener_->get_params();
-    RCLCPP_INFO_STREAM(this->get_logger(), "Servo move_group_name: " << servo_params.move_group_name);  
+    RCLCPP_INFO_STREAM(this->get_logger(), "Servo move_group_name: " << servo_params.move_group_name);
 
-    auto servo = std::make_unique<moveit_servo::Servo>(node_, servo_param_listener_, m_pSceneMonitorPtr); 
-    RCLCPP_INFO(this->get_logger(), "Servo initialized!"); 
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] init_servo: Creating Servo instance...");
+    auto servo = std::make_unique<moveit_servo::Servo>(node_, servo_param_listener_, m_pSceneMonitorPtr);
+    RCLCPP_INFO(this->get_logger(), "Servo initialized!");
     return servo;
 }
 
@@ -594,24 +634,124 @@ void m2Iface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeSt
     } 
 }
 
+bool m2Iface::fetchAndSetRobotDescription()
+{
+    const std::string urdf_topic = "/robot_description";
+    std::string srdf_topic;
+    if (MOVE_GROUP_NS.empty() || MOVE_GROUP_NS == "null") {
+        srdf_topic = "/move_group/robot_description_semantic";
+    } else {
+        srdf_topic = "/" + MOVE_GROUP_NS + "/robot_description_semantic";
+    }
+    constexpr double timeout_sec = 10.0;
+
+    auto fetch_node = std::make_shared<rclcpp::Node>("moveit2_iface_fetch_robot_desc");
+    bool use_sim_time = false;
+    if (this->get_parameter("use_sim_time", use_sim_time)) {
+        fetch_node->set_parameter(rclcpp::Parameter("use_sim_time", use_sim_time));
+    }
+
+    std::string urdf_string;
+    std::string srdf_string;
+    auto urdf_received = std::make_shared<std::promise<void>>();
+    auto srdf_received = std::make_shared<std::promise<void>>();
+    auto urdf_done = std::make_shared<std::atomic<bool>>(false);
+    auto srdf_done = std::make_shared<std::atomic<bool>>(false);
+
+    rclcpp::QoS qos = rclcpp::QoS(1).transient_local();
+
+    auto urdf_sub = fetch_node->create_subscription<std_msgs::msg::String>(
+        urdf_topic, qos,
+        [&urdf_string, urdf_received, urdf_done](const std_msgs::msg::String::SharedPtr msg) {
+            if (!urdf_done->exchange(true)) {
+                urdf_string = msg->data;
+                urdf_received->set_value();
+            }
+        });
+    auto srdf_sub = fetch_node->create_subscription<std_msgs::msg::String>(
+        srdf_topic, qos,
+        [&srdf_string, srdf_received, srdf_done](const std_msgs::msg::String::SharedPtr msg) {
+            if (!srdf_done->exchange(true)) {
+                srdf_string = msg->data;
+                srdf_received->set_value();
+            }
+        });
+
+    RCLCPP_INFO(this->get_logger(), "Waiting for %s and %s (timeout: %.1fs)", urdf_topic.c_str(), srdf_topic.c_str(), timeout_sec);
+
+    rclcpp::executors::SingleThreadedExecutor executor;
+    executor.add_node(fetch_node);
+
+    auto urdf_future = urdf_received->get_future();
+    auto srdf_future = srdf_received->get_future();
+
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_sec);
+    while (rclcpp::ok() && std::chrono::steady_clock::now() < deadline) {
+        executor.spin_some(std::chrono::milliseconds(100));
+        if (urdf_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready &&
+            srdf_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            break;
+        }
+    }
+
+    executor.remove_node(fetch_node);
+
+    if (urdf_string.empty() || srdf_string.empty()) {
+        RCLCPP_ERROR(this->get_logger(), "Timeout waiting for robot_description topics.");
+        return false;
+    }
+
+    /* Debug: extract and log robot names from URDF/SRDF to diagnose "Semantic description is not specified for the same robot" */
+    std::regex urdf_name_regex(R"(<robot[^>]*\s+name\s*=\s*["']([^"']+)["'])");
+    std::regex srdf_name_regex(R"(<robot[^>]*\s+name\s*=\s*["']([^"']+)["'])");
+    std::smatch urdf_match, srdf_match;
+    std::string urdf_robot_name = "(not found)";
+    std::string srdf_robot_name = "(not found)";
+    if (std::regex_search(urdf_string, urdf_match, urdf_name_regex)) {
+        urdf_robot_name = urdf_match[1].str();
+    }
+    if (std::regex_search(srdf_string, srdf_match, srdf_name_regex)) {
+        srdf_robot_name = srdf_match[1].str();
+    }
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] URDF robot name: '%s' | SRDF robot name: '%s' | Match: %s",
+        urdf_robot_name.c_str(), srdf_robot_name.c_str(),
+        (urdf_robot_name == srdf_robot_name ? "OK" : "MISMATCH - ensure same robot/ur_type in move_group and robot_state_publisher"));
+
+    node_->declare_parameter<std::string>("robot_description", "");
+    node_->declare_parameter<std::string>("robot_description_semantic", "");
+    node_->set_parameters({
+        rclcpp::Parameter("robot_description", urdf_string),
+        rclcpp::Parameter("robot_description_semantic", srdf_string),
+    });
+
+    RCLCPP_INFO(this->get_logger(), "Robot description fetched and set on parameter server.");
+    return true;
+}
+
 bool m2Iface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName, std::string moveNs)
 {
     // check if moveNs is empty
     if (moveNs == "null") moveNs=""; 
 
     //https://github.com/moveit/moveit2/issues/496
-    m_moveGroupPtr = std::make_shared<moveit::planning_interface::MoveGroupInterface>(nodePtr, 
-        moveit::planning_interface::MoveGroupInterface::Options(
-            groupName,
-            "robot_description",
-            moveNs));
+    // Use 30s timeout instead of default -1 (unlimited) to avoid indefinite block
+    constexpr int WAIT_FOR_SERVERS_SEC = 30;
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] setMoveGroup: Creating MoveGroupInterface (wait_for_servers=%ds)...", WAIT_FOR_SERVERS_SEC);
+    m_moveGroupPtr = std::make_shared<moveit::planning_interface::MoveGroupInterface>(
+        nodePtr,
+        moveit::planning_interface::MoveGroupInterface::Options(groupName, "robot_description", moveNs),
+        nullptr,  // tf_buffer
+        rclcpp::Duration::from_seconds(WAIT_FOR_SERVERS_SEC));
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] setMoveGroup: MoveGroupInterface created.");
 
     double POS_TOL = 0.0000001; 
     // set move group stuff
     m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME); 
     m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME); 
     m_moveGroupPtr->setGoalPositionTolerance(POS_TOL);
-    m_moveGroupPtr->startStateMonitor(); 
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] setMoveGroup: Calling startStateMonitor()...");
+    m_moveGroupPtr->startStateMonitor();
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] setMoveGroup: startStateMonitor() returned."); 
 
     // velocity scaling
     m_moveGroupPtr->setMaxVelocityScalingFactor(INIT_VEL_SCALING);

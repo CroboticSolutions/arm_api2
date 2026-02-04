@@ -172,7 +172,8 @@ class m2Iface: public rclcpp::Node
         void init_publishers(); 
         void init_services();
         void init_actionservers();
-        void init_moveit(); 
+        void init_moveit();
+        bool fetchAndSetRobotDescription();
         std::unique_ptr<moveit_servo::Servo> init_servo(); 
         
         /* subs */
