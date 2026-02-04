@@ -1,0 +1,68 @@
+robot:
+  arm_name: ur_manipulator
+  ee_link_name: ur1_tool0
+  robot_desc: robot_description
+  move_group_ns: "ur1"
+  servo_command_topic: "ur1/forward_position_controller/commands"
+  planning_scene: planning_scene
+  planning_frame: world 
+  num_cart_pts: 20
+  joint_states: ur1/joint_states
+  max_vel_scaling_factor: 0.1
+  max_acc_scaling_factor: 0.1
+  with_planner: true
+topic:
+  sub:
+    cmd_pose:
+      name: ur1/arm/cmd/pose
+      queue: 1
+    cmd_traj:
+      name: ur1/arm/cmd/traj
+      queue: 1
+    cmd_tool_orientation:
+      name: ur1/tool/cmd/orient
+      queue: 1
+    cmd_delta_pose:
+      name: ur1/arm/cmd/delta_pose
+      queue: 1
+    joint_states:
+      name: ur1/joint_states
+      queue: 1
+  pub:
+    display_trajectory:
+      name: ur1/arm/display_path
+      queue: 1
+    current_pose:
+      name: ur1/arm/state/current_pose
+      queue: 1
+    current_robot_state:
+      name: ur1/arm/state/ctl_state
+      queue: 1
+srv:
+  disable_collision:
+    name: ur1/move_group/disable_collision
+  add_collision:
+    name: ur1/move_group/add_collision
+  change_robot_state:
+    name: ur1/arm/change_state
+  set_vel_acc:
+    name: ur1/arm/set_vel_acc
+  set_planner:
+    name: ur1/arm/set_planner
+  set_eelink:
+    name: ur1/arm/set_eelink
+  set_planonly:
+    name: ur1/arm/set_planonly
+  open_gripper:
+    name: ur1/arm/open_gripper
+  close_gripper:
+    name: ur1/arm/close_gripper
+action:
+  move_to_pose:
+    name: ur1/arm/move_to_pose
+  move_to_joint:
+    name: ur1/arm/move_to_joint
+  move_to_pose_path:
+    name: ur1/arm/move_to_pose_path
+  gripper_control:
+    name: ur1/arm/gripper_control

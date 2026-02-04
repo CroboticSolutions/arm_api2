@@ -146,8 +146,13 @@ void m2Iface::init_subscribers()
     servo_twist_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
         "~/servo_twist_cmd", 10, std::bind(&m2Iface::servo_twist_cb, this, _1));
     // Servo position output publisher (Float64MultiArray for forward_position_controller)
+    // Use relative topic so it resolves correctly when node is in a namespace (e.g. ur1, ur2)
+    std::string servo_cmd_topic = "forward_position_controller/commands";
+    if (config["robot"]["servo_command_topic"]) {
+        servo_cmd_topic = config["robot"]["servo_command_topic"].as<std::string>();
+    }
     servo_position_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(
-        "/forward_position_controller/commands", 10);
+        ns_ + servo_cmd_topic, 10);
     // Servo status publisher
     servo_status_pub_ = this->create_publisher<moveit_msgs::msg::ServoStatus>(
         "~/status", 10);
@@ -636,16 +641,22 @@ void m2Iface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeSt
 
 bool m2Iface::fetchAndSetRobotDescription()
 {
-    const std::string urdf_topic = "/robot_description";
+    std::string urdf_topic;
     std::string srdf_topic;
     if (MOVE_GROUP_NS.empty() || MOVE_GROUP_NS == "null") {
+        urdf_topic = "/robot_description";
         srdf_topic = "/move_group/robot_description_semantic";
     } else {
-        srdf_topic = "/" + MOVE_GROUP_NS + "/robot_description_semantic";
+        urdf_topic = "/" + MOVE_GROUP_NS + "/robot_description";
+        srdf_topic = "/" + MOVE_GROUP_NS + "/move_group/robot_description_semantic";
     }
     constexpr double timeout_sec = 10.0;
 
-    auto fetch_node = std::make_shared<rclcpp::Node>("moveit2_iface_fetch_robot_desc");
+    std::string fetch_node_name = "moveit2_iface_fetch_robot_desc";
+    if (!MOVE_GROUP_NS.empty() && MOVE_GROUP_NS != "null") {
+        fetch_node_name += "_" + MOVE_GROUP_NS;
+    }
+    auto fetch_node = std::make_shared<rclcpp::Node>(fetch_node_name);
     bool use_sim_time = false;
     if (this->get_parameter("use_sim_time", use_sim_time)) {
         fetch_node->set_parameter(rclcpp::Parameter("use_sim_time", use_sim_time));
@@ -970,10 +981,15 @@ void m2Iface::printTimestamps(const moveit_msgs::msg::RobotTrajectory &trajector
 void m2Iface::addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory &trajectory){
     // The trajectory created with computeCartesianPath() needs to be modified so it will include velocities as well.
     // reference: https://groups.google.com/g/moveit-users/c/MOoFxy2exT4
+    auto current_state = m_moveGroupPtr->getCurrentState(1.0);
+    if (!current_state) {
+        RCLCPP_WARN(this->get_logger(), "addTimestampsToTrajectory: Failed to fetch current robot state");
+        return;
+    }
     // First to create a RobotTrajectory object
-    robot_trajectory::RobotTrajectory rt(m_moveGroupPtr->getCurrentState()->getRobotModel(), PLANNING_GROUP);
+    robot_trajectory::RobotTrajectory rt(current_state->getRobotModel(), PLANNING_GROUP);
     // Second get a RobotTrajectory from trajectory
-    rt.setRobotTrajectoryMsg(*m_moveGroupPtr->getCurrentState(), trajectory);
+    rt.setRobotTrajectoryMsg(*current_state, trajectory);
     // Thrid create a TimeOptimalTrajectoryGeneration object
     trajectory_processing::TimeOptimalTrajectoryGeneration iptp;
     // Fourth compute computeTimeStamps
@@ -1052,19 +1068,22 @@ bool m2Iface::planWithPlanner(moveit::planning_interface::MoveGroupInterface::Pl
 
 void m2Iface::getArmState() 
 {   
-    const moveit::core::JointModelGroup* joint_model_group = m_robotStatePtr->getJointModelGroup(PLANNING_GROUP);
-    m_robotStatePtr->copyJointGroupPositions(joint_model_group, m_currJointPosition);
-    // get current ee pose
-    m_currPoseState = m_moveGroupPtr->getCurrentPose(EE_LINK_NAME); 
-    // current_state_monitor
-    m_robotStatePtr = m_moveGroupPtr->getCurrentState();
-    // by default timeout is 10 secs
+    auto current_state = m_moveGroupPtr->getCurrentState(1.0);
+    if (!current_state) {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+            "getArmState: Failed to fetch current robot state");
+        return;
+    }
+    m_robotStatePtr = current_state;
     m_robotStatePtr->update();
-    
-    Eigen::Isometry3d currentPose_ = m_moveGroupPtr->getCurrentState()->getFrameTransform(EE_LINK_NAME);
+
+    const moveit::core::JointModelGroup* joint_model_group = m_robotStatePtr->getJointModelGroup(PLANNING_GROUP);
+    if (joint_model_group) {
+        m_robotStatePtr->copyJointGroupPositions(joint_model_group, m_currJointPosition);
+    }
+    Eigen::Isometry3d currentPose_ = m_robotStatePtr->getFrameTransform(EE_LINK_NAME);
     m_currPoseState = utils::convertIsometryToMsg(currentPose_);
-    auto frame_id = m_moveGroupPtr->getPlanningFrame().c_str();
-    m_currPoseState.header.frame_id = frame_id;
+    m_currPoseState.header.frame_id = m_moveGroupPtr->getPlanningFrame();
 }
 
 bool m2Iface::run()

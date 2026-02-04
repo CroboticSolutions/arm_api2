@@ -1,17 +1,18 @@
 ######################################################################
- # BSD 3-Clause License
- #
- # Copyright (c) 2024, Crobotic Solutions d.o.o.
- # All rights reserved.
+# BSD 3-Clause License
+#
+# Copyright (c) 2024, Crobotic Solutions d.o.o.
+# All rights reserved.
 ######################################################################
-
- #      Title       : moveit2_iface.launch.py
- #      Project     : arm_api2
- #      Created     : 06/08/2025
- #      Author      : Filip Zoric
- #
- #      Description : Launch file for moveit2_iface
- #
+#
+#      Title       : moveit2_iface.launch.py
+#      Project     : arm_api2
+#      Created     : 06/08/2025
+#      Author      : Filip Zoric
+#
+#      Description : Launch file for moveit2_iface.
+#                    Supports 1 robot (robot_name) or 2 robots (robot_namespaces="ur1,ur2").
+#
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -24,42 +25,12 @@ from launch.substitutions import LaunchConfiguration
 import yaml
 import os
 
-# TODO: Make this changeable without ERROR for wrong param type
 use_sim_time = True
 dt = 0.1
 
-def launch_setup(context, *args, **kwargs):
 
-    launch_nodes_ = []
-    arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
-    arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))
-    arg_enable_servo    = context.perform_substitution(LaunchConfiguration('enable_servo', default='true'))
-    arg_launch_servo_watchdog = context.perform_substitution(LaunchConfiguration('launch_servo_watchdog', default=True))
-    print("arg_launch_joy: ", arg_launch_joy)
-
-    # TODO: Swap between sim and real arg depending on the robot type
-    robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
-    servo_yaml = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
-    kinematics_yaml = "config/{0}/{1}_kinematics.yaml".format(arg_robot_name, arg_robot_name)
-
-    # Arm params (ctl, servo) --> sent just as path
-    # 3 different ways of loading and using yaml files, DISGUSTING [FIX ASAP]
-    config_path = os.path.join(
-        get_package_share_directory('arm_api2'),
-        "config",
-        robot_yaml
-    )
-
-    # Servo params created with the help of ParameterBuilder
-    servo_params = {
-        "moveit_servo": ParameterBuilder("arm_api2")
-        .yaml(f"config/{servo_yaml}")
-        .to_dict()
-    }
-
-    # Load kinematic params (MoveIt expects under robot_description_kinematics)
-    kinematic_params = load_yaml("arm_api2", kinematics_yaml)
-    use_servo = str(arg_enable_servo).lower() == "true"
+def _create_moveit2_iface_node(config_path, servo_params, kinematic_params, use_servo, node_name=None, remappings=None):
+    """Create a moveit2_iface Node with given config."""
     node_params = [
         {"use_sim_time": use_sim_time},
         {"enable_servo": use_servo},
@@ -70,30 +41,91 @@ def launch_setup(context, *args, **kwargs):
     if kinematic_params:
         node_params.insert(-1, {"robot_description_kinematics": kinematic_params})
 
-    launch_move_group = Node(
-        package='arm_api2',
-        executable='moveit2_iface',
-        # prefix=['gdbserver localhost:3000'],  # Used for debugging
-        output='screen',
-        parameters=node_params,
+    node_kwargs = {
+        "package": "arm_api2",
+        "executable": "moveit2_iface",
+        "name": node_name,
+        "output": "screen",
+        "parameters": node_params,
+    }
+    if remappings:
+        node_kwargs["remappings"] = remappings
+    return Node(**node_kwargs)
+
+
+def launch_setup(context, *args, **kwargs):
+    launch_nodes_ = []
+    arg_robot_name = context.perform_substitution(LaunchConfiguration("robot_name"))
+    arg_robot_namespaces = context.perform_substitution(
+        LaunchConfiguration("robot_namespaces", default="")
+    )
+    arg_launch_joy = context.perform_substitution(
+        LaunchConfiguration("launch_joy", default="true")
+    )
+    arg_enable_servo = context.perform_substitution(
+        LaunchConfiguration("enable_servo", default="true")
+    )
+    arg_launch_servo_watchdog = context.perform_substitution(
+        LaunchConfiguration("launch_servo_watchdog", default="true")
     )
 
-    launch_nodes_.append(launch_move_group)
+    use_servo = str(arg_enable_servo).lower() == "true"
+    pkg_share = get_package_share_directory("arm_api2")
 
-    if str(arg_launch_joy).lower() == "true":  # To avoid pkg not found
+
+    # robot_namespaces: "ur1", "ur2", or "ur1,ur2" - launches node(s) with ur/{ns}_sim.yaml
+    # Empty = single-robot mode using robot_name
+    namespaces = [ns.strip() for ns in arg_robot_namespaces.split(",") if ns.strip()]
+
+    if len(namespaces) >= 1:
+        # Dual-arm mode: ur1, ur2 (or custom namespaces)
+        kinematics = load_yaml("arm_api2", "config/ur/ur_kinematics.yaml")
+        for ns in namespaces[:2]:
+            config_path = os.path.join(pkg_share, "config", "ur", f"{ns}_sim.yaml")
+            servo_params = {
+                "moveit_servo": ParameterBuilder("arm_api2")
+                .yaml(f"config/ur/{ns}_servo_sim.yaml")
+                .to_dict()
+            }
+            node = _create_moveit2_iface_node(
+                config_path, servo_params, kinematics, use_servo,
+                node_name=f"moveit2_iface_{ns}",
+                remappings=[("joint_states", f"{ns}/joint_states")],
+            )
+            launch_nodes_.append(node)
+    else:
+        # Single-robot mode (original behavior)
+        robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
+        servo_yaml = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
+        kinematics_yaml = "config/{0}/{1}_kinematics.yaml".format(
+            arg_robot_name, arg_robot_name
+        )
+        config_path = os.path.join(pkg_share, "config", robot_yaml)
+        servo_params = {
+            "moveit_servo": ParameterBuilder("arm_api2")
+            .yaml(f"config/{servo_yaml}")
+            .to_dict()
+        }
+        kinematic_params = load_yaml("arm_api2", kinematics_yaml)
+        node = _create_moveit2_iface_node(
+            config_path, servo_params, kinematic_params, use_servo,
+        )
+        launch_nodes_.append(node)
+
+    if str(arg_launch_joy).lower() == "true":
         joy_node = Node(
-            package='joy',
+            package="joy",
             executable="joy_node",
             output="screen",
-            arguments={'device_name': "js0"}.items()
+            arguments={"device_name": "js0"}.items(),
         )
         launch_nodes_.append(joy_node)
 
     if str(arg_launch_servo_watchdog).lower() == "true":
         launch_servo_watchdog = Node(
-            package='arm_api2',
+            package="arm_api2",
             executable="servo_watchdog.py",
-            output='screen'
+            output="screen",
         )
         launch_nodes_.append(launch_servo_watchdog)
 
@@ -106,11 +138,19 @@ def generate_launch_description():
     declared_arguments = []
 
     declared_arguments.append(
-        DeclareLaunchArgument(name='robot_name',
-                             default_value='kinova',
-                             description='robot name')
+        DeclareLaunchArgument(
+            name="robot_name",
+            default_value="kinova",
+            description="Robot name for single-robot mode (config subdir, e.g. ur, kinova).",
+        )
     )
-    # TODO: THIS IS NOT CONVERTED TO FALSE WHEN SETUP! FIX IT!
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            name="robot_namespaces",
+            default_value="",
+            description='Dual-arm: comma-separated namespaces, e.g. "ur1,ur2". Empty = single robot.',
+        )
+    )
     declared_arguments.append(
         DeclareLaunchArgument(name='launch_joy',
                              default_value='true',
