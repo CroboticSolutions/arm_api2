@@ -1,6 +1,6 @@
 robot:
   arm_name: ur_manipulator
-  ee_link_name: ur1_tool0
+  ee_link_name: tool0
   robot_desc: robot_description
   move_group_ns: "ur1"
   servo_command_topic: "forward_position_controller/commands"
