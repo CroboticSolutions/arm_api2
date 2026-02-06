@@ -26,6 +26,7 @@
   <depend>control_msgs</depend>
   <depend>tf2</depend>
   <depend>std_srvs</depend>
+  <depend>controller_manager_msgs</depend>
   <depend>python3</depend>
 
   <test_depend>ament_lint_auto</test_depend>

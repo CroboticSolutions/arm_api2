@@ -108,9 +108,6 @@ class m2SimpleIface: public rclcpp::Node
         m2SimpleIface(const rclcpp::NodeOptions &options);  
         //~m2SimpleIface();
 
-        /* namespace param, maybe redundant */ 
-        std::string ns_; 
-
     private: 
 
         /* node related stuff */
@@ -150,6 +147,9 @@ class m2SimpleIface: public rclcpp::Node
 
         /*config*/
         YAML::Node init_config(std::string yaml_path);
+
+        /** Creates the internal MoveIt node with root namespace and joint_states remapping. */
+        static rclcpp::Node::SharedPtr createMoveitNode(rclcpp::Node* parent);
 
         /* init methods */
         void init_subscribers();

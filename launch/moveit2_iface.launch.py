@@ -11,7 +11,7 @@
 #      Author      : Filip Zoric
 #
 #      Description : Launch file for moveit2_iface.
-#                    Supports 1 robot (robot_name) or 2 robots (robot_namespaces="ur1,ur2").
+#                    One launch = one robot. Use robot_namespaces:=ur1 or ur2 per terminal.
 #
 
 from ament_index_python.packages import get_package_share_directory
@@ -29,7 +29,7 @@ use_sim_time = True
 dt = 0.1
 
 
-def _create_moveit2_iface_node(config_path, servo_params, kinematic_params, use_servo, node_name=None, remappings=None):
+def _create_moveit2_iface_node(config_path, servo_params, kinematic_params, use_servo, node_name=None, namespace=None):
     """Create a moveit2_iface Node with given config."""
     node_params = [
         {"use_sim_time": use_sim_time},
@@ -48,8 +48,8 @@ def _create_moveit2_iface_node(config_path, servo_params, kinematic_params, use_
         "output": "screen",
         "parameters": node_params,
     }
-    if remappings:
-        node_kwargs["remappings"] = remappings
+    if namespace:
+        node_kwargs["namespace"] = namespace
     return Node(**node_kwargs)
 
 
@@ -73,44 +73,31 @@ def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("arm_api2")
 
 
-    # robot_namespaces: "ur1", "ur2", or "ur1,ur2" - launches node(s) with ur/{ns}_sim.yaml
-    # Empty = single-robot mode using robot_name
-    namespaces = [ns.strip() for ns in arg_robot_namespaces.split(",") if ns.strip()]
-
-    if len(namespaces) >= 1:
-        # Dual-arm mode: ur1, ur2 (or custom namespaces)
+    # robot_namespaces: "ur1" or "ur2" - one per terminal. Empty = single-robot mode (robot_name).
+    ns = arg_robot_namespaces.strip().split(",")[0].strip() if arg_robot_namespaces else ""
+    if ns:
+        instance_name = ns
+        config_subdir = "ur"
         kinematics = load_yaml("arm_api2", "config/ur/ur_kinematics.yaml")
-        for ns in namespaces[:2]:
-            config_path = os.path.join(pkg_share, "config", "ur", f"{ns}_sim.yaml")
-            servo_params = {
-                "moveit_servo": ParameterBuilder("arm_api2")
-                .yaml(f"config/ur/{ns}_servo_sim.yaml")
-                .to_dict()
-            }
-            node = _create_moveit2_iface_node(
-                config_path, servo_params, kinematics, use_servo,
-                node_name=f"moveit2_iface_{ns}",
-                remappings=[("joint_states", f"{ns}/joint_states")],
-            )
-            launch_nodes_.append(node)
     else:
-        # Single-robot mode (original behavior)
-        robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
-        servo_yaml = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
-        kinematics_yaml = "config/{0}/{1}_kinematics.yaml".format(
-            arg_robot_name, arg_robot_name
-        )
-        config_path = os.path.join(pkg_share, "config", robot_yaml)
-        servo_params = {
-            "moveit_servo": ParameterBuilder("arm_api2")
-            .yaml(f"config/{servo_yaml}")
-            .to_dict()
-        }
-        kinematic_params = load_yaml("arm_api2", kinematics_yaml)
-        node = _create_moveit2_iface_node(
-            config_path, servo_params, kinematic_params, use_servo,
-        )
-        launch_nodes_.append(node)
+        instance_name = arg_robot_name
+        config_subdir = arg_robot_name
+        ns = ""
+        kinematics = load_yaml("arm_api2", f"config/{arg_robot_name}/{arg_robot_name}_kinematics.yaml")
+
+    config_path = os.path.join(pkg_share, "config", config_subdir, f"{instance_name}_sim.yaml")
+    servo_params = {
+        "moveit_servo": ParameterBuilder("arm_api2")
+        .yaml(f"config/{config_subdir}/{instance_name}_servo_sim.yaml")
+        .to_dict()
+    }
+    node_name = f"moveit2_iface_{ns}" if ns else "moveit2_iface"
+    node = _create_moveit2_iface_node(
+        config_path, servo_params, kinematics, use_servo,
+        node_name=node_name,
+        namespace=ns if ns else None,
+    )
+    launch_nodes_.append(node)
 
     if str(arg_launch_joy).lower() == "true":
         joy_node = Node(
@@ -148,7 +135,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             name="robot_namespaces",
             default_value="",
-            description='Dual-arm: comma-separated namespaces, e.g. "ur1,ur2". Empty = single robot.',
+            description='Namespace for this instance (e.g. ur1, ur2). Empty = single robot mode.',
         )
     )
     declared_arguments.append(

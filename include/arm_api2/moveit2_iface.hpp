@@ -97,6 +97,7 @@
 #include "arm_api2_msgs/action/move_cartesian_path.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include "std_srvs/srv/set_bool.hpp"
+#include "controller_manager_msgs/srv/switch_controller.hpp"
 
 // utils
 #include "arm_api2/utils.hpp"
@@ -121,9 +122,6 @@ class m2Iface: public rclcpp::Node
         m2Iface(const rclcpp::NodeOptions &options);  
         //~m2Iface();
 
-        /* namespace param, maybe redundant */ 
-        std::string ns_; 
-
     private: 
 
         /* node related stuff */
@@ -135,8 +133,10 @@ class m2Iface: public rclcpp::Node
         RobotiqGripper gripper; 
 
         /* arm_definition */ 
-        std::string PLANNING_GROUP; 
-        std::string EE_LINK_NAME;  
+        std::string PLANNING_GROUP;
+        std::string EE_LINK_NAME;
+        std::string scaled_joint_trajectory_controller_name_;
+        std::string forward_position_controller_name_;
         std::string ROBOT_DESC; 
         std::string PLANNING_SCENE; 
         std::string PLANNING_FRAME; 
@@ -167,6 +167,9 @@ class m2Iface: public rclcpp::Node
         /*config*/
         YAML::Node init_config(std::string yaml_path);
 
+        /** Creates the internal MoveIt node with root namespace and joint_states remapping. */
+        static rclcpp::Node::SharedPtr createMoveitNode(rclcpp::Node* parent);
+
         /* init methods */
         void init_subscribers();
         void init_publishers(); 
@@ -194,6 +197,8 @@ class m2Iface: public rclcpp::Node
         rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr                      set_plan_only_srv_;
         rclcpp::Service<arm_api2_msgs::srv::AddCollisionObject>::SharedPtr      add_collision_object_srv_;
 
+        rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedPtr switch_controller_client_;
+
         /* actions */
         rclcpp_action::Server<arm_api2_msgs::action::MoveJoint>::SharedPtr              move_to_joint_as_;
         rclcpp_action::Server<arm_api2_msgs::action::MoveCartesian>::SharedPtr          move_to_pose_as_;
@@ -218,6 +223,9 @@ class m2Iface: public rclcpp::Node
                                const std::shared_ptr<std_srvs::srv::SetBool::Response> res);
         void add_collision_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Request> req,
                                       const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Response> res);
+
+        /** Switch controllers when entering/leaving SERVO_CTL. Returns true on success. */
+        bool switchControllersForServo(bool enter_servo);
 
         /* action callbacks */
         rclcpp_action::GoalResponse move_to_joint_goal_cb(

@@ -24,6 +24,7 @@ find_package(rclpy REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(controller_manager_msgs REQUIRED)
 
 # include headers
 include_directories(include)
@@ -40,7 +41,7 @@ PUBLIC
 # Build moveit2_iface
 target_compile_features(moveit2_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
-  moveit2_iface moveit_ros_planning moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs
+  moveit2_iface moveit_ros_planning moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs controller_manager_msgs
 )
 
 # Install moveit2_iface

@@ -41,9 +41,36 @@
 
 #include "arm_api2/moveit2_simple_iface.hpp"
 
+rclcpp::Node::SharedPtr m2SimpleIface::createMoveitNode(rclcpp::Node* parent)
+{
+    std::string config_path;
+    parent->get_parameter("config_path", config_path);
+    const YAML::Node config = YAML::LoadFile(config_path);
+    std::string MOVE_GROUP_NS = config["robot"]["move_group_ns"].as<std::string>();
+    std::string joint_states_topic;
+    if (config["robot"]["joint_states"]) {
+        joint_states_topic = config["robot"]["joint_states"].as<std::string>();
+    } else {
+        joint_states_topic = (MOVE_GROUP_NS.empty() || MOVE_GROUP_NS == "null")
+            ? "joint_states"
+            : MOVE_GROUP_NS + "/joint_states";
+    }
+
+    rclcpp::NodeOptions opts;
+    opts.use_global_arguments(false);
+    std::vector<std::string> args = {"--ros-args", "-r", "__ns:=/"};
+    if (!joint_states_topic.empty() && joint_states_topic != "joint_states") {
+        args.push_back("-r");
+        args.push_back("joint_states:=" + joint_states_topic);
+    }
+    opts.arguments(args);
+    return std::make_shared<rclcpp::Node>("moveit2_simple_iface_node", opts);
+}
+
 m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
-    : Node("moveit2_simple_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_simple_iface_node")), 
-     executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()), gripper(node_) 
+    : Node("moveit2_simple_iface", options),
+     node_(createMoveitNode(this)),
+     executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()), gripper(node_)
 {   
     // USE_SIM_TIME HACK TO TEST SERVO!
     this->set_parameter(rclcpp::Parameter("use_sim_time", false));
@@ -65,14 +92,18 @@ m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
     ROBOT_DESC          = config["robot"]["robot_desc"].as<std::string>();  
     PLANNING_FRAME      = config["robot"]["planning_frame"].as<std::string>(); 
     PLANNING_SCENE      = config["robot"]["planning_scene"].as<std::string>(); 
-    MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
-    NUM_CART_PTS        = config["robot"]["num_cart_pts"].as<int>(); 
-    JOINT_STATES        = config["robot"]["joint_states"].as<std::string>(); 
+    MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>();
+    NUM_CART_PTS        = config["robot"]["num_cart_pts"].as<int>();
+    if (config["robot"]["joint_states"]) {
+        JOINT_STATES = config["robot"]["joint_states"].as<std::string>();
+    } else {
+        JOINT_STATES = (MOVE_GROUP_NS.empty() || MOVE_GROUP_NS == "null")
+            ? "joint_states"
+            : MOVE_GROUP_NS + "/joint_states";
+    }
     max_vel_scaling_factor = config["robot"]["max_vel_scaling_factor"].as<float>();
     max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
     
-    // Currently not used :) [ns]
-    ns_ = this->get_namespace(); 	
     init_publishers(); 
     init_subscribers(); 
     init_services(); 
@@ -94,38 +125,38 @@ YAML::Node m2SimpleIface::init_config(std::string yaml_path)
 }
 
 void m2SimpleIface::init_publishers()
-{   
-    auto pose_state_name = config["topic"]["pub"]["current_pose"]["name"].as<std::string>(); 
-    pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(ns_ + pose_state_name, 1); 
-    auto current_robot_state_name = config["topic"]["pub"]["current_robot_state"]["name"].as<std::string>(); 
-    robot_state_pub_ = this->create_publisher<std_msgs::msg::String>(ns_ + current_robot_state_name, 1);
+{
+    auto pose_state_name = config["topic"]["pub"]["current_pose"]["name"].as<std::string>();
+    pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(pose_state_name, 1);
+    auto current_robot_state_name = config["topic"]["pub"]["current_robot_state"]["name"].as<std::string>();
+    robot_state_pub_ = this->create_publisher<std_msgs::msg::String>(current_robot_state_name, 1);
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized publishers!");
 }
 
 void m2SimpleIface::init_subscribers()
 {
-    auto pose_cmd_name = config["topic"]["sub"]["cmd_pose"]["name"].as<std::string>(); 
-    auto cart_traj_cmd_name = config["topic"]["sub"]["cmd_traj"]["name"].as<std::string>(); 
+    auto pose_cmd_name = config["topic"]["sub"]["cmd_pose"]["name"].as<std::string>();
+    auto cart_traj_cmd_name = config["topic"]["sub"]["cmd_traj"]["name"].as<std::string>();
     auto joint_states_name = config["topic"]["sub"]["joint_states"]["name"].as<std::string>();
-    pose_cmd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(ns_ + pose_cmd_name, 1, std::bind(&m2SimpleIface::pose_cmd_cb, this, _1));
-    ctraj_cmd_sub_ = this->create_subscription<arm_api2_msgs::msg::CartesianWaypoints>(ns_ + cart_traj_cmd_name, 1, std::bind(&m2SimpleIface::cart_poses_cb, this, _1));
-    joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(ns_ + joint_states_name, 1, std::bind(&m2SimpleIface::joint_state_cb, this, _1));
+    pose_cmd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(pose_cmd_name, 1, std::bind(&m2SimpleIface::pose_cmd_cb, this, _1));
+    ctraj_cmd_sub_ = this->create_subscription<arm_api2_msgs::msg::CartesianWaypoints>(cart_traj_cmd_name, 1, std::bind(&m2SimpleIface::cart_poses_cb, this, _1));
+    joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(joint_states_name, 1, std::bind(&m2SimpleIface::joint_state_cb, this, _1));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
 }
 
 void m2SimpleIface::init_services()
 {
-    auto change_state_name = config["srv"]["change_robot_state"]["name"].as<std::string>(); 
+    auto change_state_name = config["srv"]["change_robot_state"]["name"].as<std::string>();
     auto set_vel_acc_name  = config["srv"]["set_vel_acc"]["name"].as<std::string>();
     auto set_planner_name  = config["srv"]["set_planner"]["name"].as<std::string>();
-    auto open_gripper_name = config["srv"]["open_gripper"]["name"].as<std::string>(); 
-    auto close_gripper_name= config["srv"]["close_gripper"]["name"].as<std::string>();
-    change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2SimpleIface::change_state_cb, this, _1, _2)); 
-    set_vel_acc_srv_  = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2SimpleIface::set_vel_acc_cb, this, _1, _2));
-    set_planner_srv_  = this->create_service<arm_api2_msgs::srv::SetStringParam>(ns_ + set_planner_name, std::bind(&m2SimpleIface::set_planner_cb, this, _1, _2));
-    open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + open_gripper_name, std::bind(&m2SimpleIface::open_gripper_cb, this, _1, _2));
-    close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + close_gripper_name, std::bind(&m2SimpleIface::close_gripper_cb, this, _1, _2));
-    add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(ns_ + "add_collision_object", std::bind(&m2SimpleIface::add_collision_object_cb, this, _1, _2));
+    auto open_gripper_name = config["srv"]["open_gripper"]["name"].as<std::string>();
+    auto close_gripper_name = config["srv"]["close_gripper"]["name"].as<std::string>();
+    change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(change_state_name, std::bind(&m2SimpleIface::change_state_cb, this, _1, _2));
+    set_vel_acc_srv_  = this->create_service<arm_api2_msgs::srv::SetVelAcc>(set_vel_acc_name, std::bind(&m2SimpleIface::set_vel_acc_cb, this, _1, _2));
+    set_planner_srv_  = this->create_service<arm_api2_msgs::srv::SetStringParam>(set_planner_name, std::bind(&m2SimpleIface::set_planner_cb, this, _1, _2));
+    open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(open_gripper_name, std::bind(&m2SimpleIface::open_gripper_cb, this, _1, _2));
+    close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(close_gripper_name, std::bind(&m2SimpleIface::close_gripper_cb, this, _1, _2));
+    add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>("add_collision_object", std::bind(&m2SimpleIface::add_collision_object_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
@@ -147,7 +178,11 @@ void m2SimpleIface::init_moveit()
 std::unique_ptr<moveit_servo::Servo> m2SimpleIface::init_servo()
 {   
     // New Jazzy API - use ParamListener instead of ServoParameters
-    servo_param_listener_ = std::make_shared<servo::ParamListener>(node_);
+    // Use main node's parameters (servo params are loaded on this node, not node_)
+    servo_param_listener_ = std::make_shared<servo::ParamListener>(
+        this->get_node_parameters_interface(),
+        this->get_logger(),
+        "moveit_servo");
     auto servo_params = servo_param_listener_->get_params();
     RCLCPP_INFO_STREAM(this->get_logger(), "Servo move_group_name: " << servo_params.move_group_name);  
 
@@ -405,16 +440,26 @@ bool m2SimpleIface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std
 {
     // https://moveit.picknik.ai/main/doc/examples/planning_scene_ros_api/planning_scene_ros_api_tutorial.html
     // https://github.com/moveit/moveit2_tutorials/blob/main/doc/examples/planning_scene/src/planning_scene_tutorial.cpp
-    m_pSceneMonitorPtr = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(nodePtr, name); 
-    m_pSceneMonitorPtr->startSceneMonitor(PLANNING_SCENE); 
+    m_pSceneMonitorPtr = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(nodePtr, name);
+
+    // Use move_group's monitored_planning_scene topic (namespaced for dual-arm to avoid cross-talk)
+    std::string scene_topic = MOVE_GROUP_NS.empty()
+        ? "/monitored_planning_scene"
+        : "/" + MOVE_GROUP_NS + "/monitored_planning_scene";
+    m_pSceneMonitorPtr->startSceneMonitor(scene_topic);
+
     if (m_pSceneMonitorPtr->getPlanningScene())
     {
-        m_pSceneMonitorPtr->startStateMonitor(JOINT_STATES); 
+        m_pSceneMonitorPtr->startStateMonitor(JOINT_STATES);
         m_pSceneMonitorPtr->setPlanningScenePublishingFrequency(25);
+
+        // Publish to namespaced topic for dual-arm to avoid both robots overwriting the same topic
+        std::string publish_topic = MOVE_GROUP_NS.empty()
+            ? "/moveit_servo/publish_planning_scene"
+            : "/" + MOVE_GROUP_NS + "/moveit_servo/publish_planning_scene";
         m_pSceneMonitorPtr->startPublishingPlanningScene(planning_scene_monitor::PlanningSceneMonitor::UPDATE_SCENE,
-                                                         "/moveit_servo/publish_planning_scene");
-        m_pSceneMonitorPtr->startSceneMonitor(); 
-        m_pSceneMonitorPtr->providePlanningSceneService(); 
+                                                         publish_topic);
+        m_pSceneMonitorPtr->providePlanningSceneService();
     }
     else 
     {
