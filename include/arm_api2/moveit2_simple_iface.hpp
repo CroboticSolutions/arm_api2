@@ -238,7 +238,7 @@ class m2SimpleIface: public rclcpp::Node
         bool recivCmd           = false; 
         bool recivTraj          = false; 
         bool servoEntered       = false; 
-        bool async              = true; 
+        bool async              = false; 
 
         /* planner info */
         std::string current_planner_id_ = "pilz_industrial_motion_planner";

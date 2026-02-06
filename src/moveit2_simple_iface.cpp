@@ -421,11 +421,12 @@ bool m2SimpleIface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string gr
             "robot_description",
             moveNs));
 
-    double POS_TOL = 0.0000001; 
-    // set move group stuff
-    m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME); 
-    m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME); 
+    const double POS_TOL = 0.002;   // meters, relaxed for rounded poses
+    const double ORI_TOL = 0.01;    // radians (~0.5 deg)
+    m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME);
+    m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME);
     m_moveGroupPtr->setGoalPositionTolerance(POS_TOL);
+    m_moveGroupPtr->setGoalOrientationTolerance(ORI_TOL);
     m_moveGroupPtr->startStateMonitor(); 
     // executor
     executor_->add_node(node_); 
