@@ -61,6 +61,7 @@ def launch_setup(context, *args, **kwargs):
     arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
     arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))
     arg_use_gdb         = context.perform_substitution(LaunchConfiguration('use_gdb', default=False))
+    arg_robot_namespace = context.perform_substitution(LaunchConfiguration('robot_namespace', default=''))
 
     # TODO: Swap between sim and real arg depending on the robot type
     robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
@@ -77,11 +78,13 @@ def launch_setup(context, *args, **kwargs):
 
     # Servo params created with the help of ParameterBuilder
     servo_params = {
-        "moveit_servo": ParameterBuilder("arm_api2") 
+        "moveit_servo": ParameterBuilder("arm_api2")
         .yaml(f"config/{servo_yaml}")
         .to_dict()
     }
-    
+    if arg_robot_namespace:
+        servo_params["moveit_servo"]["joint_topic"] = f"/{arg_robot_namespace}/joint_states"
+
     # Load kinematic params
     kinematic_params = load_yaml("arm_api2", kinematics_yaml)
 
@@ -90,9 +93,14 @@ def launch_setup(context, *args, **kwargs):
     if arg_use_gdb.lower() == 'true':
         prefix_cmd =['xterm -e gdb -ex run --args']
 
+    remappings = []
+    if arg_robot_namespace:
+        remappings = [("joint_states", f"/{arg_robot_namespace}/joint_states")]
+
     launch_arm_api2 = Node(
         package='arm_api2',
         executable='moveit2_simple_iface',
+        remappings=remappings,
         parameters=[{"use_sim_time": use_sim_time},
                     {"enable_servo": use_servo},
                     {"dt": dt},
@@ -161,6 +169,12 @@ def generate_launch_description():
         DeclareLaunchArgument(name='use_gdb',
                               default_value='false',
                               description='Run node with GDB debugger')
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(name='robot_namespace',
+                              default_value='',
+                              description='Robot namespace (e.g. robot1). Empty = no namespace.')
     )
 
     return LaunchDescription(declared_arguments + [OpaqueFunction(function=launch_setup)])

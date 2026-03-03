@@ -121,6 +121,7 @@ class m2SimpleIface: public rclcpp::Node
         
         /* Thread safety */
         std::mutex pose_cmd_mutex_;
+        std::mutex robot_state_mutex_;
 
         /* gripper */
         RobotiqGripper gripper; 

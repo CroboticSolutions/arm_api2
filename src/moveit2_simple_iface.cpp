@@ -181,8 +181,10 @@ void m2SimpleIface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr
 {   
     std::vector<std::string> jointNames = msg->name;
     std::vector<double> jointPositions = msg->position;
-    if(robotModelInit) {m_robotStatePtr->setVariablePositions(jointNames, jointPositions);}; 
-
+    if (robotModelInit) {
+        std::lock_guard<std::mutex> lock(robot_state_mutex_);
+        if (m_robotStatePtr) m_robotStatePtr->setVariablePositions(jointNames, jointPositions);
+    }
 }
 
 void m2SimpleIface::open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
@@ -469,22 +471,14 @@ void m2SimpleIface::execPlan(bool async=false)
     
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     bool success = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
-    
     if (success) {
-        if (async) {
-            // Store plan as member variable to keep it alive during async execution
-            m_async_plan_ptr = std::make_shared<moveit::planning_interface::MoveGroupInterface::Plan>(plan);
-            // Make a shared_ptr copy of the trajectory to ensure it stays alive
-            auto trajectory_copy = std::make_shared<moveit_msgs::msg::RobotTrajectory>(m_async_plan_ptr->trajectory_);
-            RCLCPP_INFO(this->get_logger(), "Starting async execution, plan at: %p, trajectory at: %p", 
-                        static_cast<void*>(m_async_plan_ptr.get()), static_cast<void*>(trajectory_copy.get()));
-            m_moveGroupPtr->asyncExecute(*trajectory_copy);
-            // Keep trajectory_copy alive by storing it
-            m_async_trajectory_ptr = trajectory_copy;
-        }
-        else {
-            m_moveGroupPtr->execute(plan);
-        }
+        // Use asyncExecute for all joint plans: blocking execute() crashes intermittently
+        // when switching JOINT->CART (MoveIt/controller race). asyncExecute avoids the
+        // blocking wait; commander uses is_complete() to detect arrival.
+        m_async_plan_ptr = std::make_shared<moveit::planning_interface::MoveGroupInterface::Plan>(plan);
+        auto trajectory_copy = std::make_shared<moveit_msgs::msg::RobotTrajectory>(m_async_plan_ptr->trajectory_);
+        m_moveGroupPtr->asyncExecute(*trajectory_copy);
+        m_async_trajectory_ptr = trajectory_copy;
     }else {
         RCLCPP_ERROR(this->get_logger(), "Planning failed!"); 
     }
@@ -526,43 +520,30 @@ void m2SimpleIface::execCartesian(bool async=false)
 
 void m2SimpleIface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async=false)
 {
-    if (async) {
-        // Store trajectory as member variable to keep it alive during async execution
-        m_async_trajectory_ptr = std::make_shared<moveit_msgs::msg::RobotTrajectory>(trajectory);
-        RCLCPP_INFO(this->get_logger(), "Starting async trajectory execution, storing at: %p", static_cast<void*>(m_async_trajectory_ptr.get()));
-        m_moveGroupPtr->asyncExecute(*m_async_trajectory_ptr);
-        RCLCPP_INFO_STREAM(this->get_logger(), "Executing trajectory asynchronously!");
-    }
-    else{
-        m_moveGroupPtr->execute(trajectory);
-    }
+    // Always use asyncExecute: blocking execute() crashes intermittently on state transitions
+    // (JOINT<->CART). Commander uses is_complete() to detect arrival.
+    m_async_trajectory_ptr = std::make_shared<moveit_msgs::msg::RobotTrajectory>(trajectory);
+    m_moveGroupPtr->asyncExecute(*m_async_trajectory_ptr);
 }
 
 void m2SimpleIface::getArmState() 
 {   
-    if (!m_robotStatePtr) {
-        RCLCPP_WARN(this->get_logger(), "Robot state pointer is null!");
-        return;
-    }
-    
-    const moveit::core::JointModelGroup* joint_model_group = m_robotStatePtr->getJointModelGroup(PLANNING_GROUP);
-    std::vector<double> joint_values;
-    m_robotStatePtr->copyJointGroupPositions(joint_model_group, joint_values);
-    
-    // Get current state with timeout to prevent blocking
-    m_robotStatePtr = m_moveGroupPtr->getCurrentState(0.1); // 100ms timeout
-    if (!m_robotStatePtr) {
+    moveit::core::RobotStatePtr fresh_state = m_moveGroupPtr->getCurrentState(0.1);
+    if (!fresh_state) {
         RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Failed to get current state");
         return;
     }
     
-    // by default timeout is 10 secs
-    m_robotStatePtr->update();
-    
-    Eigen::Isometry3d currentPose_ = m_robotStatePtr->getFrameTransform(EE_LINK_NAME);
+    fresh_state->update();
+    Eigen::Isometry3d currentPose_ = fresh_state->getFrameTransform(EE_LINK_NAME);
     m_currPoseState = utils::convertIsometryToMsg(currentPose_);
     m_currPoseState.header.stamp = this->now();
     m_currPoseState.header.frame_id = PLANNING_FRAME;
+
+    {
+        std::lock_guard<std::mutex> lock(robot_state_mutex_);
+        m_robotStatePtr = fresh_state;
+    }
 }
 
 bool m2SimpleIface::run()
