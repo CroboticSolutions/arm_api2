@@ -153,6 +153,10 @@ class m2SimpleIface: public rclcpp::Node
         /*config*/
         YAML::Node init_config(std::string yaml_path);
 
+        /* MoveIt node and robot description (apirsic/devel pattern for namespaced robots) */
+        rclcpp::Node::SharedPtr createMoveitNode(rclcpp::Node* parent);
+        bool fetchAndSetRobotDescription();
+
         /* init methods */
         void init_subscribers();
         void init_publishers(); 
@@ -201,11 +205,14 @@ class m2SimpleIface: public rclcpp::Node
 
         /* setters */
         bool setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName, std::string moveNs); 
-        bool setRobotModel(rclcpp::Node::SharedPtr nodePtr); 
+        bool setRobotModel(rclcpp::Node::SharedPtr nodePtr, const std::string& robot_desc_param = "robot_description"); 
         bool setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::string name);
 
         /* getters */
-        void getArmState();  
+        void getArmState();
+
+        /** Resolve topic/service name with namespace. Ensures slash between ns_ and name. */
+        std::string resolve_topic_name(const std::string& name) const;  
 
         /* funcs */
         void execPlan(bool async); 
@@ -265,7 +272,7 @@ class m2SimpleIface: public rclcpp::Node
         moveit::core::RobotStatePtr m_robotStatePtr;  
         moveit::core::RobotModelPtr kinematic_model; 
         std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> m_pSceneMonitorPtr;
-        moveit::planning_interface::PlanningSceneInterface m_planningSceneInterface;
+        moveit::planning_interface::PlanningSceneInterfacePtr m_planningSceneInterface;
         std::unique_ptr<moveit_servo::Servo> servoPtr; 
 
 }; 

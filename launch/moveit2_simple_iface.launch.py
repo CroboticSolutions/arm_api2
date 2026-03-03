@@ -64,9 +64,16 @@ def launch_setup(context, *args, **kwargs):
     arg_robot_namespace = context.perform_substitution(LaunchConfiguration('robot_namespace', default=''))
 
     # TODO: Swap between sim and real arg depending on the robot type
-    robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
-    servo_yaml = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
-    kinematics_yaml = "config/{0}/{1}_kinematics.yaml".format(arg_robot_name, arg_robot_name)
+    # abb1/abb2 use configs from abb folder
+    if arg_robot_name in ('abb1', 'abb2'):
+        config_folder = 'abb'
+        config_prefix = arg_robot_name
+    else:
+        config_folder = arg_robot_name
+        config_prefix = arg_robot_name
+    robot_yaml = "{0}/{1}_sim.yaml".format(config_folder, config_prefix)
+    servo_yaml = "{0}/{1}_servo_sim.yaml".format(config_folder, config_prefix)
+    kinematics_yaml = "config/{0}/{1}_kinematics.yaml".format(config_folder, config_prefix)
     
     # Arm params (ctl, servo) --> sent just as path
     # 3 different ways of loading and using yaml files, DISGUSTING [FIX ASAP]
@@ -97,19 +104,27 @@ def launch_setup(context, *args, **kwargs):
     if arg_robot_namespace:
         remappings = [("joint_states", f"/{arg_robot_namespace}/joint_states")]
 
-    launch_arm_api2 = Node(
-        package='arm_api2',
-        executable='moveit2_simple_iface',
-        remappings=remappings,
-        parameters=[{"use_sim_time": use_sim_time},
-                    {"enable_servo": use_servo},
-                    {"dt": dt},
-                    {"config_path": config_path},
-                    kinematic_params,
-                    servo_params,],
-        prefix=prefix_cmd,
-        output='screen'
-    )
+    arm_params = [
+        {"use_sim_time": use_sim_time},
+        {"enable_servo": use_servo},
+        {"dt": dt},
+        {"config_path": config_path},
+        kinematic_params,
+        servo_params,
+    ]
+    if arg_robot_namespace:
+        arm_params.append({"move_group_ns": arg_robot_namespace})
+    node_params = {
+        "package": "arm_api2",
+        "executable": "moveit2_simple_iface",
+        "remappings": remappings,
+        "parameters": arm_params,
+        "prefix": prefix_cmd,
+        "output": "screen",
+    }
+    if arg_robot_namespace:
+        node_params["namespace"] = arg_robot_namespace
+    launch_arm_api2 = Node(**node_params)
 
     launch_nodes_.append(launch_arm_api2)
 

@@ -53,7 +53,6 @@ JoyCtl::JoyCtl(): Node("joy_ctl")
     init();
 
     setScaleFactor(1); 
-    this->set_parameter(rclcpp::Parameter("use_sim_time", false));
 
     enableJoy_ = true; 
 

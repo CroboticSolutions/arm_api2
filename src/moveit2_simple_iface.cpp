@@ -41,15 +41,178 @@
 
 #include "arm_api2/moveit2_simple_iface.hpp"
 
+#include <atomic>
+#include <future>
+
+#include <std_msgs/msg/string.hpp>
+
+rclcpp::Node::SharedPtr m2SimpleIface::createMoveitNode(rclcpp::Node* parent)
+{
+    std::string cfg_path;
+    parent->get_parameter("config_path", cfg_path);
+    const YAML::Node cfg = YAML::LoadFile(cfg_path);
+    std::string move_ns = cfg["robot"]["move_group_ns"].as<std::string>();
+    if (move_ns == "null") move_ns = "";
+    if (parent->has_parameter("move_group_ns")) {
+        std::string param_ns = parent->get_parameter("move_group_ns").get_value<std::string>();
+        if (!param_ns.empty() && param_ns != "null") {
+            move_ns = param_ns;
+        }
+    }
+    std::string joint_states_topic;
+    if (!move_ns.empty()) {
+        joint_states_topic = move_ns + "/joint_states";
+    } else if (cfg["robot"]["joint_states"]) {
+        joint_states_topic = cfg["robot"]["joint_states"].as<std::string>();
+    } else {
+        joint_states_topic = "joint_states";
+    }
+
+    rclcpp::NodeOptions opts;
+    opts.use_global_arguments(false);
+    opts.automatically_declare_parameters_from_overrides(false);
+    std::vector<std::string> args;
+    if (!move_ns.empty()) {
+        args = {"--ros-args", "-r", "__ns:=/" + move_ns};
+        RCLCPP_INFO(parent->get_logger(), "MoveIt node in namespace /%s (avoids dual-robot cache collision)", move_ns.c_str());
+    } else {
+        args = {"--ros-args", "-r", "__ns:=/"};
+    }
+    if (!joint_states_topic.empty() && joint_states_topic != "joint_states") {
+        std::string remap_target = (joint_states_topic[0] == '/') ? joint_states_topic : "/" + joint_states_topic;
+        args.push_back("-r");
+        args.push_back("joint_states:=" + remap_target);
+        RCLCPP_INFO(parent->get_logger(), "Remapping joint_states to %s (move_ns=%s)", remap_target.c_str(), move_ns.c_str());
+    }
+    opts.arguments(args);
+
+    // Copy moveit_servo and kinematics params from parent so MoveIt node has them (RobotModelLoader/KinematicsPluginLoader)
+    std::vector<rclcpp::Parameter> param_overrides;
+    auto servo_result = parent->list_parameters({"moveit_servo"}, 0);
+    for (const auto& name : servo_result.names) {
+        if (parent->has_parameter(name)) {
+            param_overrides.push_back(parent->get_parameter(name));
+        }
+    }
+    auto kin_result = parent->list_parameters({"manipulator"}, 0);
+    for (const auto& name : kin_result.names) {
+        if (parent->has_parameter(name)) {
+            param_overrides.push_back(parent->get_parameter(name));
+        }
+    }
+    if (!param_overrides.empty()) {
+        opts.parameter_overrides(param_overrides);
+    }
+
+    std::string node_name = "moveit2_simple_iface_node";
+    if (!move_ns.empty()) {
+        node_name += "_" + move_ns;
+    }
+    return std::make_shared<rclcpp::Node>(node_name, opts);
+}
+
+bool m2SimpleIface::fetchAndSetRobotDescription()
+{
+    std::string urdf_topic;
+    std::string srdf_topic;
+    if (MOVE_GROUP_NS.empty() || MOVE_GROUP_NS == "null") {
+        urdf_topic = "/robot_description";
+        srdf_topic = "/robot_description_semantic";
+    } else {
+        urdf_topic = "/" + MOVE_GROUP_NS + "/robot_description";
+        srdf_topic = "/" + MOVE_GROUP_NS + "/robot_description_semantic";
+    }
+    constexpr double timeout_sec = 10.0;
+
+    std::string fetch_node_name = "moveit2_simple_iface_fetch_robot_desc";
+    if (!MOVE_GROUP_NS.empty() && MOVE_GROUP_NS != "null") {
+        fetch_node_name += "_" + MOVE_GROUP_NS;
+    }
+    auto fetch_node = std::make_shared<rclcpp::Node>(fetch_node_name);
+    bool use_sim_time = false;
+    if (this->get_parameter("use_sim_time", use_sim_time)) {
+        fetch_node->set_parameter(rclcpp::Parameter("use_sim_time", use_sim_time));
+    }
+
+    std::string urdf_string;
+    std::string srdf_string;
+    auto urdf_received = std::make_shared<std::promise<void>>();
+    auto srdf_received = std::make_shared<std::promise<void>>();
+    auto urdf_done = std::make_shared<std::atomic<bool>>(false);
+    auto srdf_done = std::make_shared<std::atomic<bool>>(false);
+
+    rclcpp::QoS qos = rclcpp::QoS(1).transient_local();
+
+    auto urdf_sub = fetch_node->create_subscription<std_msgs::msg::String>(
+        urdf_topic, qos,
+        [&urdf_string, urdf_received, urdf_done](const std_msgs::msg::String::SharedPtr msg) {
+            if (!urdf_done->exchange(true)) {
+                urdf_string = msg->data;
+                urdf_received->set_value();
+            }
+        });
+    auto srdf_sub = fetch_node->create_subscription<std_msgs::msg::String>(
+        srdf_topic, qos,
+        [&srdf_string, srdf_received, srdf_done](const std_msgs::msg::String::SharedPtr msg) {
+            if (!srdf_done->exchange(true)) {
+                srdf_string = msg->data;
+                srdf_received->set_value();
+            }
+        });
+
+    RCLCPP_INFO(this->get_logger(), "Waiting for %s and %s (timeout: %.1fs)",
+                urdf_topic.c_str(), srdf_topic.c_str(), timeout_sec);
+
+    rclcpp::executors::SingleThreadedExecutor executor;
+    executor.add_node(fetch_node);
+
+    auto urdf_future = urdf_received->get_future();
+    auto srdf_future = srdf_received->get_future();
+
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_sec);
+    while (rclcpp::ok() && std::chrono::steady_clock::now() < deadline) {
+        executor.spin_some(std::chrono::milliseconds(100));
+        if (urdf_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready &&
+            srdf_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            break;
+        }
+    }
+
+    executor.remove_node(fetch_node);
+
+    if (urdf_string.empty() || srdf_string.empty()) {
+        RCLCPP_ERROR(this->get_logger(), "Timeout waiting for robot_description topics.");
+        return false;
+    }
+
+    std::string rd_param = ROBOT_DESC;
+    std::string rd_semantic_param = rd_param + "_semantic";
+    if (!MOVE_GROUP_NS.empty() && MOVE_GROUP_NS != "null") {
+        rd_param = "robot_description_" + MOVE_GROUP_NS;
+        rd_semantic_param = rd_param + "_semantic";
+    }
+    node_->declare_parameter(rd_param, "");
+    node_->declare_parameter(rd_semantic_param, "");
+    node_->set_parameters({
+        rclcpp::Parameter(rd_param, urdf_string),
+        rclcpp::Parameter(rd_semantic_param, srdf_string),
+    });
+
+    RCLCPP_INFO(this->get_logger(), "Robot description fetched and set (param=%s).", rd_param.c_str());
+    return true;
+}
+
 m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
-    : Node("moveit2_simple_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_simple_iface_node")), 
+    : Node("moveit2_simple_iface", options), node_(createMoveitNode(this)),
      executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()), gripper(node_) 
 {   
-    // USE_SIM_TIME HACK TO TEST SERVO!
-    this->set_parameter(rclcpp::Parameter("use_sim_time", false));
     this->get_parameter("config_path", config_path);
     this->get_parameter("enable_servo", enable_servo);
-    this->get_parameter("dt", dt); 
+    this->get_parameter("dt", dt);
+
+    bool use_sim_time = false;
+    this->get_parameter("use_sim_time", use_sim_time);
+    node_->set_parameter(rclcpp::Parameter("use_sim_time", use_sim_time));
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Loaded config!");
 
@@ -71,8 +234,14 @@ m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
     max_vel_scaling_factor = config["robot"]["max_vel_scaling_factor"].as<float>();
     max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
     
-    // Currently not used :) [ns]
-    ns_ = this->get_namespace(); 	
+    ns_ = this->get_namespace();
+    if (!this->has_parameter("move_group_ns")) {
+        this->declare_parameter<std::string>("move_group_ns", "");
+    }
+    std::string param_move_group_ns = this->get_parameter("move_group_ns").get_value<std::string>();
+    if (!param_move_group_ns.empty()) {
+        MOVE_GROUP_NS = param_move_group_ns;
+    } 	
     init_publishers(); 
     init_subscribers(); 
     init_services(); 
@@ -93,12 +262,18 @@ YAML::Node m2SimpleIface::init_config(std::string yaml_path)
     return YAML::LoadFile(yaml_path);
 }
 
+std::string m2SimpleIface::resolve_topic_name(const std::string& name) const
+{
+  if (ns_.empty() || ns_ == "/") return name;
+  return (ns_.back() == '/' ? ns_ : ns_ + "/") + name;
+}
+
 void m2SimpleIface::init_publishers()
 {   
     auto pose_state_name = config["topic"]["pub"]["current_pose"]["name"].as<std::string>(); 
-    pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(ns_ + pose_state_name, 1); 
+    pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(resolve_topic_name(pose_state_name), 1); 
     auto current_robot_state_name = config["topic"]["pub"]["current_robot_state"]["name"].as<std::string>(); 
-    robot_state_pub_ = this->create_publisher<std_msgs::msg::String>(ns_ + current_robot_state_name, 1);
+    robot_state_pub_ = this->create_publisher<std_msgs::msg::String>(resolve_topic_name(current_robot_state_name), 1);
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized publishers!");
 }
 
@@ -107,9 +282,9 @@ void m2SimpleIface::init_subscribers()
     auto pose_cmd_name = config["topic"]["sub"]["cmd_pose"]["name"].as<std::string>(); 
     auto cart_traj_cmd_name = config["topic"]["sub"]["cmd_traj"]["name"].as<std::string>(); 
     auto joint_states_name = config["topic"]["sub"]["joint_states"]["name"].as<std::string>();
-    pose_cmd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(ns_ + pose_cmd_name, 1, std::bind(&m2SimpleIface::pose_cmd_cb, this, _1));
-    ctraj_cmd_sub_ = this->create_subscription<arm_api2_msgs::msg::CartesianWaypoints>(ns_ + cart_traj_cmd_name, 1, std::bind(&m2SimpleIface::cart_poses_cb, this, _1));
-    joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(ns_ + joint_states_name, 1, std::bind(&m2SimpleIface::joint_state_cb, this, _1));
+    pose_cmd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(resolve_topic_name(pose_cmd_name), 1, std::bind(&m2SimpleIface::pose_cmd_cb, this, _1));
+    ctraj_cmd_sub_ = this->create_subscription<arm_api2_msgs::msg::CartesianWaypoints>(resolve_topic_name(cart_traj_cmd_name), 1, std::bind(&m2SimpleIface::cart_poses_cb, this, _1));
+    joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(resolve_topic_name(joint_states_name), 1, std::bind(&m2SimpleIface::joint_state_cb, this, _1));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
 }
 
@@ -120,41 +295,64 @@ void m2SimpleIface::init_services()
     auto set_planner_name  = config["srv"]["set_planner"]["name"].as<std::string>();
     auto open_gripper_name = config["srv"]["open_gripper"]["name"].as<std::string>(); 
     auto close_gripper_name= config["srv"]["close_gripper"]["name"].as<std::string>();
-    change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2SimpleIface::change_state_cb, this, _1, _2)); 
-    set_vel_acc_srv_  = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2SimpleIface::set_vel_acc_cb, this, _1, _2));
-    set_planner_srv_  = this->create_service<arm_api2_msgs::srv::SetStringParam>(ns_ + set_planner_name, std::bind(&m2SimpleIface::set_planner_cb, this, _1, _2));
-    open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + open_gripper_name, std::bind(&m2SimpleIface::open_gripper_cb, this, _1, _2));
-    close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + close_gripper_name, std::bind(&m2SimpleIface::close_gripper_cb, this, _1, _2));
-    add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(ns_ + "add_collision_object", std::bind(&m2SimpleIface::add_collision_object_cb, this, _1, _2));
-    add_grasped_object_srv_ = this->create_service<arm_api2_msgs::srv::AddGraspedObject>(ns_ + "add_grasped_object", std::bind(&m2SimpleIface::add_grasped_object_cb, this, _1, _2));
+    change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(resolve_topic_name(change_state_name), std::bind(&m2SimpleIface::change_state_cb, this, _1, _2)); 
+    set_vel_acc_srv_  = this->create_service<arm_api2_msgs::srv::SetVelAcc>(resolve_topic_name(set_vel_acc_name), std::bind(&m2SimpleIface::set_vel_acc_cb, this, _1, _2));
+    set_planner_srv_  = this->create_service<arm_api2_msgs::srv::SetStringParam>(resolve_topic_name(set_planner_name), std::bind(&m2SimpleIface::set_planner_cb, this, _1, _2));
+    open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(resolve_topic_name(open_gripper_name), std::bind(&m2SimpleIface::open_gripper_cb, this, _1, _2));
+    close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(resolve_topic_name(close_gripper_name), std::bind(&m2SimpleIface::close_gripper_cb, this, _1, _2));
+    add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(resolve_topic_name("add_collision_object"), std::bind(&m2SimpleIface::add_collision_object_cb, this, _1, _2));
+    add_grasped_object_srv_ = this->create_service<arm_api2_msgs::srv::AddGraspedObject>(resolve_topic_name("add_grasped_object"), std::bind(&m2SimpleIface::add_grasped_object_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
 void m2SimpleIface::init_moveit()
 {
-
-    RCLCPP_INFO_STREAM(this->get_logger(), "robot_description: " << ROBOT_DESC); 
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] init_moveit ENTER");
+    RCLCPP_INFO_STREAM(this->get_logger(), "robot_description: " << ROBOT_DESC);
     RCLCPP_INFO_STREAM(this->get_logger(), "planning_group: " << PLANNING_GROUP);
-    RCLCPP_INFO_STREAM(this->get_logger(), "planning_frame: " << PLANNING_FRAME); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "move_group_ns: " << MOVE_GROUP_NS);  
-    // MoveIt related things!
-    moveGroupInit       = setMoveGroup(node_, PLANNING_GROUP, MOVE_GROUP_NS); 
-    pSceneMonitorInit   = setPlanningSceneMonitor(node_, ROBOT_DESC);
-    robotModelInit      = setRobotModel(node_);
+    RCLCPP_INFO_STREAM(this->get_logger(), "planning_frame: " << PLANNING_FRAME);
+    RCLCPP_INFO_STREAM(this->get_logger(), "move_group_ns: " << MOVE_GROUP_NS);
+
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] fetchAndSetRobotDescription...");
+    if (!fetchAndSetRobotDescription()) {
+        throw std::runtime_error("Failed to fetch robot description. Ensure move_group and robot_state_publisher are running.");
+    }
+
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] Calling setMoveGroup...");
+    moveGroupInit = setMoveGroup(node_, PLANNING_GROUP, MOVE_GROUP_NS);
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] setMoveGroup returned: %s", moveGroupInit ? "true" : "false");
+    if (!moveGroupInit) {
+        RCLCPP_ERROR(this->get_logger(), "[DEBUG] setMoveGroup FAILED - aborting init_moveit");
+        return;
+    }
+
+    std::string robot_desc_param = ROBOT_DESC;
+    if (!MOVE_GROUP_NS.empty() && MOVE_GROUP_NS != "null") {
+        robot_desc_param = "robot_description_" + MOVE_GROUP_NS;
+    }
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] Calling setPlanningSceneMonitor...");
+    pSceneMonitorInit = setPlanningSceneMonitor(node_, robot_desc_param);
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] setPlanningSceneMonitor returned: %s", pSceneMonitorInit ? "true" : "false");
+
+    std::string interface_ns = (MOVE_GROUP_NS == "null") ? "" : MOVE_GROUP_NS;
+    m_planningSceneInterface = std::make_shared<moveit::planning_interface::PlanningSceneInterface>(interface_ns);
+    RCLCPP_INFO(this->get_logger(), "PlanningSceneInterface initialized!");
+
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] Calling setRobotModel...");
+    robotModelInit = setRobotModel(node_, robot_desc_param);
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] setRobotModel returned: %s", robotModelInit ? "true" : "false");
+
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] init_moveit COMPLETE");
 }
 
 // TODO: Try to replace with auto
 std::unique_ptr<moveit_servo::Servo> m2SimpleIface::init_servo()
-{   
-    auto nodeParameters = node_->get_node_parameters_interface(); 
-    auto servoParams = moveit_servo::ServoParameters::makeServoParameters(node_); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "ee_frame_name: " << servoParams->ee_frame_name);  
-    servoParams->get("moveit_servo", nodeParameters);
+{
+    // moveit_servo params are passed via parameter_overrides in createMoveitNode (when namespaced)
+    auto servoParams = moveit_servo::ServoParameters::makeServoParameters(node_);
+    RCLCPP_INFO_STREAM(this->get_logger(), "ee_frame_name: " << servoParams->ee_frame_name);
+    servoParams->get("moveit_servo", node_->get_node_parameters_interface());
 
-
-    //auto servoParamsPtr = std::make_shared<moveit_servo::ServoParameters>(std::move(servoParams));
-    //auto servo_parameters = moveit_servo::ServoParameters::makeServoParameters(node_); 
-    // Servo parameters need to bee constSharedPtr
     auto servo = std::make_unique<moveit_servo::Servo>(node_, servoParams, m_pSceneMonitorPtr); 
     RCLCPP_INFO(this->get_logger(), "Servo initialized!"); 
     return servo;
@@ -343,7 +541,7 @@ void m2SimpleIface::add_collision_object_cb(const std::shared_ptr<arm_api2_msgs:
     std::vector<moveit_msgs::msg::CollisionObject> collision_objects;
     collision_objects.push_back(collision_object);
     
-    m_planningSceneInterface.addCollisionObjects(collision_objects);
+    m_planningSceneInterface->addCollisionObjects(collision_objects);
     
     RCLCPP_INFO(this->get_logger(), "Added collision object '%s' to planning scene", req->id.c_str());
     res->success = true;
@@ -358,7 +556,7 @@ void m2SimpleIface::add_grasped_object_cb(const std::shared_ptr<arm_api2_msgs::s
     attached_object.object = req->grasped_object; 
     attached_object.touch_links = req->attach_object.touch_links;
     attached_object.object.operation = attached_object.object.ADD;
-    m_planningSceneInterface.applyAttachedCollisionObject(attached_object);
+    m_planningSceneInterface->applyAttachedCollisionObject(attached_object);
     res->success = true;
     RCLCPP_INFO(this->get_logger(), "Attached collision object to the end effector.");
 }
@@ -382,68 +580,94 @@ void m2SimpleIface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::Ch
 
 bool m2SimpleIface::setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName, std::string moveNs)
 {
-    // check if moveNs is empty
-    if (moveNs == "null") moveNs=""; 
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] setMoveGroup ENTER group=%s moveNs=%s", groupName.c_str(), moveNs.c_str());
+    if (moveNs == "null") moveNs = "";
 
-    //https://github.com/moveit/moveit2/issues/496
-    m_moveGroupPtr = std::make_shared<moveit::planning_interface::MoveGroupInterface>(nodePtr, 
-        moveit::planning_interface::MoveGroupInterface::Options(
-            groupName,
-            "robot_description",
-            moveNs));
+    std::string robot_desc_param = ROBOT_DESC;
+    if (!moveNs.empty()) {
+        robot_desc_param = "robot_description_" + moveNs;
+    }
 
-    double POS_TOL = 0.0000001; 
-    // set move group stuff
-    m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME); 
-    m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME); 
-    m_moveGroupPtr->setGoalPositionTolerance(POS_TOL);
-    m_moveGroupPtr->startStateMonitor(); 
-    // executor
-    executor_->add_node(node_); 
-    executor_thread_ = std::thread([this]() {executor_->spin();});
-    RCLCPP_INFO_STREAM(this->get_logger(), "Move group interface set up!"); 
-    return true; 
-}
+    std::string move_group_ns_for_options = moveNs;
+    if (!moveNs.empty() && moveNs[0] != '/') {
+        move_group_ns_for_options = "/" + moveNs;
+    }
 
-/* This is not neccessary*/
-bool m2SimpleIface::setRobotModel(rclcpp::Node::SharedPtr nodePtr)
-{
-    robot_model_loader::RobotModelLoader robot_model_loader(nodePtr);
-    kinematic_model = robot_model_loader.getModel(); 
-    // Find nicer way to do this
-    moveit::core::RobotStatePtr kinematic_state(new moveit::core::RobotState(kinematic_model));
-    m_robotStatePtr = kinematic_state;
-    m_robotStatePtr->setToDefaultValues();
-    RCLCPP_INFO_STREAM(this->get_logger(), "Robot model loaded!");
-    RCLCPP_INFO_STREAM(this->get_logger(), "Robot model frame is: " << kinematic_model->getModelFrame().c_str());
+    constexpr int WAIT_FOR_SERVERS_SEC = 30;
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] Creating MoveGroupInterface (robot_desc_param=%s, move_group_ns=%s, wait=%ds)...",
+                robot_desc_param.c_str(), move_group_ns_for_options.c_str(), WAIT_FOR_SERVERS_SEC);
+
+    try {
+        m_moveGroupPtr = std::make_shared<moveit::planning_interface::MoveGroupInterface>(
+            nodePtr,
+            moveit::planning_interface::MoveGroupInterface::Options(groupName, robot_desc_param, move_group_ns_for_options),
+            nullptr,
+            rclcpp::Duration::from_seconds(WAIT_FOR_SERVERS_SEC));
+        RCLCPP_INFO(this->get_logger(), "[DEBUG] MoveGroupInterface created.");
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(this->get_logger(), "[DEBUG] MoveGroupInterface EXCEPTION: %s", e.what());
+        return false;
+    }
+
+    m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME);
+    m_moveGroupPtr->setPoseReferenceFrame(PLANNING_FRAME);
+    m_moveGroupPtr->setGoalPositionTolerance(0.0000001);
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] Calling startStateMonitor()...");
+    m_moveGroupPtr->startStateMonitor();
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] startStateMonitor() returned.");
+
+    executor_->add_node(node_);
+    executor_thread_ = std::thread([this]() { executor_->spin(); });
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] Move group interface set up DONE");
     return true;
 }
 
-// TODO: Add service to add collision objects to the scene 
+/* This is not neccessary*/
+bool m2SimpleIface::setRobotModel(rclcpp::Node::SharedPtr nodePtr, const std::string& robot_desc_param)
+{
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] setRobotModel ENTER (param=%s) - creating RobotModelLoader...", robot_desc_param.c_str());
+    robot_model_loader::RobotModelLoader robot_model_loader(nodePtr, robot_desc_param);
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] RobotModelLoader created, calling getModel()...");
+    kinematic_model = robot_model_loader.getModel();
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] getModel() returned");
+    moveit::core::RobotStatePtr kinematic_state(new moveit::core::RobotState(kinematic_model));
+    m_robotStatePtr = kinematic_state;
+    m_robotStatePtr->setToDefaultValues();
+    RCLCPP_INFO_STREAM(this->get_logger(), "Robot model loaded! frame=" << kinematic_model->getModelFrame().c_str());
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] setRobotModel DONE");
+    return true;
+}
+
 bool m2SimpleIface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::string name)
 {
-    // https://moveit.picknik.ai/main/doc/examples/planning_scene_ros_api/planning_scene_ros_api_tutorial.html
-    // https://github.com/moveit/moveit2_tutorials/blob/main/doc/examples/planning_scene/src/planning_scene_tutorial.cpp
-    m_pSceneMonitorPtr = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(nodePtr, name); 
-    m_pSceneMonitorPtr->startSceneMonitor(PLANNING_SCENE); 
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] setPlanningSceneMonitor ENTER name=%s", name.c_str());
+    m_pSceneMonitorPtr = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(nodePtr, name);
+
+    std::string scene_topic = MOVE_GROUP_NS.empty() || MOVE_GROUP_NS == "null"
+        ? "/monitored_planning_scene"
+        : "/" + MOVE_GROUP_NS + "/monitored_planning_scene";
+    m_pSceneMonitorPtr->startSceneMonitor(scene_topic);
+
     if (m_pSceneMonitorPtr->getPlanningScene())
     {
-        m_pSceneMonitorPtr->startStateMonitor(JOINT_STATES); 
+        m_pSceneMonitorPtr->startStateMonitor(JOINT_STATES);
         m_pSceneMonitorPtr->setPlanningScenePublishingFrequency(25);
-        m_pSceneMonitorPtr->startPublishingPlanningScene(planning_scene_monitor::PlanningSceneMonitor::UPDATE_SCENE,
-                                                         "/moveit_servo/publish_planning_scene");
-        m_pSceneMonitorPtr->startSceneMonitor(); 
-        m_pSceneMonitorPtr->providePlanningSceneService(); 
+        std::string publish_topic = MOVE_GROUP_NS.empty() || MOVE_GROUP_NS == "null"
+            ? "/moveit_servo/publish_planning_scene"
+            : "/" + MOVE_GROUP_NS + "/moveit_servo/publish_planning_scene";
+        m_pSceneMonitorPtr->startPublishingPlanningScene(
+            planning_scene_monitor::PlanningSceneMonitor::UPDATE_SCENE, publish_topic);
+        m_pSceneMonitorPtr->startSceneMonitor();
+        m_pSceneMonitorPtr->providePlanningSceneService();
     }
-    else 
+    else
     {
-        RCLCPP_ERROR(this->get_logger(), "Planning scene not configured!"); 
-        return EXIT_FAILURE; 
+        RCLCPP_ERROR(this->get_logger(), "Planning scene not configured!");
+        return false;
     }
-    
-    //TODO: Check what's difference between planning_Scene and planning_scene_monitor
-    RCLCPP_INFO_STREAM(this->get_logger(), "Created planning scene monitor!");
-    return true; 
+
+    RCLCPP_INFO(this->get_logger(), "[DEBUG] setPlanningSceneMonitor DONE");
+    return true;
 }
 
 void m2SimpleIface::execMove(bool async=false)

@@ -252,7 +252,10 @@ class m2Iface: public rclcpp::Node
         bool setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::string name);
 
         /* getters */
-        void getArmState();  
+        void getArmState();
+
+        /** Resolve topic/service name with namespace. Ensures slash between ns_ and name. */
+        std::string resolve_topic_name(const std::string& name) const;
 
         /* funcs */
         void planAndExecJoint();
