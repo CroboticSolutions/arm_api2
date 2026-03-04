@@ -268,6 +268,15 @@ class m2SimpleIface: public rclcpp::Node
         std::shared_ptr<moveit::planning_interface::MoveGroupInterface::Plan> m_async_plan_ptr;
         std::shared_ptr<moveit_msgs::msg::RobotTrajectory> m_async_trajectory_ptr;
 
+        /** Last trajectory final joint positions. Before sending a new asyncExecute, wait until
+         * current state matches these (prevents race when switching JOINT->CART). */
+        std::vector<std::string> m_last_trajectory_joint_names_;
+        std::vector<double> m_last_trajectory_final_positions_;
+
+        /** Wait for previous async execution to complete (current joints near last trajectory end).
+         * Prevents race: new CART asyncExecute while previous JOINT asyncExecute still running. */
+        void waitForPreviousExecution();
+
         moveit::planning_interface::MoveGroupInterfacePtr m_moveGroupPtr; 
         moveit::core::RobotStatePtr m_robotStatePtr;  
         moveit::core::RobotModelPtr kinematic_model; 

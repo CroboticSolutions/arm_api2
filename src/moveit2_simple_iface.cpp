@@ -42,7 +42,9 @@
 #include "arm_api2/moveit2_simple_iface.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <future>
+#include <thread>
 
 #include <std_msgs/msg/string.hpp>
 
@@ -360,12 +362,10 @@ std::unique_ptr<moveit_servo::Servo> m2SimpleIface::init_servo()
 
 void m2SimpleIface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
-   
-    // hardcode this to planning frame to check if it works like that? 
-    m_currPoseCmd.header.frame_id = PLANNING_FRAME; 
+    m_currPoseCmd.header.frame_id = PLANNING_FRAME;
     m_currPoseCmd.pose = msg->pose;
-    if (!utils::comparePose(m_currPoseCmd, m_oldPoseCmd)) recivCmd = true;
-    RCLCPP_INFO_STREAM(this->get_logger(), "recivCmd: " << recivCmd); 
+    recivCmd = true;  // Always accept new commands (enables retry when commander re-sends same pose)
+    RCLCPP_INFO_STREAM(this->get_logger(), "recivCmd: " << recivCmd);
 }
 
 void m2SimpleIface::cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::SharedPtr msg)
@@ -688,6 +688,37 @@ void m2SimpleIface::execMove(bool async=false)
 
 }
 
+void m2SimpleIface::waitForPreviousExecution()
+{
+    if (m_last_trajectory_final_positions_.empty()) return;
+
+    constexpr double JOINT_TOLERANCE = 0.02;  // rad (~1.1 deg)
+    constexpr double POLL_INTERVAL_MS = 50.0;
+    constexpr double TIMEOUT_SEC = 5.0;
+    const int max_iters = static_cast<int>(TIMEOUT_SEC * 1000.0 / POLL_INTERVAL_MS);
+
+    for (int i = 0; i < max_iters && rclcpp::ok(); ++i) {
+        moveit::core::RobotStatePtr state = m_moveGroupPtr->getCurrentState(0.1);
+        if (!state) continue;
+
+        bool all_close = true;
+        for (size_t j = 0; j < m_last_trajectory_joint_names_.size() && j < m_last_trajectory_final_positions_.size(); ++j) {
+            double current = state->getVariablePosition(m_last_trajectory_joint_names_[j]);
+            double diff = std::abs(current - m_last_trajectory_final_positions_[j]);
+            if (diff > JOINT_TOLERANCE) { all_close = false; break; }
+        }
+        if (all_close) {
+            m_last_trajectory_joint_names_.clear();
+            m_last_trajectory_final_positions_.clear();
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(POLL_INTERVAL_MS));
+    }
+    RCLCPP_WARN(this->get_logger(), "Timeout waiting for previous execution; proceeding anyway");
+    m_last_trajectory_joint_names_.clear();
+    m_last_trajectory_final_positions_.clear();
+}
+
 void m2SimpleIface::execPlan(bool async=false)
 {
     m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
@@ -696,6 +727,8 @@ void m2SimpleIface::execPlan(bool async=false)
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     bool success = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
     if (success) {
+        // Wait for previous async execution before sending new one (prevents JOINT->CART race)
+        waitForPreviousExecution();
         // Use asyncExecute for all joint plans: blocking execute() crashes intermittently
         // when switching JOINT->CART (MoveIt/controller race). asyncExecute avoids the
         // blocking wait; commander uses is_complete() to detect arrival.
@@ -703,6 +736,13 @@ void m2SimpleIface::execPlan(bool async=false)
         auto trajectory_copy = std::make_shared<moveit_msgs::msg::RobotTrajectory>(m_async_plan_ptr->trajectory_);
         m_moveGroupPtr->asyncExecute(*trajectory_copy);
         m_async_trajectory_ptr = trajectory_copy;
+        // Store final positions for next waitForPreviousExecution
+        const auto& jt = trajectory_copy->joint_trajectory;
+        if (!jt.points.empty() && !jt.joint_names.empty() &&
+            jt.points.back().positions.size() == jt.joint_names.size()) {
+            m_last_trajectory_joint_names_ = jt.joint_names;
+            m_last_trajectory_final_positions_ = jt.points.back().positions;
+        }
     }else {
         RCLCPP_ERROR(this->get_logger(), "Planning failed!"); 
     }
@@ -747,7 +787,16 @@ void m2SimpleIface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory,
     // Always use asyncExecute: blocking execute() crashes intermittently on state transitions
     // (JOINT<->CART). Commander uses is_complete() to detect arrival.
     m_async_trajectory_ptr = std::make_shared<moveit_msgs::msg::RobotTrajectory>(trajectory);
+    // Wait for previous async execution before sending new one (prevents JOINT->CART race)
+    waitForPreviousExecution();
     m_moveGroupPtr->asyncExecute(*m_async_trajectory_ptr);
+    // Store final positions for next waitForPreviousExecution
+    const auto& jt = trajectory.joint_trajectory;
+    if (!jt.points.empty() && !jt.joint_names.empty() &&
+        jt.points.back().positions.size() == jt.joint_names.size()) {
+        m_last_trajectory_joint_names_ = jt.joint_names;
+        m_last_trajectory_final_positions_ = jt.points.back().positions;
+    }
 }
 
 void m2SimpleIface::getArmState() 
