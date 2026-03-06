@@ -355,10 +355,9 @@ void m2Iface::add_grasped_object_cb(const std::shared_ptr<arm_api2_msgs::srv::Ad
 
     moveit_msgs::msg::AttachedCollisionObject attached_object; 
     attached_object.link_name = req->attach_object.link_name;
-    // Does this make sense at all? 
     attached_object.object = req->grasped_object; 
     attached_object.touch_links = req->attach_object.touch_links;
-    attached_object.object.operation = attached_object.object.ADD;
+    // Preserve operation from request (ADD or REMOVE); do not overwrite
     m_planningSceneInterface->applyAttachedCollisionObject(attached_object);
     res->success = true;
     RCLCPP_INFO(this->get_logger(), "Attached collision object to the end effector.");
