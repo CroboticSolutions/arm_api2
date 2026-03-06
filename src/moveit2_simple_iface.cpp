@@ -303,7 +303,7 @@ void m2SimpleIface::init_services()
     open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(resolve_topic_name(open_gripper_name), std::bind(&m2SimpleIface::open_gripper_cb, this, _1, _2));
     close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(resolve_topic_name(close_gripper_name), std::bind(&m2SimpleIface::close_gripper_cb, this, _1, _2));
     add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(resolve_topic_name("add_collision_object"), std::bind(&m2SimpleIface::add_collision_object_cb, this, _1, _2));
-    add_grasped_object_srv_ = this->create_service<arm_api2_msgs::srv::AddGraspedObject>(resolve_topic_name("add_grasped_object"), std::bind(&m2SimpleIface::add_grasped_object_cb, this, _1, _2));
+    add_grasped_object_srv_ = this->create_service<arm_api2_msgs::srv::AddGraspedObject>(resolve_topic_name("arm/add_grasped_object"), std::bind(&m2SimpleIface::add_grasped_object_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 

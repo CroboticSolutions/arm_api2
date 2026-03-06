@@ -131,7 +131,7 @@ void m2Iface::init_services()
     set_eelink_srv_         = this->create_service<arm_api2_msgs::srv::SetStringParam>(resolve_topic_name(set_eelink_name), std::bind(&m2Iface::set_eelink_cb, this, _1, _2));
     set_plan_only_srv_      = this->create_service<std_srvs::srv::SetBool>(resolve_topic_name(set_plan_only_name), std::bind(&m2Iface::set_plan_only_cb, this, _1, _2));
     add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(resolve_topic_name("add_collision_object"), std::bind(&m2Iface::add_collision_object_cb, this, _1, _2));
-    add_grasped_object_srv_ = this->create_service<arm_api2_msgs::srv::AddGraspedObject>(resolve_topic_name("add_grasped_object"), std::bind(&m2Iface::add_grasped_object_cb, this, _1, _2));
+    add_grasped_object_srv_ = this->create_service<arm_api2_msgs::srv::AddGraspedObject>(resolve_topic_name("arm/add_grasped_object"), std::bind(&m2Iface::add_grasped_object_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
