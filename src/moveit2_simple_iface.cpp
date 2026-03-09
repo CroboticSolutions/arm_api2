@@ -43,6 +43,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <future>
 #include <thread>
 
@@ -304,6 +305,8 @@ void m2SimpleIface::init_services()
     close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(resolve_topic_name(close_gripper_name), std::bind(&m2SimpleIface::close_gripper_cb, this, _1, _2));
     add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(resolve_topic_name("add_collision_object"), std::bind(&m2SimpleIface::add_collision_object_cb, this, _1, _2));
     add_grasped_object_srv_ = this->create_service<arm_api2_msgs::srv::AddGraspedObject>(resolve_topic_name("arm/add_grasped_object"), std::bind(&m2SimpleIface::add_grasped_object_cb, this, _1, _2));
+    set_path_constraints_srv_ = this->create_service<arm_api2_msgs::srv::SetPathConstraints>(resolve_topic_name("arm/set_path_constraints"), std::bind(&m2SimpleIface::set_path_constraints_cb, this, _1, _2));
+    clear_path_constraints_srv_ = this->create_service<arm_api2_msgs::srv::ClearPathConstraints>(resolve_topic_name("arm/clear_path_constraints"), std::bind(&m2SimpleIface::clear_path_constraints_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
@@ -561,6 +564,67 @@ void m2SimpleIface::add_grasped_object_cb(const std::shared_ptr<arm_api2_msgs::s
     RCLCPP_INFO(this->get_logger(), "Attached collision object to the end effector.");
 }
 
+void m2SimpleIface::set_path_constraints_cb(const std::shared_ptr<arm_api2_msgs::srv::SetPathConstraints::Request> req,
+                                            const std::shared_ptr<arm_api2_msgs::srv::SetPathConstraints::Response> res)
+{
+    if (req->joint_constraints.empty()) {
+        m_path_constraints_.joint_constraints.clear();
+        res->success = true;
+        RCLCPP_INFO(this->get_logger(), "Path constraints cleared (empty request)");
+        return;
+    }
+
+    moveit_msgs::msg::Constraints constraints;
+    moveit::core::RobotStatePtr state;
+    try {
+        state = m_moveGroupPtr ? m_moveGroupPtr->getCurrentState(0.1) : nullptr;
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(this->get_logger(), "SetPathConstraints: getCurrentState failed: %s", e.what());
+        res->success = false;
+        return;
+    }
+
+    for (const auto& jc_in : req->joint_constraints) {
+        moveit_msgs::msg::JointConstraint jc;
+        jc.joint_name = jc_in.joint_name;
+        jc.position = jc_in.position;
+        jc.tolerance_above = jc_in.tolerance_above;
+        jc.tolerance_below = jc_in.tolerance_below;
+        jc.weight = (jc_in.weight > 0.0) ? jc_in.weight : 1.0;
+
+        if (std::isnan(jc.position) && state) {
+            try {
+                moveit::core::RobotModelConstPtr model = state->getRobotModel();
+                if (model) {
+                    int idx = model->getVariableIndex(jc.joint_name);
+                    if (idx >= 0) {
+                        jc.position = state->getVariablePosition(idx);
+                    }
+                }
+            } catch (const std::exception& e) {
+                RCLCPP_WARN(this->get_logger(), "SetPathConstraints: failed to fill NaN for %s: %s",
+                            jc.joint_name.c_str(), e.what());
+            }
+        }
+        constraints.joint_constraints.push_back(jc);
+    }
+
+    m_path_constraints_ = constraints;
+    res->success = true;
+    RCLCPP_INFO(this->get_logger(), "Path constraints set for %zu joint(s)", constraints.joint_constraints.size());
+}
+
+void m2SimpleIface::clear_path_constraints_cb(const std::shared_ptr<arm_api2_msgs::srv::ClearPathConstraints::Request> req,
+                                             const std::shared_ptr<arm_api2_msgs::srv::ClearPathConstraints::Response> res)
+{
+    m_path_constraints_.joint_constraints.clear();
+    if (m_moveGroupPtr) {
+        m_moveGroupPtr->clearPathConstraints();
+    }
+    res->success = true;
+    RCLCPP_INFO(this->get_logger(), "Path constraints cleared");
+}
+
 void m2SimpleIface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
                                     const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res)
 {
@@ -723,7 +787,8 @@ void m2SimpleIface::execPlan(bool async=false)
 {
     m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
     m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
-    
+
+    // Path constraints are only used for CART (planExecCartesian), not for JOINT plans
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     bool success = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
     if (success) {
@@ -755,15 +820,27 @@ void m2SimpleIface::planExecCartesian(bool async=false)
     
     // TODO: Move this method to utils.cpp
     std::vector<geometry_msgs::msg::Pose> cartesianWaypoints = utils::createCartesianWaypoints(m_currPoseState.pose, m_currPoseCmd.pose, NUM_CART_PTS); 
-    // TODO: create Cartesian plan, use as first point currentPose 4 now, and as end point use targetPoint 
     moveit_msgs::msg::RobotTrajectory trajectory;
-    // TODO: Set as params that can be configured in YAML!
-    double jumpThr = 0.0; 
-    double eefStep = 0.02; 
-    // plan Cartesian path
-    m_moveGroupPtr->computeCartesianPath(cartesianWaypoints, eefStep, jumpThr, trajectory);
-    execTrajectory(trajectory, async); 
-    m_oldPoseCmd = m_currPoseCmd; 
+    double jumpThr = 0.0;
+    double eefStep = 0.02;
+    double fraction;
+    if (!m_path_constraints_.joint_constraints.empty()) {
+        moveit_msgs::msg::MoveItErrorCodes err;
+        fraction = m_moveGroupPtr->computeCartesianPath(
+            cartesianWaypoints, eefStep, jumpThr, trajectory,
+            m_path_constraints_, true, &err);
+        m_moveGroupPtr->clearPathConstraints();
+        m_path_constraints_.joint_constraints.clear();
+    } else {
+        fraction = m_moveGroupPtr->computeCartesianPath(
+            cartesianWaypoints, eefStep, jumpThr, trajectory);
+    }
+    if (fraction > 0.0) {
+        execTrajectory(trajectory, async);
+    } else {
+        RCLCPP_WARN(this->get_logger(), "Cartesian path computation failed (fraction=%.2f)", fraction);
+    }
+    m_oldPoseCmd = m_currPoseCmd;
 }
 
 void m2SimpleIface::execCartesian(bool async=false)
