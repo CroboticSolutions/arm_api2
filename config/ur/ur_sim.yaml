@@ -2,7 +2,7 @@ robot:
   arm_name: ur_manipulator  
   ee_link_name: tool0
   robot_desc: robot_description
-  move_group_ns: 
+  move_group_ns: ""
   planning_scene: planning_scene
   planning_frame: world #or base
   num_cart_pts: 20

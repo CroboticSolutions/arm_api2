@@ -42,7 +42,7 @@
 #include "arm_api2/moveit2_simple_iface.hpp"
 
 m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
-    : Node("moveit2_simple_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_simple_iface_node")), 
+    : Node("moveit2_simple_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_simple_iface_node", options)), 
      executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()), gripper(node_) 
 {   
     // USE_SIM_TIME HACK TO TEST SERVO!
@@ -72,7 +72,11 @@ m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
     max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
     
     // Currently not used :) [ns]
-    ns_ = this->get_namespace(); 	
+    ns_ = this->get_namespace();
+    if (MOVE_GROUP_NS.empty() || MOVE_GROUP_NS == "null")
+    {
+        MOVE_GROUP_NS = (ns_ == "/") ? "" : ns_;
+    }
     init_publishers(); 
     init_subscribers(); 
     init_services(); 
@@ -96,9 +100,9 @@ YAML::Node m2SimpleIface::init_config(std::string yaml_path)
 void m2SimpleIface::init_publishers()
 {   
     auto pose_state_name = config["topic"]["pub"]["current_pose"]["name"].as<std::string>(); 
-    pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(ns_ + pose_state_name, 1); 
+    pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(pose_state_name, 1); 
     auto current_robot_state_name = config["topic"]["pub"]["current_robot_state"]["name"].as<std::string>(); 
-    robot_state_pub_ = this->create_publisher<std_msgs::msg::String>(ns_ + current_robot_state_name, 1);
+    robot_state_pub_ = this->create_publisher<std_msgs::msg::String>(current_robot_state_name, 1);
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized publishers!");
 }
 
@@ -107,9 +111,9 @@ void m2SimpleIface::init_subscribers()
     auto pose_cmd_name = config["topic"]["sub"]["cmd_pose"]["name"].as<std::string>(); 
     auto cart_traj_cmd_name = config["topic"]["sub"]["cmd_traj"]["name"].as<std::string>(); 
     auto joint_states_name = config["topic"]["sub"]["joint_states"]["name"].as<std::string>();
-    pose_cmd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(ns_ + pose_cmd_name, 1, std::bind(&m2SimpleIface::pose_cmd_cb, this, _1));
-    ctraj_cmd_sub_ = this->create_subscription<arm_api2_msgs::msg::CartesianWaypoints>(ns_ + cart_traj_cmd_name, 1, std::bind(&m2SimpleIface::cart_poses_cb, this, _1));
-    joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(ns_ + joint_states_name, 1, std::bind(&m2SimpleIface::joint_state_cb, this, _1));
+    pose_cmd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(pose_cmd_name, 1, std::bind(&m2SimpleIface::pose_cmd_cb, this, _1));
+    ctraj_cmd_sub_ = this->create_subscription<arm_api2_msgs::msg::CartesianWaypoints>(cart_traj_cmd_name, 1, std::bind(&m2SimpleIface::cart_poses_cb, this, _1));
+    joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(joint_states_name, 1, std::bind(&m2SimpleIface::joint_state_cb, this, _1));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
 }
 
@@ -120,12 +124,12 @@ void m2SimpleIface::init_services()
     auto set_planner_name  = config["srv"]["set_planner"]["name"].as<std::string>();
     auto open_gripper_name = config["srv"]["open_gripper"]["name"].as<std::string>(); 
     auto close_gripper_name= config["srv"]["close_gripper"]["name"].as<std::string>();
-    change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2SimpleIface::change_state_cb, this, _1, _2)); 
-    set_vel_acc_srv_  = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2SimpleIface::set_vel_acc_cb, this, _1, _2));
-    set_planner_srv_  = this->create_service<arm_api2_msgs::srv::SetStringParam>(ns_ + set_planner_name, std::bind(&m2SimpleIface::set_planner_cb, this, _1, _2));
-    open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + open_gripper_name, std::bind(&m2SimpleIface::open_gripper_cb, this, _1, _2));
-    close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(ns_ + close_gripper_name, std::bind(&m2SimpleIface::close_gripper_cb, this, _1, _2));
-    add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(ns_ + "add_collision_object", std::bind(&m2SimpleIface::add_collision_object_cb, this, _1, _2));
+    change_state_srv_ = this->create_service<arm_api2_msgs::srv::ChangeState>(change_state_name, std::bind(&m2SimpleIface::change_state_cb, this, _1, _2)); 
+    set_vel_acc_srv_  = this->create_service<arm_api2_msgs::srv::SetVelAcc>(set_vel_acc_name, std::bind(&m2SimpleIface::set_vel_acc_cb, this, _1, _2));
+    set_planner_srv_  = this->create_service<arm_api2_msgs::srv::SetStringParam>(set_planner_name, std::bind(&m2SimpleIface::set_planner_cb, this, _1, _2));
+    open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(open_gripper_name, std::bind(&m2SimpleIface::open_gripper_cb, this, _1, _2));
+    close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(close_gripper_name, std::bind(&m2SimpleIface::close_gripper_cb, this, _1, _2));
+    add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>("add_collision_object", std::bind(&m2SimpleIface::add_collision_object_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 

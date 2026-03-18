@@ -44,7 +44,7 @@
 #include <vector>
 
 m2Iface::m2Iface(const rclcpp::NodeOptions &options)
-    : Node("moveit2_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_iface_node")), 
+    : Node("moveit2_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_iface_node", options)), 
      executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()), gripper(node_) 
 {   
     // USE_SIM_TIME HACK TO TEST SERVO!
@@ -77,8 +77,12 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     max_vel_scaling_factor = config["robot"]["max_vel_scaling_factor"].as<float>();
     max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
     
-    // Currently not used :) 
-    ns_ = this->get_namespace(); 	
+    // Align MoveIt namespace defaults with node namespace when config is generic.
+    ns_ = this->get_namespace();
+    if (MOVE_GROUP_NS.empty() || MOVE_GROUP_NS == "null")
+    {
+        MOVE_GROUP_NS = (ns_ == "/") ? "" : ns_;
+    }
     init_publishers(); 
     init_subscribers(); 
     init_services(); 
@@ -102,15 +106,15 @@ void m2Iface::init_publishers()
 {   
     auto pose_state_name    = config["topic"]["pub"]["current_pose"]["name"].as<std::string>();
     auto robot_state_name   = config["topic"]["pub"]["current_robot_state"]["name"].as<std::string>(); 
-    pose_state_pub_         = this->create_publisher<geometry_msgs::msg::PoseStamped>(ns_ + pose_state_name, 1);
-    robot_state_pub_        = this->create_publisher<std_msgs::msg::String>(ns_ + robot_state_name, 1); 
+    pose_state_pub_         = this->create_publisher<geometry_msgs::msg::PoseStamped>(pose_state_name, 1);
+    robot_state_pub_        = this->create_publisher<std_msgs::msg::String>(robot_state_name, 1); 
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized publishers!");
 }
 
 void m2Iface::init_subscribers()
 {
     auto joint_states_name  = config["topic"]["sub"]["joint_states"]["name"].as<std::string>();
-    joint_state_sub_        = this->create_subscription<sensor_msgs::msg::JointState>(ns_ + joint_states_name, 1, std::bind(&m2Iface::joint_state_cb, this, _1));
+    joint_state_sub_        = this->create_subscription<sensor_msgs::msg::JointState>(joint_states_name, 1, std::bind(&m2Iface::joint_state_cb, this, _1));
     // Servo twist subscriber
     servo_twist_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
         "~/servo_twist_cmd", 10, std::bind(&m2Iface::servo_twist_cb, this, _1));
@@ -130,12 +134,12 @@ void m2Iface::init_services()
     auto set_planner_name   = config["srv"]["set_planner"]["name"].as<std::string>();
     auto set_eelink_name    = config["srv"]["set_eelink"]["name"].as<std::string>();
     auto set_plan_only_name = config["srv"]["set_planonly"]["name"].as<std::string>();
-    change_state_srv_       = this->create_service<arm_api2_msgs::srv::ChangeState>(ns_ + change_state_name, std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
-    set_vel_acc_srv_        = this->create_service<arm_api2_msgs::srv::SetVelAcc>(ns_ + set_vel_acc_name, std::bind(&m2Iface::set_vel_acc_cb, this, _1, _2));
-    set_planner_srv_        = this->create_service<arm_api2_msgs::srv::SetStringParam>(ns_ + set_planner_name, std::bind(&m2Iface::set_planner_cb, this, _1, _2));
-    set_eelink_srv_         = this->create_service<arm_api2_msgs::srv::SetStringParam>(ns_ + set_eelink_name, std::bind(&m2Iface::set_eelink_cb, this, _1, _2));
-    set_plan_only_srv_      = this->create_service<std_srvs::srv::SetBool>(ns_ + set_plan_only_name, std::bind(&m2Iface::set_plan_only_cb, this, _1, _2));
-    add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>(ns_ + "add_collision_object", std::bind(&m2Iface::add_collision_object_cb, this, _1, _2));
+    change_state_srv_       = this->create_service<arm_api2_msgs::srv::ChangeState>(change_state_name, std::bind(&m2Iface::change_state_cb, this, _1, _2)); 
+    set_vel_acc_srv_        = this->create_service<arm_api2_msgs::srv::SetVelAcc>(set_vel_acc_name, std::bind(&m2Iface::set_vel_acc_cb, this, _1, _2));
+    set_planner_srv_        = this->create_service<arm_api2_msgs::srv::SetStringParam>(set_planner_name, std::bind(&m2Iface::set_planner_cb, this, _1, _2));
+    set_eelink_srv_         = this->create_service<arm_api2_msgs::srv::SetStringParam>(set_eelink_name, std::bind(&m2Iface::set_eelink_cb, this, _1, _2));
+    set_plan_only_srv_      = this->create_service<std_srvs::srv::SetBool>(set_plan_only_name, std::bind(&m2Iface::set_plan_only_cb, this, _1, _2));
+    add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>("add_collision_object", std::bind(&m2Iface::add_collision_object_cb, this, _1, _2));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
@@ -146,22 +150,22 @@ void m2Iface::init_actionservers()
     auto move_to_pose_path_name = config["action"]["move_to_pose_path"]["name"].as<std::string>();
     auto gripper_control_name   = config["action"]["gripper_control"]["name"].as<std::string>();
     move_to_pose_as_    = rclcpp_action::create_server<arm_api2_msgs::action::MoveCartesian>(this,
-                                                                                        ns_ + move_to_pose_name,
+                                                                                        move_to_pose_name,
                                                                                         std::bind(&m2Iface::move_to_pose_goal_cb, this, _1, _2),
                                                                                         std::bind(&m2Iface::move_to_pose_cancel_cb, this, _1),
                                                                                         std::bind(&m2Iface::move_to_pose_accepted_cb, this, _1));
     move_to_joint_as_   = rclcpp_action::create_server<arm_api2_msgs::action::MoveJoint>(this,
-                                                                                        ns_ + move_to_joint_name,
+                                                                                        move_to_joint_name,
                                                                                         std::bind(&m2Iface::move_to_joint_goal_cb, this, _1, _2),
                                                                                         std::bind(&m2Iface::move_to_joint_cancel_cb, this, _1),
                                                                                         std::bind(&m2Iface::move_to_joint_accepted_cb, this, _1));
     move_to_pose_path_as_ = rclcpp_action::create_server<arm_api2_msgs::action::MoveCartesianPath>(this,
-                                                                                        ns_ + move_to_pose_path_name,
+                                                                                        move_to_pose_path_name,
                                                                                         std::bind(&m2Iface::move_to_pose_path_goal_cb, this, _1, _2),
                                                                                         std::bind(&m2Iface::move_to_pose_path_cancel_cb, this, _1),
                                                                                         std::bind(&m2Iface::move_to_pose_path_accepted_cb, this, _1));
     gripper_control_as_ = rclcpp_action::create_server<control_msgs::action::GripperCommand>(this,
-                                                                                        ns_ + gripper_control_name,
+                                                                                        gripper_control_name,
                                                                                         std::bind(&m2Iface::gripper_control_goal_cb, this, _1, _2),
                                                                                         std::bind(&m2Iface::gripper_control_cancel_cb, this, _1),
                                                                                         std::bind(&m2Iface::gripper_control_accepted_cb, this, _1));
