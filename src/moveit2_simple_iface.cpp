@@ -70,7 +70,25 @@ m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
     JOINT_STATES        = config["robot"]["joint_states"].as<std::string>(); 
     max_vel_scaling_factor = config["robot"]["max_vel_scaling_factor"].as<float>();
     max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
-    
+
+    {
+      RobotiqGripperConfig gcfg;
+      const YAML::Node & r = config["robot"];
+      if (r["gripper_backend_action"]) {
+        gcfg.backend_action = r["gripper_backend_action"].as<std::string>();
+      }
+      if (r["gripper_action_type"]) {
+        const std::string t = r["gripper_action_type"].as<std::string>();
+        if (t == "parallel_gripper_command" || t == "parallel") {
+          gcfg.backend = RobotiqGripperConfig::BackendKind::ParallelGripperCommand;
+        }
+      }
+      if (r["gripper_parallel_joint_name"]) {
+        gcfg.parallel_joint_name = r["gripper_parallel_joint_name"].as<std::string>();
+      }
+      gripper.configure(gcfg);
+    }
+
     // Currently not used :) [ns]
     ns_ = this->get_namespace();
     if (MOVE_GROUP_NS.empty() || MOVE_GROUP_NS == "null")

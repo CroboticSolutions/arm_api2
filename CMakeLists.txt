@@ -29,7 +29,12 @@ find_package(std_srvs REQUIRED)
 include_directories(include)
 
 # Build moveit2_iface
-add_executable(moveit2_iface src/moveit2_iface.cpp src/moveit2_iface_node.cpp src/utils.cpp)
+add_executable(
+  moveit2_iface
+  src/moveit2_iface.cpp
+  src/moveit2_iface_node.cpp
+  src/robotiq_gripper.cpp
+  src/utils.cpp)
 target_include_directories(moveit2_iface 
 PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -49,7 +54,12 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME})
 
 # Build moveit2_simple_iface
-add_executable(moveit2_simple_iface src/moveit2_simple_iface.cpp src/moveit2_simple_iface_node.cpp src/utils.cpp)
+add_executable(
+  moveit2_simple_iface
+  src/moveit2_simple_iface.cpp
+  src/moveit2_simple_iface_node.cpp
+  src/robotiq_gripper.cpp
+  src/utils.cpp)
 target_include_directories(moveit2_simple_iface 
 PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

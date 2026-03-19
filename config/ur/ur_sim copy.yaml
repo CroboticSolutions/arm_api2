@@ -1,20 +1,15 @@
-# arm_api2 + UR Gazebo sim with PickNik Robotiq 2F-85 and parallel_gripper_action_controller.
-# Use with MoveIt semantic_description_file:=srdf/ur_robotiq.srdf.xacro and use_robotiq_gripper:=true.
-robot:
-  arm_name: ur_manipulator
-  ee_link_name: robotiq_85_left_finger_tip_link
+robot: 
+  arm_name: ur_manipulator  
+  ee_link_name: tool0
   robot_desc: robot_description
   move_group_ns: ""
   planning_scene: planning_scene
-  planning_frame: world
+  planning_frame: world #or base
   num_cart_pts: 20
   joint_states: joint_states
   max_vel_scaling_factor: 0.1
   max_acc_scaling_factor: 0.1
   with_planner: true
-  gripper_backend_action: robotiq_gripper_controller/gripper_cmd
-  gripper_action_type: parallel_gripper_command
-  gripper_parallel_joint_name: robotiq_85_left_knuckle_joint
 topic:
   sub:
     cmd_pose:
@@ -63,7 +58,7 @@ srv:
     name: arm/set_eelink
   set_planonly:
     name: arm/set_planonly
-  open_gripper:
+  open_gripper: 
     name: arm/open_gripper
   close_gripper:
     name: arm/close_gripper
