@@ -32,6 +32,7 @@
   <test_depend>ament_lint_common</test_depend>
 
   <exec_depend>ros2launch</exec_depend>
+  <exec_depend>launch_param_builder</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

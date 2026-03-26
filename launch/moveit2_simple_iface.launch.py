@@ -64,16 +64,10 @@ def launch_setup(context, *args, **kwargs):
     arg_robot_namespace = context.perform_substitution(LaunchConfiguration('robot_namespace', default=''))
 
     # TODO: Swap between sim and real arg depending on the robot type
-    # abb1/abb2 use configs from abb folder
-    if arg_robot_name in ('abb1', 'abb2'):
-        config_folder = 'abb'
-        config_prefix = arg_robot_name
-    else:
-        config_folder = arg_robot_name
-        config_prefix = arg_robot_name
-    robot_yaml = "{0}/{1}_sim.yaml".format(config_folder, config_prefix)
-    servo_yaml = "{0}/{1}_servo_sim.yaml".format(config_folder, config_prefix)
-    kinematics_yaml = "config/{0}/{1}_kinematics.yaml".format(config_folder, config_prefix)
+    # Same pattern as UR: config/{robot_name}/{robot_name}_sim.yaml (e.g. abb/abb_sim.yaml)
+    robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
+    servo_yaml = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
+    kinematics_yaml = "config/{0}/{1}_kinematics.yaml".format(arg_robot_name, arg_robot_name)
     
     # Arm params (ctl, servo) --> sent just as path
     # 3 different ways of loading and using yaml files, DISGUSTING [FIX ASAP]
