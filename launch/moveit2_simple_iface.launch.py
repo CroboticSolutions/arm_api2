@@ -49,6 +49,7 @@ from launch.substitutions import LaunchConfiguration
 
 import yaml
 import os
+import tempfile
 
 # TODO: Make this changeable without ERROR for wrong param type
 use_sim_time = True
@@ -76,6 +77,20 @@ def launch_setup(context, *args, **kwargs):
         "config",
         robot_yaml
     )
+    effective_config_path = config_path
+    if arg_robot_namespace:
+        with open(config_path, "r", encoding="utf-8") as base_cfg_file:
+            base_cfg = yaml.safe_load(base_cfg_file) or {}
+        base_cfg.setdefault("robot", {})
+        base_cfg["robot"]["ee_link_name"] = f"{arg_robot_namespace}_tool0"
+        fd, tmp_cfg_path = tempfile.mkstemp(
+            suffix=f"_{arg_robot_namespace}_moveit2_simple_iface.yaml",
+            prefix="arm_api2_cfg_",
+        )
+        os.close(fd)
+        with open(tmp_cfg_path, "w", encoding="utf-8") as tmp_cfg_file:
+            yaml.safe_dump(base_cfg, tmp_cfg_file, default_flow_style=False, sort_keys=False)
+        effective_config_path = tmp_cfg_path
 
     # Servo params created with the help of ParameterBuilder
     servo_params = {
@@ -102,7 +117,7 @@ def launch_setup(context, *args, **kwargs):
         {"use_sim_time": use_sim_time},
         {"enable_servo": use_servo},
         {"dt": dt},
-        {"config_path": config_path},
+        {"config_path": effective_config_path},
         kinematic_params,
         servo_params,
     ]

@@ -43,6 +43,7 @@
 #define MOVEIT2_SIMPLE_IFACE_HPP
 
 #include <chrono>
+#include <atomic>
 #include <cmath>
 #include <memory>
 #include <thread>
@@ -125,6 +126,7 @@ class m2SimpleIface: public rclcpp::Node
         /* Thread safety */
         std::mutex pose_cmd_mutex_;
         std::mutex robot_state_mutex_;
+        std::mutex move_group_mutex_;
 
         /* gripper */
         RobotiqGripper gripper; 
@@ -281,10 +283,11 @@ class m2SimpleIface: public rclcpp::Node
          * current state matches these (prevents race when switching JOINT->CART). */
         std::vector<std::string> m_last_trajectory_joint_names_;
         std::vector<double> m_last_trajectory_final_positions_;
+        std::atomic_bool execute_in_flight_{false};
 
         /** Wait for previous async execution to complete (current joints near last trajectory end).
          * Prevents race: new CART asyncExecute while previous JOINT asyncExecute still running. */
-        void waitForPreviousExecution();
+        bool waitForPreviousExecution();
 
         /** Path constraints for next plan. Cleared after each plan. */
         moveit_msgs::msg::Constraints m_path_constraints_;

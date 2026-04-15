@@ -610,26 +610,26 @@ class ArmCommander(Node):
             self.state_index += 1
 
     def add_stud_collision_object(self):
-        """Add a collision object representing the grasped wooden stud (2.00m x 0.15m x 0.03m box)"""
+        """Add a grasped-stud box attached to tool0 (TCP); dimensions from primitive below."""
         try:
             request = AddGraspedObject.Request()
             
             # Create collision object for the stud
             collision_object = CollisionObject()
             collision_object.id = "grasped_stud"
-            collision_object.header.frame_id = "upper_right_finger"
+            collision_object.header.frame_id = "tool0"
             collision_object.operation = CollisionObject.ADD
             
             # Define stud as a box with dimensions from Gazebo model: 2.00 x 0.15 x 0.03
             primitive = SolidPrimitive()
             primitive.type = SolidPrimitive.BOX
-            primitive.dimensions = [2.00, 0.15, 0.03]  # [x, y, z] dimensions in meters
+            primitive.dimensions = [2.394, 0.14, 0.0381]  # [x, y, z] dimensions in meters
             
-            # Position the stud centered on the finger
+            # Box pose in tool0 (TCP); tune offsets if the stud is not centered on TCP.
             pose = Pose()
-            pose.position.x = 0.0
-            pose.position.y = 0.0
-            pose.position.z = 0.0
+            pose.position.x = 1.0
+            pose.position.y = 0.7
+            pose.position.z = 1.0
             pose.orientation.w = 1.0
             
             collision_object.primitives.append(primitive)
@@ -637,7 +637,7 @@ class ArmCommander(Node):
             
             # Create attached collision object
             attached_object = AttachedCollisionObject()
-            attached_object.link_name = "upper_right_finger"
+            attached_object.link_name = "tool0"
             attached_object.object = collision_object
             
             request.grasped_object = collision_object
@@ -647,7 +647,7 @@ class ArmCommander(Node):
             future = self.add_grasped_object_client.call_async(request)
             
             # Note: We don't wait for response here to avoid blocking
-            self.get_logger().info('>>> Wooden stud collision object added to upper_right_finger (2.00m x 0.15m x 0.03m)')
+            self.get_logger().info('>>> Wooden stud collision object attached to tool0 (TCP)')
             
         except Exception as e:
             self.get_logger().error(f'Failed to add stud collision object: {str(e)}')

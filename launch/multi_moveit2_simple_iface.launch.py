@@ -17,6 +17,7 @@ from launch.substitutions import LaunchConfiguration
 import copy
 import os
 import re
+import tempfile
 import yaml
 
 use_servo = True
@@ -90,6 +91,20 @@ def launch_setup(context: LaunchContext, *args, **kwargs):
     for idx, arg_robot_ns in enumerate(parts):
         _validate_ros_namespace(arg_robot_ns)
 
+        # Match moveit2_simple_iface.launch.py: namespaced TF uses e.g. abb1_tool0, not bare tool0.
+        with open(config_path, "r", encoding="utf-8") as base_cfg_file:
+            base_cfg = yaml.safe_load(base_cfg_file) or {}
+        base_cfg.setdefault("robot", {})
+        base_cfg["robot"]["ee_link_name"] = f"{arg_robot_ns}_tool0"
+        fd, tmp_cfg_path = tempfile.mkstemp(
+            suffix=f"_{arg_robot_ns}_moveit2_simple_iface.yaml",
+            prefix="arm_api2_cfg_",
+        )
+        os.close(fd)
+        with open(tmp_cfg_path, "w", encoding="utf-8") as tmp_cfg_file:
+            yaml.safe_dump(base_cfg, tmp_cfg_file, default_flow_style=False, sort_keys=False)
+        effective_config_path = tmp_cfg_path
+
         servo_params = copy.deepcopy(servo_params_base)
         servo_params["moveit_servo"]["joint_topic"] = f"/{arg_robot_ns}/joint_states"
 
@@ -97,7 +112,7 @@ def launch_setup(context: LaunchContext, *args, **kwargs):
             {"use_sim_time": use_sim_flag},
             {"enable_servo": use_servo},
             {"dt": dt},
-            {"config_path": config_path},
+            {"config_path": effective_config_path},
             {"move_group_ns": arg_robot_ns},
         ]
 

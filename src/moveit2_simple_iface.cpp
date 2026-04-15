@@ -752,17 +752,25 @@ void m2SimpleIface::execMove(bool async=false)
 
 }
 
-void m2SimpleIface::waitForPreviousExecution()
+bool m2SimpleIface::waitForPreviousExecution()
 {
-    if (m_last_trajectory_final_positions_.empty()) return;
+    if (!execute_in_flight_.load() || m_last_trajectory_final_positions_.empty()) {
+        return true;
+    }
 
-    constexpr double JOINT_TOLERANCE = 0.02;  // rad (~1.1 deg)
+    // Keep this tighter than MoveIt's start validation tolerance (0.01 rad)
+    // so we do not release the gate before execute_trajectory would accept start state.
+    constexpr double JOINT_TOLERANCE = 0.008;  // rad (~0.46 deg)
     constexpr double POLL_INTERVAL_MS = 50.0;
     constexpr double TIMEOUT_SEC = 5.0;
     const int max_iters = static_cast<int>(TIMEOUT_SEC * 1000.0 / POLL_INTERVAL_MS);
 
     for (int i = 0; i < max_iters && rclcpp::ok(); ++i) {
-        moveit::core::RobotStatePtr state = m_moveGroupPtr->getCurrentState(0.1);
+        moveit::core::RobotStatePtr state;
+        {
+            std::lock_guard<std::mutex> lock(move_group_mutex_);
+            state = m_moveGroupPtr->getCurrentState(0.1);
+        }
         if (!state) continue;
 
         bool all_close = true;
@@ -772,15 +780,37 @@ void m2SimpleIface::waitForPreviousExecution()
             if (diff > JOINT_TOLERANCE) { all_close = false; break; }
         }
         if (all_close) {
+            // One extra short poll to ensure a fresh state sample before the next plan/execute.
+            std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(POLL_INTERVAL_MS));
+            moveit::core::RobotStatePtr confirm;
+            {
+                std::lock_guard<std::mutex> lock(move_group_mutex_);
+                confirm = m_moveGroupPtr->getCurrentState(0.1);
+            }
+            if (!confirm) {
+                continue;
+            }
+            bool confirm_close = true;
+            for (size_t j = 0; j < m_last_trajectory_joint_names_.size() && j < m_last_trajectory_final_positions_.size(); ++j) {
+                double current = confirm->getVariablePosition(m_last_trajectory_joint_names_[j]);
+                double diff = std::abs(current - m_last_trajectory_final_positions_[j]);
+                if (diff > JOINT_TOLERANCE) { confirm_close = false; break; }
+            }
+            if (!confirm_close) {
+                continue;
+            }
             m_last_trajectory_joint_names_.clear();
             m_last_trajectory_final_positions_.clear();
-            return;
+            execute_in_flight_.store(false);
+            return true;
         }
         std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(POLL_INTERVAL_MS));
     }
-    RCLCPP_WARN(this->get_logger(), "Timeout waiting for previous execution; proceeding anyway");
+    RCLCPP_ERROR(this->get_logger(), "Timeout waiting for previous execution; refusing new plan/execute");
     m_last_trajectory_joint_names_.clear();
     m_last_trajectory_final_positions_.clear();
+    execute_in_flight_.store(false);
+    return false;
 }
 
 void m2SimpleIface::execPlan(bool async=false)
@@ -788,19 +818,31 @@ void m2SimpleIface::execPlan(bool async=false)
     m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
     m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
 
+    // Wait until prior async motion finishes *before* planning so the plan's start state
+    // matches the robot at execute time (avoids Invalid Trajectory start tolerance failures).
+    if (!waitForPreviousExecution()) {
+        return;
+    }
+
     // Path constraints are only used for CART (planExecCartesian), not for JOINT plans
     moveit::planning_interface::MoveGroupInterface::Plan plan;
-    bool success = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+    bool success = false;
+    {
+        std::lock_guard<std::mutex> lock(move_group_mutex_);
+        success = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+    }
     if (success) {
-        // Wait for previous async execution before sending new one (prevents JOINT->CART race)
-        waitForPreviousExecution();
         // Use asyncExecute for all joint plans: blocking execute() crashes intermittently
         // when switching JOINT->CART (MoveIt/controller race). asyncExecute avoids the
         // blocking wait; commander uses is_complete() to detect arrival.
         m_async_plan_ptr = std::make_shared<moveit::planning_interface::MoveGroupInterface::Plan>(plan);
         auto trajectory_copy = std::make_shared<moveit_msgs::msg::RobotTrajectory>(m_async_plan_ptr->trajectory_);
-        m_moveGroupPtr->asyncExecute(*trajectory_copy);
+        {
+            std::lock_guard<std::mutex> lock(move_group_mutex_);
+            m_moveGroupPtr->asyncExecute(*trajectory_copy);
+        }
         m_async_trajectory_ptr = trajectory_copy;
+        execute_in_flight_.store(true);
         // Store final positions for next waitForPreviousExecution
         const auto& jt = trajectory_copy->joint_trajectory;
         if (!jt.points.empty() && !jt.joint_names.empty() &&
@@ -817,7 +859,13 @@ void m2SimpleIface::planExecCartesian(bool async=false)
 {   
     m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
     m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
-    
+
+    // Same ordering as execPlan: finish previous motion, refresh pose, then plan from current state.
+    if (!waitForPreviousExecution()) {
+        return;
+    }
+    getArmState();
+
     // TODO: Move this method to utils.cpp
     std::vector<geometry_msgs::msg::Pose> cartesianWaypoints = utils::createCartesianWaypoints(m_currPoseState.pose, m_currPoseCmd.pose, NUM_CART_PTS); 
     moveit_msgs::msg::RobotTrajectory trajectory;
@@ -826,12 +874,16 @@ void m2SimpleIface::planExecCartesian(bool async=false)
     double fraction;
     if (!m_path_constraints_.joint_constraints.empty()) {
         moveit_msgs::msg::MoveItErrorCodes err;
-        fraction = m_moveGroupPtr->computeCartesianPath(
-            cartesianWaypoints, eefStep, jumpThr, trajectory,
-            m_path_constraints_, true, &err);
-        m_moveGroupPtr->clearPathConstraints();
+        {
+            std::lock_guard<std::mutex> lock(move_group_mutex_);
+            fraction = m_moveGroupPtr->computeCartesianPath(
+                cartesianWaypoints, eefStep, jumpThr, trajectory,
+                m_path_constraints_, true, &err);
+            m_moveGroupPtr->clearPathConstraints();
+        }
         m_path_constraints_.joint_constraints.clear();
     } else {
+        std::lock_guard<std::mutex> lock(move_group_mutex_);
         fraction = m_moveGroupPtr->computeCartesianPath(
             cartesianWaypoints, eefStep, jumpThr, trajectory);
     }
@@ -847,14 +899,22 @@ void m2SimpleIface::execCartesian(bool async=false)
 {   
     m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
     m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
-    
+
+    if (!waitForPreviousExecution()) {
+        return;
+    }
+    getArmState();
+
     // TODO: create Cartesian plan, use as first point currentPose 4 now, and as end point use targetPoint 
     moveit_msgs::msg::RobotTrajectory trajectory;
     // TODO: Set as params that can be configured in YAML!
     double jumpThr = 0.0; 
     double eefStep = 0.02; 
     // plan Cartesian path
-    m_moveGroupPtr->computeCartesianPath(m_cartesianWaypoints, eefStep, jumpThr, trajectory);
+    {
+        std::lock_guard<std::mutex> lock(move_group_mutex_);
+        m_moveGroupPtr->computeCartesianPath(m_cartesianWaypoints, eefStep, jumpThr, trajectory);
+    }
     execTrajectory(trajectory, async); 
     m_oldPoseCmd = m_currPoseCmd; 
 }
@@ -865,8 +925,14 @@ void m2SimpleIface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory,
     // (JOINT<->CART). Commander uses is_complete() to detect arrival.
     m_async_trajectory_ptr = std::make_shared<moveit_msgs::msg::RobotTrajectory>(trajectory);
     // Wait for previous async execution before sending new one (prevents JOINT->CART race)
-    waitForPreviousExecution();
-    m_moveGroupPtr->asyncExecute(*m_async_trajectory_ptr);
+    if (!waitForPreviousExecution()) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(move_group_mutex_);
+        m_moveGroupPtr->asyncExecute(*m_async_trajectory_ptr);
+    }
+    execute_in_flight_.store(true);
     // Store final positions for next waitForPreviousExecution
     const auto& jt = trajectory.joint_trajectory;
     if (!jt.points.empty() && !jt.joint_names.empty() &&
@@ -878,7 +944,11 @@ void m2SimpleIface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory,
 
 void m2SimpleIface::getArmState() 
 {   
-    moveit::core::RobotStatePtr fresh_state = m_moveGroupPtr->getCurrentState(0.1);
+    moveit::core::RobotStatePtr fresh_state;
+    {
+        std::lock_guard<std::mutex> lock(move_group_mutex_);
+        fresh_state = m_moveGroupPtr->getCurrentState(0.1);
+    }
     if (!fresh_state) {
         RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Failed to get current state");
         return;
