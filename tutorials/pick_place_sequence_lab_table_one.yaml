@@ -1,0 +1,169 @@
+# Pick-and-place: red → drop zone, then blue on red, then yellow on stack (lab_table_one).
+# SDF: cubes 0.06 m; centers (world) red (0.4,0.55), blue (0.4,0.45), yellow (0.4,0.35), z=1.21 (black platform h=0.2).
+# EE offsets vs cube center match the original red tune: dx=-0.0012, dy=+0.0012; approach z = cz+0.23; pick/descend z = cz+0.1667.
+# Stack: layer n center z = 1.21 + n*0.06 (n=0 table; after red moved, blue on red n=1 → cz=1.27; yellow on top n=2 → cz=1.33).
+
+robot_namespace: ur1
+planning_frame: world
+
+convergence:
+  position_tolerance_m: 0.012
+  orientation_tolerance_rad: 0.08
+  stable_samples: 6
+  spin_period_sec: 0.05
+  max_wait_sec_per_step: 120.0
+
+gripper_settle_sec: 0.8
+
+steps:
+  # --- Red: pick @ row y≈0.55, place left zone ---
+  - name: set_joint_mode_home
+    change_state: JOINT_TRAJ_CTL
+
+  - name: home
+    pose:
+      position: {x: 0.08571, y: 0.2951, z: 1.564}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: approach_red
+    pose:
+      position: {x: 0.3988, y: 0.5512, z: 1.44}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: set_cart_mode_pick_red
+    change_state: CART_TRAJ_CTL
+
+  - name: pick_red_descend
+    pose:
+      position: {x: 0.3988, y: 0.5512, z: 1.3767}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: close_gripper_red
+    close_gripper: true
+
+  - name: pick_red_retract
+    pose:
+      position: {x: 0.3988, y: 0.5512, z: 1.44}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: set_joint_mode_place_red
+    change_state: JOINT_TRAJ_CTL
+
+  - name: approach_place_red
+    pose:
+      position: {x: 0.04671, y: 0.5512, z: 1.44}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: set_cart_mode_place_red
+    change_state: CART_TRAJ_CTL
+
+  - name: place_red_descend
+    pose:
+      position: {x: 0.04671, y: 0.5512, z: 1.3767}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: open_gripper_red
+    open_gripper: true
+
+  - name: place_red_retract
+    pose:
+      position: {x: 0.04671, y: 0.5512, z: 1.44}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  # --- Blue: pick @ y=0.45 (Δy −0.1 vs red), place on red stack (cz=1.21+0.06) ---
+  - name: set_joint_mode_approach_blue
+    change_state: JOINT_TRAJ_CTL
+
+  - name: approach_blue
+    pose:
+      position: {x: 0.3988, y: 0.4512, z: 1.44}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: set_cart_mode_pick_blue
+    change_state: CART_TRAJ_CTL
+
+  - name: pick_blue_descend
+    pose:
+      position: {x: 0.3988, y: 0.4512, z: 1.3767}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: close_gripper_blue
+    close_gripper: true
+
+  - name: pick_blue_retract
+    pose:
+      position: {x: 0.3988, y: 0.4512, z: 1.44}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: set_joint_mode_place_blue_on_red
+    change_state: JOINT_TRAJ_CTL
+
+  - name: approach_stack_blue
+    pose:
+      position: {x: 0.04671, y: 0.5512, z: 1.50}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: set_cart_mode_place_blue
+    change_state: CART_TRAJ_CTL
+
+  - name: place_blue_on_red_descend
+    pose:
+      position: {x: 0.04671, y: 0.5512, z: 1.4367}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: open_gripper_blue
+    open_gripper: true
+
+  - name: place_blue_retract
+    pose:
+      position: {x: 0.04671, y: 0.5512, z: 1.50}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  # --- Yellow: pick @ y=0.35 (Δy −0.2 vs red), place on 2-high stack (cz=1.21+0.12) ---
+  - name: set_joint_mode_approach_yellow
+    change_state: JOINT_TRAJ_CTL
+
+  - name: approach_yellow
+    pose:
+      position: {x: 0.3988, y: 0.3512, z: 1.44}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: set_cart_mode_pick_yellow
+    change_state: CART_TRAJ_CTL
+
+  - name: pick_yellow_descend
+    pose:
+      position: {x: 0.3988, y: 0.3512, z: 1.3767}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: close_gripper_yellow
+    close_gripper: true
+
+  - name: pick_yellow_retract
+    pose:
+      position: {x: 0.3988, y: 0.3512, z: 1.44}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: set_joint_mode_place_yellow_on_stack
+    change_state: JOINT_TRAJ_CTL
+
+  - name: approach_stack_yellow
+    pose:
+      position: {x: 0.04671, y: 0.5512, z: 1.56}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: set_cart_mode_place_yellow
+    change_state: CART_TRAJ_CTL
+
+  - name: place_yellow_on_stack_descend
+    pose:
+      position: {x: 0.04671, y: 0.5512, z: 1.4967}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - name: open_gripper_yellow
+    open_gripper: true
+
+  - name: place_yellow_retract
+    pose:
+      position: {x: 0.04671, y: 0.5512, z: 1.56}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}

@@ -40,6 +40,7 @@ def launch_setup(context, *args, **kwargs):
 
     launch_nodes_ = []
     arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
+    arg_robot_ns        = context.perform_substitution(LaunchConfiguration('robot_ns', default=''))
     arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))
     arg_launch_servo_watchdog = context.perform_substitution(LaunchConfiguration('launch_servo_watchdog', default=True))
     arg_use_sim_time    = context.perform_substitution(LaunchConfiguration('use_sim_time', default='false'))
@@ -98,6 +99,7 @@ def launch_setup(context, *args, **kwargs):
         package='arm_api2',
         executable='moveit2_iface',
         output='screen',
+        namespace=arg_robot_ns,
         parameters=node_params
     )
 
@@ -116,7 +118,8 @@ def launch_setup(context, *args, **kwargs):
         launch_servo_watchdog = Node(
             package='arm_api2',
             executable="servo_watchdog.py",
-            output='screen'
+            output='screen',
+            namespace=arg_robot_ns,
         )
         launch_nodes_.append(launch_servo_watchdog)
 
@@ -130,6 +133,13 @@ def generate_launch_description():
         DeclareLaunchArgument(name='robot_name',
                               default_value='kinova',
                               description='robot name')
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            name='robot_ns',
+            default_value='',
+            description='ROS namespace for arm_api2 instance (e.g. ur1, ur2). Empty keeps root namespace.'
+        )
     )
     declared_arguments.append(
         DeclareLaunchArgument(name='launch_joy', 

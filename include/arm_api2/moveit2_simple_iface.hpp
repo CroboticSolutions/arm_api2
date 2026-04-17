@@ -42,6 +42,8 @@
 #ifndef MOVEIT2_SIMPLE_IFACE_HPP
 #define MOVEIT2_SIMPLE_IFACE_HPP
 
+#include <atomic>
+#include <mutex>
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -120,6 +122,9 @@ class m2SimpleIface: public rclcpp::Node
         
         /* Thread safety */
         std::mutex pose_cmd_mutex_;
+
+        /** Set while a trajectory is being executed (async: worker thread; sync: same thread). */
+        std::atomic_bool trajectory_executing_{ false };
 
         /* gripper */
         RobotiqGripper gripper; 
@@ -203,11 +208,14 @@ class m2SimpleIface: public rclcpp::Node
         void getArmState();  
 
         /* funcs */
-        void execPlan(bool async); 
-        void execMove(bool async);  
-        void execCartesian(bool async); 
-        void planExecCartesian(bool async); 
-        void execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async); 
+        /** @return true if a new execution was started or completed (sync); false if busy or plan failed. */
+        bool execPlan(bool async);
+        bool execMove(bool async);
+        bool execCartesian(bool async);
+        bool planExecCartesian(bool async);
+        bool execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async);
+        /** Stop active trajectory before planning a new one. Overlap is also prevented by trajectory_executing_. */
+        void stopBeforeAsyncExecute();
 
         // Simple state machine 
         enum state{
@@ -251,10 +259,6 @@ class m2SimpleIface: public rclcpp::Node
         geometry_msgs::msg::PoseStamped m_currPoseState;
         sensor_msgs::msg::JointState    m_currJointState;  
         std::vector<geometry_msgs::msg::Pose> m_cartesianWaypoints;
-        
-        // Store plan and trajectory for async execution to prevent premature destruction
-        std::shared_ptr<moveit::planning_interface::MoveGroupInterface::Plan> m_async_plan_ptr;
-        std::shared_ptr<moveit_msgs::msg::RobotTrajectory> m_async_trajectory_ptr;
 
         moveit::planning_interface::MoveGroupInterfacePtr m_moveGroupPtr; 
         moveit::core::RobotStatePtr m_robotStatePtr;  

@@ -66,6 +66,7 @@ def launch_setup(context, *args, **kwargs):
 
     launch_nodes_ = []
     arg_robot_name      = context.perform_substitution(LaunchConfiguration('robot_name'))
+    arg_robot_ns        = context.perform_substitution(LaunchConfiguration('robot_ns', default=''))
     arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))
     arg_use_gdb         = context.perform_substitution(LaunchConfiguration('use_gdb', default=False))
     arg_use_sim_time    = context.perform_substitution(LaunchConfiguration('use_sim_time', default='false'))
@@ -113,7 +114,7 @@ def launch_setup(context, *args, **kwargs):
     
     # Add kinematic params if available
     if kinematic_params:
-        node_params.append(kinematic_params)
+        node_params.append({"robot_description_kinematics": kinematic_params})
     
     # Add servo params if available
     if servo_params:
@@ -128,6 +129,7 @@ def launch_setup(context, *args, **kwargs):
     launch_arm_api2 = Node(
         package='arm_api2',
         executable='moveit2_simple_iface',
+        namespace=arg_robot_ns,
         parameters=node_params,
         prefix=prefix_cmd,
         output='screen'
@@ -150,6 +152,7 @@ def launch_setup(context, *args, **kwargs):
         joy_ctl_node = Node(
             package="arm_api2", 
             executable="joy_ctl", 
+            namespace=arg_robot_ns,
             output="screen", 
             parameters = [{"use_sim_time": use_sim_time}]
         )
@@ -167,6 +170,13 @@ def generate_launch_description():
         DeclareLaunchArgument(name='robot_name',
                               default_value='kinova',
                               description='robot name')
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            name='robot_ns',
+            default_value='',
+            description='ROS namespace for arm_api2 instance (e.g. ur1, ur2). Empty keeps root namespace.'
+        )
     )
     # TODO: THIS IS NOT CONVERTED TO FALSE WHEN SETUP! FIX IT!
     declared_arguments.append(
