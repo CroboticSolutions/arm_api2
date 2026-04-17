@@ -2,9 +2,9 @@
 
 This tutorial walks through a minimal **pick-and-place** sequence on a simulated Universal Robots arm using **arm_api2**. The same pattern applies to other supported manipulators: a small set of **topics** and **services** replaces bespoke MoveIt client code, so application logic stays short and maintainable.
 
-![lab_table_one automated sequence preview](pick_place_lab_table_demo.gif)
-
-*Full run time-compressed to ~10 s (≈5.6× speed): UR + Robotiq, `lab_table_one`, `pick_place_sequence.py`. Rebuild the GIF with `ffmpeg` from your screen capture if you change the demo.*
+<p align="center">
+  <img src="pick_place_lab_table_demo.gif" alt="lab_table_one automated sequence preview" />
+</p>
 
 **Why arm_api2 for pick and place**
 
@@ -197,12 +197,4 @@ Edit `steps:` in the YAML for your poses; adjust optional `convergence` and `gri
 
 ---
 
-## 5. Next steps
 
-- The same sequence can be reimplemented in **Python** or **C++** by publishing the **identical** message and service types; the arm_api2 contract does not change.
-- For action-based flows (goals with feedback), use `moveit2_iface.launch.py` instead of the simple interface.
-- See the main [arm_api2 README](../README.md) for `ChangeState`, velocity scaling, and end-effector frame options.
-
----
-
-*World layout: `lab_gripper_one` / `lab_table_one.sdf`. Re-verify poses if you change the world or robot profile.*
