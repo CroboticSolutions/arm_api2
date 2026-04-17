@@ -92,6 +92,7 @@ install(
   FILES_MATCHING
   PATTERN "*.yaml"
   PATTERN "*.md"
+  PATTERN "*.gif"
 )
 
 # Install C++ files

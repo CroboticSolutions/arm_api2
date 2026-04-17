@@ -2,6 +2,10 @@
 
 This tutorial walks through a minimal **pick-and-place** sequence on a simulated Universal Robots arm using **arm_api2**. The same pattern applies to other supported manipulators: a small set of **topics** and **services** replaces bespoke MoveIt client code, so application logic stays short and maintainable.
 
+![lab_table_one automated sequence preview](pick_place_lab_table_demo.gif)
+
+*Full run time-compressed to ~10 s (≈5.6× speed): UR + Robotiq, `lab_table_one`, `pick_place_sequence.py`. Rebuild the GIF with `ffmpeg` from your screen capture if you change the demo.*
+
 **Why arm_api2 for pick and place**
 
 | Without a unified API | With arm_api2 |
