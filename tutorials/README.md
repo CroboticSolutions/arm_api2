@@ -14,7 +14,7 @@ This tutorial walks through a minimal **pick-and-place** sequence on a simulated
 | Reimplement joint vs Cartesian flows | Toggle `JOINT_TRAJ_CTL` vs `CART_TRAJ_CTL` when you need axis-aligned descent |
 | Ad-hoc gripper integration | Call **`/arm/open_gripper`** and **`/arm/close_gripper`** (service types as in your config) |
 
-You focus on **waypoints** (home, approach, pick, place, retract)-not on low-level ROS or MoveIt wiring.
+You focus on **waypoints** (home, approach, pick, place, retract) - not on low-level ROS or MoveIt wiring.
 
 For a **scripted multi-step** pick-and-place, skip straight to **section 4** below (YAML + one `ros2 run`); section 3 is there to show the underlying commands step by step.
 
