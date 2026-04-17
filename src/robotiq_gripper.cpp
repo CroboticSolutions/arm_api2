@@ -9,6 +9,7 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <string>
+#include <thread>
 
 namespace
 {
@@ -132,36 +133,39 @@ bool RobotiqGripper::send_gripper_command_legacy(double position, double max_eff
             node_->get_logger(), "Result: position = %f, effort = %f, stalled = %d, reached_goal = %d",
             result.result->position, result.result->effort, result.result->stalled,
             result.result->reached_goal);
-          last_position = static_cast<float>(result.result->position);
-          last_effort = static_cast<float>(result.result->effort);
-          last_stalled = result.result->stalled;
-          last_reached_goal = result.result->reached_goal;
+          last_position_.store(static_cast<float>(result.result->position));
+          last_effort_.store(static_cast<float>(result.result->effort));
+          last_stalled_.store(result.result->stalled);
+          last_reached_goal_.store(result.result->reached_goal);
         }
-        success = true;
+        action_success_.store(true);
         break;
       case rclcpp_action::ResultCode::ABORTED:
         RCLCPP_ERROR(node_->get_logger(), "Goal was aborted");
-        success = false;
+        action_success_.store(false);
         break;
       case rclcpp_action::ResultCode::CANCELED:
         RCLCPP_ERROR(node_->get_logger(), "Goal was canceled");
-        success = false;
+        action_success_.store(false);
         break;
       default:
         RCLCPP_ERROR(node_->get_logger(), "Unknown result code");
+        action_success_.store(false);
         break;
     }
-    is_done = true;
+    action_done_.store(true, std::memory_order_release);
   };
 
+  action_done_.store(false, std::memory_order_relaxed);
+  action_success_.store(false);
   legacy_client_->async_send_goal(goal, send_goal_options);
 
-  is_done = false;
-  while (!is_done) {
+  while (!action_done_.load(std::memory_order_acquire)) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
-  RCLCPP_INFO(node_->get_logger(), "Gripper moved to position %f", last_position);
-  return success;
+  RCLCPP_INFO(node_->get_logger(), "Gripper moved to position %f", last_position_.load());
+  return action_success_.load();
 }
 
 bool RobotiqGripper::send_gripper_command_parallel(double position, double max_effort)
@@ -204,60 +208,65 @@ bool RobotiqGripper::send_gripper_command_parallel(double position, double max_e
       case rclcpp_action::ResultCode::SUCCEEDED:
         RCLCPP_INFO(node_->get_logger(), "Parallel gripper goal succeeded!");
         if (result.result) {
-          last_position = static_cast<float>(first_joint_position(result.result->state));
-          last_effort = 0.0F;
+          const float pos = static_cast<float>(first_joint_position(result.result->state));
+          last_position_.store(pos);
+          float eff = 0.0F;
           if (!result.result->state.effort.empty()) {
-            last_effort = static_cast<float>(result.result->state.effort[0]);
+            eff = static_cast<float>(result.result->state.effort[0]);
           }
-          last_stalled = result.result->stalled;
-          last_reached_goal = result.result->reached_goal;
+          last_effort_.store(eff);
+          last_stalled_.store(result.result->stalled);
+          last_reached_goal_.store(result.result->reached_goal);
           RCLCPP_INFO(
-            node_->get_logger(), "Result: pos=%f stalled=%d reached_goal=%d", last_position, last_stalled,
-            last_reached_goal);
+            node_->get_logger(), "Result: pos=%f stalled=%d reached_goal=%d", pos,
+            result.result->stalled, result.result->reached_goal);
         }
-        success = true;
+        action_success_.store(true);
         break;
       case rclcpp_action::ResultCode::ABORTED:
         RCLCPP_ERROR(node_->get_logger(), "Parallel gripper goal was aborted");
-        success = false;
+        action_success_.store(false);
         break;
       case rclcpp_action::ResultCode::CANCELED:
         RCLCPP_ERROR(node_->get_logger(), "Parallel gripper goal was canceled");
-        success = false;
+        action_success_.store(false);
         break;
       default:
         RCLCPP_ERROR(node_->get_logger(), "Unknown parallel gripper result code");
+        action_success_.store(false);
         break;
     }
-    is_done = true;
+    action_done_.store(true, std::memory_order_release);
   };
 
+  action_done_.store(false, std::memory_order_relaxed);
+  action_success_.store(false);
   parallel_client_->async_send_goal(goal, send_goal_options);
 
-  is_done = false;
-  while (!is_done) {
+  while (!action_done_.load(std::memory_order_acquire)) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
-  RCLCPP_INFO(node_->get_logger(), "Gripper moved to position %f", last_position);
-  return success;
+  RCLCPP_INFO(node_->get_logger(), "Gripper moved to position %f", last_position_.load());
+  return action_success_.load();
 }
 
 float RobotiqGripper::get_position()
 {
-  return last_position;
+  return last_position_.load();
 }
 
 float RobotiqGripper::get_effort()
 {
-  return last_effort;
+  return last_effort_.load();
 }
 
 bool RobotiqGripper::is_stalled()
 {
-  return last_stalled;
+  return last_stalled_.load();
 }
 
 bool RobotiqGripper::reached_goal()
 {
-  return last_reached_goal;
+  return last_reached_goal_.load();
 }

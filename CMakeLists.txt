@@ -85,6 +85,15 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
 )
 
+# Tutorial assets (YAML + README); pick_place_sequence.py is installed as PROGRAMS below.
+install(
+  DIRECTORY tutorials/
+  DESTINATION share/${PROJECT_NAME}/tutorials
+  FILES_MATCHING
+  PATTERN "*.yaml"
+  PATTERN "*.md"
+)
+
 # Install C++ files
 add_executable(joy_ctl src/arm_joy_node.cpp src/arm_joy.cpp)
 
@@ -114,6 +123,7 @@ install(TARGETS
 #ament_python_install_package(${PROJECT_NAME})
 
 install(PROGRAMS
+  tutorials/pick_place_sequence.py
   examples/scripts/joint_sender_action_client_async.py
   examples/scripts/joint_sender_action_client.py
   examples/scripts/pose_sender_action_client_async.py

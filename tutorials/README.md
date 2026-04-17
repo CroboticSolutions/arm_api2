@@ -12,6 +12,8 @@ This tutorial walks through a minimal **pick-and-place** sequence on a simulated
 
 You focus on **waypoints** (home, approach, pick, place, retract)—not on plumbing.
 
+For a **scripted multi-step** pick-and-place, skip straight to **section 4** below (YAML + one `ros2 run`); section 3 is there to show the underlying commands step by step.
+
 ---
 
 ## Prerequisites
@@ -152,9 +154,48 @@ ros2 topic pub --once /ur1/arm/cmd/pose geometry_msgs/msg/PoseStamped \
 
 ---
 
-## 4. Next steps
+## 4. Automated pick-and-place (recommended): one Python script + YAML
 
-- Automate the same sequence in **Python** or **C++** by publishing the same message types; no change to the arm_api2 contract.
+Sections 3.1–3.6 show the **same** contract (services + `/arm/cmd/pose`) as long shell one-liners. For a real pick-and-place task you rarely want to maintain dozens of those commands by hand.
+
+**With arm_api2, a full multi-step sequence is deliberately small:**
+
+| What you write | What you do *not* write |
+|----------------|-------------------------|
+| A **YAML** file listing named steps: `change_state`, `pose`, `open_gripper` / `close_gripper` | MoveIt action clients, planners, trajectory monitors, or threading |
+| **One** command to run the bundled helper | Timing sleeps, “wait until settled” logic, or ROS graph boilerplate |
+
+The helper script `pick_place_sequence.py` is a thin **rclpy** node: it publishes each target on `/arm/cmd/pose`, calls the same services you would from the CLI, and **waits until** `/ur1/arm/state/current_pose` stays within tolerance before the next step—so the sequence stays in lockstep with the arm without extra code.
+
+**Why this is the fastest path to pick-and-place**
+
+- **Declarative:** You describe *what* (poses and modes), not *how* MoveIt executes internally.
+- **One process:** `ros2 run arm_api2 pick_place_sequence.py` — no custom package, no `setup.py`, if the workspace already builds `arm_api2`.
+- **Tunable in YAML:** `convergence` (position / angle tolerance, stable samples, timeouts) and `gripper_settle_sec` match your sim or hardware without touching Python.
+- **Extensible:** Copy the YAML, duplicate or reorder `steps`, add rows for extra picks; the script does not hard-code the lab world.
+
+**Run it** (with simulation and `moveit2_simple_iface` from sections 1–2):
+
+```bash
+ros2 run arm_api2 pick_place_sequence.py
+```
+
+Default sequence file (lab table, three cubes, stack-on-place flow):  
+`share/arm_api2/tutorials/pick_place_sequence_lab_table_one.yaml`
+
+Use another file as the first argument:
+
+```bash
+ros2 run arm_api2 pick_place_sequence.py /path/to/my_sequence.yaml
+```
+
+Edit `steps:` in the YAML for your poses; adjust optional `convergence` and `gripper_settle_sec` as needed. That is the entire application surface for a scripted pick-and-place demo on top of arm_api2.
+
+---
+
+## 5. Next steps
+
+- The same sequence can be reimplemented in **Python** or **C++** by publishing the **identical** message and service types; the arm_api2 contract does not change.
 - For action-based flows (goals with feedback), use `moveit2_iface.launch.py` instead of the simple interface.
 - See the main [arm_api2 README](../README.md) for `ChangeState`, velocity scaling, and end-effector frame options.
 

@@ -206,13 +206,19 @@ void m2SimpleIface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr
 void m2SimpleIface::open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
                                     const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
 {
+    (void)req;
     gripper.open();
+    res->success = true;
+    res->message = "ok";
 }
 
 void m2SimpleIface::close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
                                      const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
 {
-    gripper.close(); 
+    (void)req;
+    gripper.close();
+    res->success = true;
+    res->message = "ok";
 }
 
 void m2SimpleIface::set_vel_acc_cb(const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req, 
@@ -449,98 +455,202 @@ bool m2SimpleIface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std
     return true; 
 }
 
-void m2SimpleIface::execMove(bool async=false)
-{   
-    geometry_msgs::msg::PoseStamped cmdPose_ = utils::normalizeOrientation(m_currPoseCmd);    
-    m_moveGroupPtr->clearPoseTargets(); 
-    m_moveGroupPtr->setPoseTarget(cmdPose_.pose, EE_LINK_NAME); 
-    RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << cmdPose_.pose.position.x << " " << cmdPose_.pose.position.y << " " << cmdPose_.pose.position.z); 
-    execPlan(async); 
-    
-    // Thread-safe update of old pose
+void m2SimpleIface::stopBeforeAsyncExecute()
+{
+    if (!m_moveGroupPtr)
     {
+        return;
+    }
+    m_moveGroupPtr->stop();
+    /* Allow the trajectory execution action to settle; short sleeps alone were not always enough. */
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+}
+
+bool m2SimpleIface::execMove(bool async_flag)
+{
+    if (trajectory_executing_.load(std::memory_order_acquire)) {
+        RCLCPP_WARN_THROTTLE(
+            this->get_logger(), *this->get_clock(), 3000,
+            "Trajectory still executing; ignoring new pose command until it finishes.");
+        return false;
+    }
+
+    stopBeforeAsyncExecute();
+    geometry_msgs::msg::PoseStamped cmdPose_ = utils::normalizeOrientation(m_currPoseCmd);
+    m_moveGroupPtr->clearPoseTargets();
+    m_moveGroupPtr->setPoseTarget(cmdPose_.pose, EE_LINK_NAME);
+    RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << cmdPose_.pose.position.x << " "
+                                                              << cmdPose_.pose.position.y << " "
+                                                              << cmdPose_.pose.position.z);
+    const bool ok = execPlan(async_flag);
+
+    if (ok) {
         std::lock_guard<std::mutex> lock(pose_cmd_mutex_);
         m_oldPoseCmd = cmdPose_;
     }
-    
-    RCLCPP_INFO_STREAM(this->get_logger(), "Executing commanded path!"); 
 
+    RCLCPP_INFO_STREAM(this->get_logger(), "Executing commanded path!");
+    return ok;
 }
 
-void m2SimpleIface::execPlan(bool async=false)
+bool m2SimpleIface::execPlan(bool async_flag)
 {
     m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
     m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
-    
+
     moveit::planning_interface::MoveGroupInterface::Plan plan;
-    bool success = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
-    
-    if (success) {
-        if (async) {
-            // Store plan as member variable to keep it alive during async execution
-            m_async_plan_ptr = std::make_shared<moveit::planning_interface::MoveGroupInterface::Plan>(plan);
-            // Make a shared_ptr copy of the trajectory to ensure it stays alive
-            auto trajectory_copy = std::make_shared<moveit_msgs::msg::RobotTrajectory>(m_async_plan_ptr->trajectory);
-            RCLCPP_INFO(this->get_logger(), "Starting async execution, plan at: %p, trajectory at: %p", 
-                        static_cast<void*>(m_async_plan_ptr.get()), static_cast<void*>(trajectory_copy.get()));
-            m_moveGroupPtr->asyncExecute(*trajectory_copy);
-            // Keep trajectory_copy alive by storing it
-            m_async_trajectory_ptr = trajectory_copy;
-        }
-        else {
-            m_moveGroupPtr->execute(plan);
-        }
-    }else {
-        RCLCPP_ERROR(this->get_logger(), "Planning failed!"); 
+    const bool planned = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+
+    if (!planned) {
+        RCLCPP_ERROR(this->get_logger(), "Planning failed!");
+        return false;
     }
+
+    if (trajectory_executing_.load(std::memory_order_acquire)) {
+        RCLCPP_WARN_THROTTLE(
+            this->get_logger(), *this->get_clock(), 3000,
+            "Trajectory already executing after plan(); skipping execute.");
+        return false;
+    }
+
+    stopBeforeAsyncExecute();
+
+    if (!async_flag) {
+        trajectory_executing_.store(true, std::memory_order_release);
+        const auto exec_err = m_moveGroupPtr->execute(plan);
+        trajectory_executing_.store(false, std::memory_order_release);
+        if (exec_err != moveit::core::MoveItErrorCode::SUCCESS) {
+            RCLCPP_WARN(this->get_logger(), "execute(plan) did not report SUCCESS");
+        }
+        return true;
+    }
+
+    /* Async: non-blocking for the timer / callback thread — blocking execute runs on a worker thread.
+     * A single-flight guard (trajectory_executing_) prevents overlapping MoveGroup executions (SIGSEGV). */
+    trajectory_executing_.store(true, std::memory_order_release);
+    try {
+        std::thread([this, plan]() {
+            try {
+                const auto exec_err = m_moveGroupPtr->execute(plan);
+                if (exec_err != moveit::core::MoveItErrorCode::SUCCESS) {
+                    RCLCPP_WARN(this->get_logger(), "execute(plan) in async worker did not report SUCCESS");
+                }
+            } catch (const std::exception &ex) {
+                RCLCPP_ERROR(this->get_logger(), "execute(plan) async worker exception: %s", ex.what());
+            } catch (...) {
+                RCLCPP_ERROR(this->get_logger(), "execute(plan) async worker unknown exception");
+            }
+            trajectory_executing_.store(false, std::memory_order_release);
+        }).detach();
+    } catch (const std::system_error &e) {
+        trajectory_executing_.store(false, std::memory_order_release);
+        RCLCPP_ERROR(this->get_logger(), "Failed to spawn async execute thread: %s", e.what());
+        return false;
+    }
+
+    return true;
 }
 
-void m2SimpleIface::planExecCartesian(bool async=false)
-{   
-    m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
-    m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
-    
-    // TODO: Move this method to utils.cpp
-    std::vector<geometry_msgs::msg::Pose> cartesianWaypoints = utils::createCartesianWaypoints(m_currPoseState.pose, m_currPoseCmd.pose, NUM_CART_PTS); 
-    // TODO: create Cartesian plan, use as first point currentPose 4 now, and as end point use targetPoint 
-    moveit_msgs::msg::RobotTrajectory trajectory;
-    // TODO: Set as params that can be configured in YAML!
-    double jumpThr = 0.0; 
-    double eefStep = 0.02; 
-    // plan Cartesian path
-    m_moveGroupPtr->computeCartesianPath(cartesianWaypoints, eefStep, jumpThr, trajectory);
-    execTrajectory(trajectory, async); 
-    m_oldPoseCmd = m_currPoseCmd; 
-}
-
-void m2SimpleIface::execCartesian(bool async=false)
-{   
-    m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
-    m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
-    
-    // TODO: create Cartesian plan, use as first point currentPose 4 now, and as end point use targetPoint 
-    moveit_msgs::msg::RobotTrajectory trajectory;
-    // TODO: Set as params that can be configured in YAML!
-    double jumpThr = 0.0; 
-    double eefStep = 0.02; 
-    // plan Cartesian path
-    m_moveGroupPtr->computeCartesianPath(m_cartesianWaypoints, eefStep, jumpThr, trajectory);
-    execTrajectory(trajectory, async); 
-    m_oldPoseCmd = m_currPoseCmd; 
-}
-
-void m2SimpleIface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async=false)
+bool m2SimpleIface::planExecCartesian(bool async_flag)
 {
-    if (async) {
-        // Store trajectory as member variable to keep it alive during async execution
-        m_async_trajectory_ptr = std::make_shared<moveit_msgs::msg::RobotTrajectory>(trajectory);
-        RCLCPP_INFO(this->get_logger(), "Starting async trajectory execution, storing at: %p", static_cast<void*>(m_async_trajectory_ptr.get()));
-        m_moveGroupPtr->asyncExecute(*m_async_trajectory_ptr);
-        RCLCPP_INFO_STREAM(this->get_logger(), "Executing trajectory asynchronously!");
+    if (trajectory_executing_.load(std::memory_order_acquire)) {
+        RCLCPP_WARN_THROTTLE(
+            this->get_logger(), *this->get_clock(), 3000,
+            "Trajectory still executing; ignoring Cartesian pose command.");
+        return false;
     }
-    else{
-        m_moveGroupPtr->execute(trajectory);
+
+    stopBeforeAsyncExecute();
+    m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
+    m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
+
+    std::vector<geometry_msgs::msg::Pose> cartesianWaypoints =
+        utils::createCartesianWaypoints(m_currPoseState.pose, m_currPoseCmd.pose, NUM_CART_PTS);
+    moveit_msgs::msg::RobotTrajectory trajectory;
+    double jumpThr = 0.0;
+    double eefStep = 0.02;
+    m_moveGroupPtr->computeCartesianPath(cartesianWaypoints, eefStep, jumpThr, trajectory);
+
+    const bool ok = execTrajectory(std::move(trajectory), async_flag);
+    if (ok) {
+        m_oldPoseCmd = m_currPoseCmd;
     }
+    return ok;
+}
+
+bool m2SimpleIface::execCartesian(bool async_flag)
+{
+    if (trajectory_executing_.load(std::memory_order_acquire)) {
+        RCLCPP_WARN_THROTTLE(
+            this->get_logger(), *this->get_clock(), 3000,
+            "Trajectory still executing; ignoring Cartesian waypoint trajectory.");
+        return false;
+    }
+
+    stopBeforeAsyncExecute();
+    m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
+    m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
+
+    moveit_msgs::msg::RobotTrajectory trajectory;
+    double jumpThr = 0.0;
+    double eefStep = 0.02;
+    m_moveGroupPtr->computeCartesianPath(m_cartesianWaypoints, eefStep, jumpThr, trajectory);
+
+    const bool ok = execTrajectory(std::move(trajectory), async_flag);
+    if (ok) {
+        m_oldPoseCmd = m_currPoseCmd;
+    }
+    return ok;
+}
+
+bool m2SimpleIface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async_flag)
+{
+    if (trajectory.joint_trajectory.points.empty()) {
+        RCLCPP_WARN(this->get_logger(), "execTrajectory: empty trajectory, skipping execute");
+        return false;
+    }
+
+    if (trajectory_executing_.load(std::memory_order_acquire)) {
+        RCLCPP_WARN_THROTTLE(
+            this->get_logger(), *this->get_clock(), 3000,
+            "Trajectory already executing; skipping duplicate execTrajectory.");
+        return false;
+    }
+
+    /* Callers (planExecCartesian, execCartesian) already invoked stopBeforeAsyncExecute(). */
+
+    if (!async_flag) {
+        trajectory_executing_.store(true, std::memory_order_release);
+        const auto exec_err = m_moveGroupPtr->execute(trajectory);
+        trajectory_executing_.store(false, std::memory_order_release);
+        if (exec_err != moveit::core::MoveItErrorCode::SUCCESS) {
+            RCLCPP_WARN(this->get_logger(), "execute(trajectory) did not report SUCCESS");
+        }
+        return true;
+    }
+
+    trajectory_executing_.store(true, std::memory_order_release);
+    try {
+        std::thread([this, trajectory]() {
+            try {
+                const auto exec_err = m_moveGroupPtr->execute(trajectory);
+                if (exec_err != moveit::core::MoveItErrorCode::SUCCESS) {
+                    RCLCPP_WARN(this->get_logger(), "execute(trajectory) in async worker did not report SUCCESS");
+                }
+            } catch (const std::exception &ex) {
+                RCLCPP_ERROR(this->get_logger(), "execute(trajectory) async worker exception: %s", ex.what());
+            } catch (...) {
+                RCLCPP_ERROR(this->get_logger(), "execute(trajectory) async worker unknown exception");
+            }
+            trajectory_executing_.store(false, std::memory_order_release);
+        }).detach();
+    } catch (const std::system_error &e) {
+        trajectory_executing_.store(false, std::memory_order_release);
+        RCLCPP_ERROR(this->get_logger(), "Failed to spawn async execTrajectory thread: %s", e.what());
+        return false;
+    }
+
+    return true;
 }
 
 void m2SimpleIface::getArmState() 
@@ -596,23 +706,25 @@ bool m2SimpleIface::run()
 
     if (robotState == JOINT_TRAJ_CTL)
     {
-       if (recivCmd) {
-           execMove(async);
-           recivCmd = false;
-       }
+        if (recivCmd) {
+            if (execMove(async)) {
+                recivCmd = false;
+            }
+        }
     }
 
     if (robotState == CART_TRAJ_CTL)
-    {   
-        // TODO: Beware if both are true at the same time, shouldn't occur, 
+    {
         if (recivCmd) {
-            planExecCartesian(async);
-            recivCmd = false;
+            if (planExecCartesian(async)) {
+                recivCmd = false;
+            }
         }
 
         if (recivTraj) {
-            execCartesian(async);
-            recivTraj = false;
+            if (execCartesian(async)) {
+                recivTraj = false;
+            }
         }
     }
 

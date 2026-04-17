@@ -33,6 +33,7 @@
 #ifndef ROBOTIQ_GRIPPER_H
 #define ROBOTIQ_GRIPPER_H
 
+#include <atomic>
 #include <control_msgs/action/gripper_command.hpp>
 #include <control_msgs/action/parallel_gripper_command.hpp>
 #include <control_msgs/msg/gripper_command.hpp>
@@ -91,12 +92,12 @@ private:
   std::shared_ptr<rclcpp::Node> node_;
   bool isOpen{false};
 
-  float last_position{0.0F};
-  float last_effort{0.0F};
-  bool last_stalled{false};
-  bool last_reached_goal{false};
-  bool success{false};
-  bool is_done{false};
+  std::atomic<float> last_position_{0.0F};
+  std::atomic<float> last_effort_{0.0F};
+  std::atomic<bool> last_stalled_{false};
+  std::atomic<bool> last_reached_goal_{false};
+  std::atomic<bool> action_success_{false};
+  std::atomic<bool> action_done_{false};
 
   RobotiqGripperConfig config_;
   bool configured_{false};
