@@ -14,7 +14,7 @@ This tutorial walks through a minimal **pick-and-place** sequence on a simulated
 | Reimplement joint vs Cartesian flows | Toggle `JOINT_TRAJ_CTL` vs `CART_TRAJ_CTL` when you need axis-aligned descent |
 | Ad-hoc gripper integration | Call **`/arm/open_gripper`** and **`/arm/close_gripper`** (service types as in your config) |
 
-You focus on **waypoints** (home, approach, pick, place, retract)—not on plumbing.
+You focus on **waypoints** (home, approach, pick, place, retract)-not on low-level ROS or MoveIt wiring.
 
 For a **scripted multi-step** pick-and-place, skip straight to **section 4** below (YAML + one `ros2 run`); section 3 is there to show the underlying commands step by step.
 
@@ -29,7 +29,7 @@ For a **scripted multi-step** pick-and-place, skip straight to **section 4** bel
 
 ## 1. Start simulation and MoveIt
 
-Terminal 1 — Gazebo + MoveIt + configured world (red / blue / yellow cubes):
+Terminal 1 - Gazebo + MoveIt + configured world (red / blue / yellow cubes):
 
 ```bash
 ros2 launch ur_simulation_gz multi_ur_sim_moveit.launch.py robots_profile:=lab_gripper_one
@@ -54,12 +54,12 @@ All commands below use the **`/ur1`** prefix. Adjust if your namespace differs.
 
 ## 3. Pick-and-place sequence (conceptual steps)
 
-1. **Home** — Move the arm to a safe starting pose (joint-space motion).
-2. **Approach** — Move above the first cube (same orientation, higher *z*).
-3. **Pick** — Switch to Cartesian control; descend along *z*; close the gripper.
-4. **Retract** — Lift clear of the table.
-5. **Move to place** — Joint motion to approach above the drop pose.
-6. **Place** — Cartesian descent; open the gripper; retract.
+1. **Home** - Move the arm to a safe starting pose (joint-space motion).
+2. **Approach** - Move above the first cube (same orientation, higher *z*).
+3. **Pick** - Switch to Cartesian control; descend along *z*; close the gripper.
+4. **Retract** - Lift clear of the table.
+5. **Move to place** - Joint motion to approach above the drop pose.
+6. **Place** - Cartesian descent; open the gripper; retract.
 
 The numbered commands below implement that flow. Numeric poses are **example** values for the bundled world; tune for your calibration.
 
@@ -89,7 +89,7 @@ ros2 topic pub --once /ur1/arm/cmd/pose geometry_msgs/msg/PoseStamped \
 
 ---
 
-### 3.3 Pick — Cartesian descent and grasp
+### 3.3 Pick - Cartesian descent and grasp
 
 Switch to Cartesian trajectory control for straight-line motion (here, along *z*):
 
@@ -119,7 +119,7 @@ ros2 topic pub --once /ur1/arm/cmd/pose geometry_msgs/msg/PoseStamped \
 
 ---
 
-### 3.5 Move to place — approach above drop location
+### 3.5 Move to place - approach above drop location
 
 Return to joint mode for the horizontal move to the place station:
 
@@ -134,7 +134,7 @@ ros2 topic pub --once /ur1/arm/cmd/pose geometry_msgs/msg/PoseStamped \
 
 ---
 
-### 3.6 Place — descend and release
+### 3.6 Place - descend and release
 
 ```bash
 ros2 service call /ur1/arm/change_state arm_api2_msgs/srv/ChangeState "{state: 'CART_TRAJ_CTL'}"
@@ -169,12 +169,12 @@ Sections 3.1–3.6 show the **same** contract (services + `/arm/cmd/pose`) as lo
 | A **YAML** file listing named steps: `change_state`, `pose`, `open_gripper` / `close_gripper` | MoveIt action clients, planners, trajectory monitors, or threading |
 | **One** command to run the bundled helper | Timing sleeps, “wait until settled” logic, or ROS graph boilerplate |
 
-The helper script `pick_place_sequence.py` is a thin **rclpy** node: it publishes each target on `/arm/cmd/pose`, calls the same services you would from the CLI, and **waits until** `/ur1/arm/state/current_pose` stays within tolerance before the next step—so the sequence stays in lockstep with the arm without extra code.
+The helper script `pick_place_sequence.py` is a thin **rclpy** node: it publishes each target on `/arm/cmd/pose`, calls the same services you would from the CLI, and **waits until** `/ur1/arm/state/current_pose` stays within tolerance before the next step-so the sequence stays in lockstep with the arm without extra code.
 
 **Why this is the fastest path to pick-and-place**
 
 - **Declarative:** You describe *what* (poses and modes), not *how* MoveIt executes internally.
-- **One process:** `ros2 run arm_api2 pick_place_sequence.py` — no custom package, no `setup.py`, if the workspace already builds `arm_api2`.
+- **One process:** `ros2 run arm_api2 pick_place_sequence.py` - no custom package, no `setup.py`, if the workspace already builds `arm_api2`.
 - **Tunable in YAML:** `convergence` (position / angle tolerance, stable samples, timeouts) and `gripper_settle_sec` match your sim or hardware without touching Python.
 - **Extensible:** Copy the YAML, duplicate or reorder `steps`, add rows for extra picks; the script does not hard-code the lab world.
 
