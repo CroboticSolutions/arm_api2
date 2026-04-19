@@ -59,7 +59,8 @@ namespace utils {
     bool                                            comparePose                 (geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2);
     std::vector<geometry_msgs::msg::Pose>           createCartesianWaypoints    (geometry_msgs::msg::Pose p1, geometry_msgs::msg::Pose p2, int n); 
     geometry_msgs::msg::PoseStamped                 normalizeOrientation        (geometry_msgs::msg::PoseStamped p);
-    geometry_msgs::msg::PoseStamped                 convertIsometryToMsg        (Eigen::Isometry3d pose);
+    /** Accepts Affine3d so callers using MoveIt / Eigen transforms (incl. Isometry → Affine) link cleanly. */
+    geometry_msgs::msg::PoseStamped                 convertIsometryToMsg        (const Eigen::Affine3d& pose);
     std_msgs::msg::String                           stateToMsg                  (int state);
 
 } // namespace utils

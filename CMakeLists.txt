@@ -18,6 +18,7 @@ find_package(std_msgs REQUIRED)
 find_package(arm_api2_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
@@ -38,7 +39,7 @@ PUBLIC
 # Build moveit2_iface
 target_compile_features(moveit2_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
-  moveit2_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs
+  moveit2_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs tf2 tf2_geometry_msgs
 )
 
 # Install moveit2_iface
@@ -57,7 +58,7 @@ PUBLIC
 
 target_compile_features(moveit2_simple_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
-  moveit2_simple_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs
+  moveit2_simple_iface moveit_ros moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs tf2 tf2_geometry_msgs
 )
 
 # Install moveit2_simple_iface
@@ -83,7 +84,7 @@ target_include_directories(joy_ctl
 
 # python dependencies 
 ament_target_dependencies(joy_ctl
-  rclcpp std_msgs geometry_msgs std_srvs sensor_msgs control_msgs)
+  rclcpp std_msgs geometry_msgs std_srvs sensor_msgs control_msgs tf2)
 
 install(TARGETS 
 joy_ctl
