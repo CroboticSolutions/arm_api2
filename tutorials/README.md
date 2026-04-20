@@ -22,7 +22,19 @@ For a **scripted multi-step** pick-and-place, skip straight to **section 4** bel
 
 ## Prerequisites
 
-- ROS 2 workspace with `arm_api2`, `ur_simulation_gz`, and `ur_moveit_config` built and sourced.
+- **Docker (optional, Jazzy):** use the repo **`Dockerfile`** and **`first-run.sh`** (image `arm_api2:tutorial`, container `arm_api2_tutorial`; host network, X11, SSH agent — see the script):
+
+  ```bash
+  git clone git@github.com:CroboticSolutions/docker_files.git
+  cd ./docker_files/ros2/jazzy/arm_api2_tutorial
+  docker build -t arm_api2:tutorial .
+  chmod +x first-run.sh
+  ./first-run.sh
+  ```
+
+  Inside the container, continue with **section 1** (Gazebo + MoveIt), then **section 2** (`arm_api2`).
+
+- **Or** a ROS 2 workspace with `arm_api2`, `ur_simulation_gz`, and `ur_moveit_config` built and sourced on the host.
 - This example uses namespace **`ur1`** and planning frame **`world`**, matching `robots_profile:=lab_gripper_one` (UR + Robotiq + `lab_table_one` world with three cubes).
 
 ---
@@ -194,7 +206,4 @@ ros2 run arm_api2 pick_place_sequence.py /path/to/my_sequence.yaml
 ```
 
 Edit `steps:` in the YAML for your poses; adjust optional `convergence` and `gripper_settle_sec` as needed. That is the entire application surface for a scripted pick-and-place demo on top of arm_api2.
-
----
-
 
