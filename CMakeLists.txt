@@ -69,7 +69,7 @@ PUBLIC
 
 target_compile_features(moveit2_simple_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
-  moveit2_simple_iface moveit_ros_planning moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs
+  moveit2_simple_iface moveit_ros_planning moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs std_msgs
 )
 
 # Install moveit2_simple_iface

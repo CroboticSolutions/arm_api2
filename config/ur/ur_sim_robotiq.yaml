@@ -48,6 +48,9 @@ topic:
     current_robot_state:
       name: arm/state/ctl_state
       queue: 1
+    gripper_state:
+      name: arm/state/gripper_state
+      queue: 1
 srv:
   disable_collision:
     name: /move_group/disable_collision

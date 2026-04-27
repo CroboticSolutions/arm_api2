@@ -121,6 +121,8 @@ void m2SimpleIface::init_publishers()
     pose_state_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(pose_state_name, 1); 
     auto current_robot_state_name = config["topic"]["pub"]["current_robot_state"]["name"].as<std::string>(); 
     robot_state_pub_ = this->create_publisher<std_msgs::msg::String>(current_robot_state_name, 1);
+    auto gripper_state_name = config["topic"]["pub"]["gripper_state"]["name"].as<std::string>();
+    gripper_state_pub_ = this->create_publisher<std_msgs::msg::String>(gripper_state_name, 1);
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized publishers!");
 }
 
@@ -207,7 +209,16 @@ void m2SimpleIface::open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger
                                     const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
 {
     (void)req;
-    gripper.open();
+    const bool success = gripper.send_gripper_command(0.0);
+    if (!success) {
+        res->success = false;
+        res->message = "failed";
+        return;
+    }
+    RCLCPP_INFO(this->get_logger(), "Gripper opened.");
+    std_msgs::msg::String state_msg;
+    state_msg.data = "open";
+    gripper_state_pub_->publish(state_msg);
     res->success = true;
     res->message = "ok";
 }
@@ -216,7 +227,16 @@ void m2SimpleIface::close_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigge
                                      const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
 {
     (void)req;
-    gripper.close();
+    const bool success = gripper.send_gripper_command(0.8);
+    if (!success) {
+        res->success = false;
+        res->message = "failed";
+        return;
+    }
+    RCLCPP_INFO(this->get_logger(), "Gripper closed.");
+    std_msgs::msg::String state_msg;
+    state_msg.data = "closed";
+    gripper_state_pub_->publish(state_msg);
     res->success = true;
     res->message = "ok";
 }
