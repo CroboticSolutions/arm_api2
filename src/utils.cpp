@@ -165,3 +165,44 @@ std_msgs::msg::String utils::stateToMsg(int state)
     
     return msg;
 }
+
+std::string utils::moveItErrorCodeToString(const moveit::core::MoveItErrorCode &code)
+{
+    using moveit_msgs::msg::MoveItErrorCodes;
+    switch (code.val)
+    {
+        case MoveItErrorCodes::SUCCESS:                                return "SUCCESS";
+        case MoveItErrorCodes::FAILURE:                                return "FAILURE";
+        case MoveItErrorCodes::PLANNING_FAILED:                        return "PLANNING_FAILED";
+        case MoveItErrorCodes::INVALID_MOTION_PLAN:                    return "INVALID_MOTION_PLAN";
+        case MoveItErrorCodes::MOTION_PLAN_INVALIDATED_BY_ENVIRONMENT_CHANGE:
+                                                                       return "MOTION_PLAN_INVALIDATED_BY_ENVIRONMENT_CHANGE";
+        case MoveItErrorCodes::CONTROL_FAILED:                         return "CONTROL_FAILED";
+        case MoveItErrorCodes::UNABLE_TO_AQUIRE_SENSOR_DATA:           return "UNABLE_TO_AQUIRE_SENSOR_DATA";
+        case MoveItErrorCodes::TIMED_OUT:                              return "TIMED_OUT";
+        case MoveItErrorCodes::PREEMPTED:                              return "PREEMPTED";
+        case MoveItErrorCodes::START_STATE_IN_COLLISION:               return "START_STATE_IN_COLLISION";
+        case MoveItErrorCodes::START_STATE_VIOLATES_PATH_CONSTRAINTS:  return "START_STATE_VIOLATES_PATH_CONSTRAINTS";
+        case MoveItErrorCodes::START_STATE_INVALID:                    return "START_STATE_INVALID";
+        case MoveItErrorCodes::GOAL_IN_COLLISION:                      return "GOAL_IN_COLLISION";
+        case MoveItErrorCodes::GOAL_VIOLATES_PATH_CONSTRAINTS:         return "GOAL_VIOLATES_PATH_CONSTRAINTS";
+        case MoveItErrorCodes::GOAL_CONSTRAINTS_VIOLATED:              return "GOAL_CONSTRAINTS_VIOLATED";
+        case MoveItErrorCodes::GOAL_STATE_INVALID:                     return "GOAL_STATE_INVALID";
+        case MoveItErrorCodes::UNRECOGNIZED_GOAL_TYPE:                 return "UNRECOGNIZED_GOAL_TYPE";
+        case MoveItErrorCodes::INVALID_GROUP_NAME:                     return "INVALID_GROUP_NAME";
+        case MoveItErrorCodes::INVALID_GOAL_CONSTRAINTS:               return "INVALID_GOAL_CONSTRAINTS";
+        case MoveItErrorCodes::INVALID_ROBOT_STATE:                    return "INVALID_ROBOT_STATE";
+        case MoveItErrorCodes::INVALID_LINK_NAME:                      return "INVALID_LINK_NAME";
+        case MoveItErrorCodes::INVALID_OBJECT_NAME:                    return "INVALID_OBJECT_NAME";
+        case MoveItErrorCodes::FRAME_TRANSFORM_FAILURE:                return "FRAME_TRANSFORM_FAILURE";
+        case MoveItErrorCodes::COLLISION_CHECKING_UNAVAILABLE:         return "COLLISION_CHECKING_UNAVAILABLE";
+        case MoveItErrorCodes::ROBOT_STATE_STALE:                      return "ROBOT_STATE_STALE";
+        case MoveItErrorCodes::SENSOR_INFO_STALE:                      return "SENSOR_INFO_STALE";
+        case MoveItErrorCodes::COMMUNICATION_FAILURE:                  return "COMMUNICATION_FAILURE";
+        case MoveItErrorCodes::CRASH:                                  return "CRASH";
+        case MoveItErrorCodes::ABORT:                                  return "ABORT";
+        case MoveItErrorCodes::NO_IK_SOLUTION:                         return "NO_IK_SOLUTION";
+        default:
+            return "MOVEIT_ERROR_" + std::to_string(static_cast<int>(code.val));
+    }
+}

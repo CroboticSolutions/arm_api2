@@ -17,7 +17,6 @@ import re
 import yaml
 
 use_servo = True
-dt = 0.1
 
 ROS_NAME_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")
 
@@ -60,6 +59,7 @@ def launch_setup(context: LaunchContext, *args, **kwargs):
     arg_launch_joy = context.perform_substitution(LaunchConfiguration("launch_joy", default="false"))
     arg_use_gdb = context.perform_substitution(LaunchConfiguration("use_gdb", default="false"))
     arg_use_sim_time = context.perform_substitution(LaunchConfiguration("use_sim_time", default="false"))
+    arg_dt = float(context.perform_substitution(LaunchConfiguration("dt")))
 
     robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
     servo_yaml = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
@@ -90,7 +90,7 @@ def launch_setup(context: LaunchContext, *args, **kwargs):
         node_params = [
             {"use_sim_time": use_sim_flag},
             {"enable_servo": use_servo},
-            {"dt": dt},
+            {"dt": arg_dt},
             {"config_path": config_path},
         ]
 
@@ -112,6 +112,10 @@ def launch_setup(context: LaunchContext, *args, **kwargs):
             executable="moveit2_simple_iface",
             namespace=arg_robot_ns,
             parameters=node_params,
+            remappings=[
+                ("/tf", f"/{arg_robot_ns}/tf"),
+                ("/tf_static", f"/{arg_robot_ns}/tf_static"),
+            ],
             prefix=prefix_cmd,
             output="screen",
         )
@@ -160,7 +164,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "dt",
-                default_value="0.1",
+                default_value="0.01",
                 description="time step",
             ),
             DeclareLaunchArgument(

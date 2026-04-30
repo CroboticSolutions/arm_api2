@@ -41,6 +41,9 @@
 
 #include "arm_api2/moveit2_simple_iface.hpp"
 
+#include <tf2/exceptions.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+
 m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
     : Node("moveit2_simple_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_simple_iface_node", options)), 
      executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()), gripper(node_) 
@@ -68,8 +71,18 @@ m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
     MOVE_GROUP_NS       = config["robot"]["move_group_ns"].as<std::string>(); 
     NUM_CART_PTS        = config["robot"]["num_cart_pts"].as<int>(); 
     JOINT_STATES        = config["robot"]["joint_states"].as<std::string>(); 
+    SERVO_TRAJECTORY_TOPIC = "scaled_joint_trajectory_controller/joint_trajectory";
+    if (config["robot"]["servo_trajectory_topic"]) {
+        SERVO_TRAJECTORY_TOPIC = config["robot"]["servo_trajectory_topic"].as<std::string>();
+    }
     max_vel_scaling_factor = config["robot"]["max_vel_scaling_factor"].as<float>();
     max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
+
+    /* Optional override for OMPL planning time. Default 1.5 s — see hpp comment. */
+    if (config["robot"]["pose_plan_time_sec"]) {
+        const double v = config["robot"]["pose_plan_time_sec"].as<double>();
+        if (v > 0.0) pose_plan_time_sec_ = v;
+    }
 
     {
       RobotiqGripperConfig gcfg;
@@ -95,6 +108,10 @@ m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
     {
         MOVE_GROUP_NS = (ns_ == "/") ? "" : ns_;
     }
+
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, node_, false);
+
     init_publishers(); 
     init_subscribers(); 
     init_services(); 
@@ -123,6 +140,25 @@ void m2SimpleIface::init_publishers()
     robot_state_pub_ = this->create_publisher<std_msgs::msg::String>(current_robot_state_name, 1);
     auto gripper_state_name = config["topic"]["pub"]["gripper_state"]["name"].as<std::string>();
     gripper_state_pub_ = this->create_publisher<std_msgs::msg::String>(gripper_state_name, 1);
+    servo_trajectory_pub_ = this->create_publisher<trajectory_msgs::msg::JointTrajectory>(
+        SERVO_TRAJECTORY_TOPIC,
+        10);
+    servo_forward_position_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(
+        "forward_position_controller/commands",
+        10);
+    servo_status_pub_ = this->create_publisher<moveit_msgs::msg::ServoStatus>(
+        "moveit2_iface/status",
+        10);
+
+    /* Plan-status: latched so a late-joining GUI client sees the most recent
+     * attempt without waiting for the next click. */
+    std::string plan_status_name = "arm/state/plan_status";
+    if (config["topic"]["pub"]["plan_status"] && config["topic"]["pub"]["plan_status"]["name"]) {
+        plan_status_name = config["topic"]["pub"]["plan_status"]["name"].as<std::string>();
+    }
+    rclcpp::QoS plan_status_qos(rclcpp::KeepLast(1));
+    plan_status_qos.transient_local();
+    plan_status_pub_ = this->create_publisher<arm_api2_msgs::msg::PlanStatus>(plan_status_name, plan_status_qos);
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized publishers!");
 }
 
@@ -134,6 +170,10 @@ void m2SimpleIface::init_subscribers()
     pose_cmd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(pose_cmd_name, 1, std::bind(&m2SimpleIface::pose_cmd_cb, this, _1));
     ctraj_cmd_sub_ = this->create_subscription<arm_api2_msgs::msg::CartesianWaypoints>(cart_traj_cmd_name, 1, std::bind(&m2SimpleIface::cart_poses_cb, this, _1));
     joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(joint_states_name, 1, std::bind(&m2SimpleIface::joint_state_cb, this, _1));
+    servo_twist_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
+        "moveit2_iface/servo_twist_cmd",
+        10,
+        std::bind(&m2SimpleIface::servo_twist_cb, this, _1));
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
 }
 
@@ -150,6 +190,23 @@ void m2SimpleIface::init_services()
     open_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(open_gripper_name, std::bind(&m2SimpleIface::open_gripper_cb, this, _1, _2));
     close_gripper_srv_ = this->create_service<std_srvs::srv::Trigger>(close_gripper_name, std::bind(&m2SimpleIface::close_gripper_cb, this, _1, _2));
     add_collision_object_srv_ = this->create_service<arm_api2_msgs::srv::AddCollisionObject>("add_collision_object", std::bind(&m2SimpleIface::add_collision_object_cb, this, _1, _2));
+
+    std::string check_reachability_name = "arm/check_reachability";
+    if (config["srv"]["check_reachability"] && config["srv"]["check_reachability"]["name"]) {
+        check_reachability_name = config["srv"]["check_reachability"]["name"].as<std::string>();
+    }
+    check_reachability_srv_ = this->create_service<arm_api2_msgs::srv::CheckReachability>(
+        check_reachability_name,
+        std::bind(&m2SimpleIface::check_reachability_cb, this, _1, _2));
+    configure_controller_client_ =
+        node_->create_client<controller_manager_msgs::srv::ConfigureController>(
+            "controller_manager/configure_controller");
+    load_controller_client_ =
+        node_->create_client<controller_manager_msgs::srv::LoadController>(
+            "controller_manager/load_controller");
+    switch_controller_client_ =
+        node_->create_client<controller_manager_msgs::srv::SwitchController>(
+            "controller_manager/switch_controller");
     RCLCPP_INFO_STREAM(this->get_logger(), "Initialized services!"); 
 }
 
@@ -182,12 +239,31 @@ std::unique_ptr<moveit_servo::Servo> m2SimpleIface::init_servo()
 
 void m2SimpleIface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
-   
-    // hardcode this to planning frame to check if it works like that? 
-    m_currPoseCmd.header.frame_id = PLANNING_FRAME; 
-    m_currPoseCmd.pose = msg->pose;
-    if (!utils::comparePose(m_currPoseCmd, m_oldPoseCmd)) recivCmd = true;
-    RCLCPP_INFO_STREAM(this->get_logger(), "recivCmd: " << recivCmd); 
+    geometry_msgs::msg::PoseStamped cmd_plan;
+    const std::string source_frame = msg->header.frame_id;
+
+    if (source_frame.empty() || source_frame == PLANNING_FRAME) {
+        cmd_plan = *msg;
+        cmd_plan.header.frame_id = PLANNING_FRAME;
+    } else {
+        try {
+            cmd_plan = tf_buffer_->transform(*msg, PLANNING_FRAME);
+        } catch (const tf2::TransformException &ex) {
+            RCLCPP_WARN(
+                this->get_logger(),
+                "pose_cmd_cb: cannot transform '%s' -> '%s': %s — ignoring pose command",
+                source_frame.c_str(), PLANNING_FRAME.c_str(), ex.what());
+            return;
+        }
+    }
+
+    std::lock_guard<std::mutex> lock(pose_cmd_mutex_);
+    m_currPoseCmd = cmd_plan;
+    m_currPoseCmd.header.frame_id = PLANNING_FRAME;
+    if (!utils::comparePose(m_currPoseCmd, m_oldPoseCmd)) {
+        recivCmd = true;
+    }
+    RCLCPP_INFO_STREAM(this->get_logger(), "recivCmd: " << recivCmd);
 }
 
 void m2SimpleIface::cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::SharedPtr msg)
@@ -203,6 +279,105 @@ void m2SimpleIface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr
     std::vector<double> jointPositions = msg->position;
     if(robotModelInit) {m_robotStatePtr->setVariablePositions(jointNames, jointPositions);}; 
 
+}
+
+void m2SimpleIface::servo_twist_cb(const geometry_msgs::msg::TwistStamped::SharedPtr msg)
+{
+    latest_twist_cmd_ = *msg;
+    new_twist_cmd_ = true;
+}
+
+void m2SimpleIface::processServoCommand()
+{
+    if (!servoPtr || !new_twist_cmd_ || !m_moveGroupPtr) return;
+
+    const auto time_since_servo_entered = (this->now() - servo_entered_time_).seconds();
+    if (time_since_servo_entered < 0.5) {
+        new_twist_cmd_ = false;
+        return;
+    }
+
+    new_twist_cmd_ = false;
+
+    const bool all_zero = (std::abs(latest_twist_cmd_.twist.linear.x) < 1e-6 &&
+                           std::abs(latest_twist_cmd_.twist.linear.y) < 1e-6 &&
+                           std::abs(latest_twist_cmd_.twist.linear.z) < 1e-6 &&
+                           std::abs(latest_twist_cmd_.twist.angular.x) < 1e-6 &&
+                           std::abs(latest_twist_cmd_.twist.angular.y) < 1e-6 &&
+                           std::abs(latest_twist_cmd_.twist.angular.z) < 1e-6);
+    if (all_zero) {
+        return;
+    }
+
+    try {
+        moveit_servo::TwistCommand twist_cmd;
+        twist_cmd.frame_id = latest_twist_cmd_.header.frame_id.empty()
+            ? PLANNING_FRAME
+            : latest_twist_cmd_.header.frame_id;
+        twist_cmd.velocities[0] = latest_twist_cmd_.twist.linear.x;
+        twist_cmd.velocities[1] = latest_twist_cmd_.twist.linear.y;
+        twist_cmd.velocities[2] = latest_twist_cmd_.twist.linear.z;
+        twist_cmd.velocities[3] = latest_twist_cmd_.twist.angular.x;
+        twist_cmd.velocities[4] = latest_twist_cmd_.twist.angular.y;
+        twist_cmd.velocities[5] = latest_twist_cmd_.twist.angular.z;
+
+        auto current_state = m_moveGroupPtr->getCurrentState(1.0);
+        if (!current_state) {
+            RCLCPP_WARN_THROTTLE(
+                this->get_logger(),
+                *this->get_clock(),
+                1000,
+                "Could not get current robot state for servo command");
+            return;
+        }
+
+        servoPtr->setCommandType(moveit_servo::CommandType::TWIST);
+        moveit_servo::KinematicState next_state =
+            servoPtr->getNextJointState(current_state, twist_cmd);
+
+        const auto status = servoPtr->getStatus();
+        const auto status_msg_str = servoPtr->getStatusMessage();
+
+        moveit_msgs::msg::ServoStatus status_msg;
+        status_msg.code = static_cast<int8_t>(status);
+        status_msg.message = status_msg_str;
+        servo_status_pub_->publish(status_msg);
+
+        if (status == moveit_servo::StatusCode::INVALID ||
+            status == moveit_servo::StatusCode::HALT_FOR_SINGULARITY ||
+            status == moveit_servo::StatusCode::HALT_FOR_COLLISION) {
+            RCLCPP_WARN_THROTTLE(
+                this->get_logger(),
+                *this->get_clock(),
+                1000,
+                "Servo status: %s",
+                status_msg_str.c_str());
+            return;
+        }
+
+        if (next_state.joint_names.empty() || next_state.positions.size() == 0) {
+            RCLCPP_WARN_THROTTLE(
+                this->get_logger(),
+                *this->get_clock(),
+                1000,
+                "Servo returned empty state");
+            return;
+        }
+
+        std_msgs::msg::Float64MultiArray command;
+        for (size_t i = 0; i < next_state.positions.size(); ++i) {
+            command.data.push_back(next_state.positions[i]);
+        }
+        servo_forward_position_pub_->publish(command);
+        last_servo_state_ = next_state;
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR_THROTTLE(
+            this->get_logger(),
+            *this->get_clock(),
+            1000,
+            "Servo command processing failed: %s",
+            e.what());
+    }
 }
 
 void m2SimpleIface::open_gripper_cb(const std::shared_ptr<std_srvs::srv::Trigger::Request> req, 
@@ -392,6 +567,135 @@ void m2SimpleIface::add_collision_object_cb(const std::shared_ptr<arm_api2_msgs:
     res->message = "Collision object added successfully";
 }
 
+void m2SimpleIface::check_reachability_cb(
+    const std::shared_ptr<arm_api2_msgs::srv::CheckReachability::Request> req,
+    const std::shared_ptr<arm_api2_msgs::srv::CheckReachability::Response> res)
+{
+    res->reachable = false;
+    res->in_collision = false;
+    res->ik_solutions_found = 0;
+    res->reason = "";
+
+    if (!moveGroupInit || !robotModelInit || !pSceneMonitorInit) {
+        res->reason = "MoveIt not fully initialized";
+        return;
+    }
+
+    /* Resolve the requested pose into PLANNING_FRAME via TF when needed.
+     * Identical guard to pose_cmd_cb: empty frame_id is treated as PLANNING_FRAME. */
+    geometry_msgs::msg::PoseStamped pose_in_planning_frame;
+    const std::string source_frame = req->pose.header.frame_id;
+    if (source_frame.empty() || source_frame == PLANNING_FRAME) {
+        pose_in_planning_frame = req->pose;
+        pose_in_planning_frame.header.frame_id = PLANNING_FRAME;
+    } else {
+        try {
+            pose_in_planning_frame = tf_buffer_->transform(req->pose, PLANNING_FRAME);
+        } catch (const tf2::TransformException &ex) {
+            res->reason = std::string("TF: cannot transform '") + source_frame +
+                          "' -> '" + PLANNING_FRAME + "': " + ex.what();
+            return;
+        }
+    }
+
+    /* Snapshot the planning scene so we evaluate against the live world,
+     * including any user-added collision objects. */
+    if (!m_pSceneMonitorPtr || !m_pSceneMonitorPtr->getPlanningScene()) {
+        res->reason = "Planning scene unavailable";
+        return;
+    }
+    planning_scene_monitor::LockedPlanningSceneRO ls(m_pSceneMonitorPtr);
+
+    moveit::core::RobotState seed_state(ls->getCurrentState());
+    const moveit::core::JointModelGroup *jmg = seed_state.getJointModelGroup(PLANNING_GROUP);
+    if (jmg == nullptr) {
+        res->reason = "Joint model group '" + PLANNING_GROUP + "' not found";
+        return;
+    }
+
+    const unsigned int attempts = (req->ik_attempts == 0) ? 4u : static_cast<unsigned int>(req->ik_attempts);
+    const double per_attempt_timeout = (req->ik_timeout_sec > 0.0) ? req->ik_timeout_sec : 0.05;
+
+    unsigned int ik_solutions = 0;
+    bool any_in_collision = false;
+    std::string last_collision_reason;
+
+    /* Try N independent IK seeds; for each successful IK, run a state-validity
+     * check (collision + bounds) against the locked planning scene. We accept
+     * the first collision-free hit and short-circuit, but continue probing for
+     * `ik_solutions_found` to give the GUI a confidence signal. */
+    for (unsigned int i = 0; i < attempts; ++i) {
+        moveit::core::RobotState attempt_state = seed_state;
+        if (i > 0) {
+            attempt_state.setToRandomPositions(jmg);
+        }
+
+        const bool ik_ok = attempt_state.setFromIK(
+            jmg,
+            pose_in_planning_frame.pose,
+            EE_LINK_NAME,
+            per_attempt_timeout);
+        if (!ik_ok) continue;
+
+        attempt_state.update();
+
+        collision_detection::CollisionRequest col_req;
+        col_req.contacts = false;
+        col_req.distance = false;
+        collision_detection::CollisionResult col_res;
+        ls->checkCollision(col_req, col_res, attempt_state);
+        if (col_res.collision) {
+            any_in_collision = true;
+            last_collision_reason = "Goal state collides with environment or self";
+            continue;
+        }
+
+        if (!ls->isStateFeasible(attempt_state, false)) {
+            any_in_collision = true;
+            last_collision_reason = "Goal state violates planning-scene state validity";
+            continue;
+        }
+
+        ++ik_solutions;
+    }
+
+    res->ik_solutions_found = static_cast<uint8_t>(std::min<unsigned int>(ik_solutions, 255u));
+    if (ik_solutions > 0) {
+        res->reachable = true;
+        res->in_collision = false;
+        res->reason = "OK";
+        return;
+    }
+
+    res->reachable = false;
+    res->in_collision = any_in_collision;
+    if (any_in_collision) {
+        res->reason = last_collision_reason;
+    } else {
+        res->reason = "No IK solution found";
+    }
+}
+
+void m2SimpleIface::publishPlanStatus(bool success,
+                                      const std::string &error_code,
+                                      const std::string &reason,
+                                      const geometry_msgs::msg::PoseStamped &requested_pose,
+                                      double plan_time_sec,
+                                      const std::string &mode)
+{
+    if (!plan_status_pub_) return;
+    arm_api2_msgs::msg::PlanStatus msg;
+    msg.header.stamp = this->now();
+    msg.header.frame_id = PLANNING_FRAME;
+    msg.success = success;
+    msg.error_code = error_code;
+    msg.reason = reason;
+    msg.requested_pose = requested_pose;
+    msg.plan_time_sec = plan_time_sec;
+    msg.mode = mode;
+    plan_status_pub_->publish(msg);
+}
+
 void m2SimpleIface::change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
                                     const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Response> res)
 {
@@ -488,35 +792,119 @@ void m2SimpleIface::stopBeforeAsyncExecute()
 
 bool m2SimpleIface::execMove(bool async_flag)
 {
+    geometry_msgs::msg::PoseStamped pose_snap;
+    {
+        std::lock_guard<std::mutex> lock(pose_cmd_mutex_);
+        pose_snap = m_currPoseCmd;
+    }
+
     if (trajectory_executing_.load(std::memory_order_acquire)) {
         RCLCPP_WARN_THROTTLE(
             this->get_logger(), *this->get_clock(), 3000,
             "Trajectory still executing; ignoring new pose command until it finishes.");
+        publishPlanStatus(false, "BUSY_TRAJECTORY_EXECUTING",
+                          "Trajectory still executing; ignored new pose command",
+                          pose_snap, 0.0, "JOINT_TRAJ_CTL");
         return false;
     }
 
     stopBeforeAsyncExecute();
-    geometry_msgs::msg::PoseStamped cmdPose_ = utils::normalizeOrientation(m_currPoseCmd);
+    geometry_msgs::msg::PoseStamped cmdPose_ = utils::normalizeOrientation(pose_snap);
     m_moveGroupPtr->clearPoseTargets();
     m_moveGroupPtr->setPoseTarget(cmdPose_.pose, EE_LINK_NAME);
+    m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
+    m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
+    if (pose_plan_time_sec_ > 0.0) {
+        m_moveGroupPtr->setPlanningTime(pose_plan_time_sec_);
+    }
     RCLCPP_INFO_STREAM(this->get_logger(), "poseTarget is: " << cmdPose_.pose.position.x << " "
                                                               << cmdPose_.pose.position.y << " "
                                                               << cmdPose_.pose.position.z);
-    const bool ok = execPlan(async_flag);
+    const auto plan_t0 = std::chrono::steady_clock::now();
+    moveit::planning_interface::MoveGroupInterface::Plan plan;
+    const auto plan_err = m_moveGroupPtr->plan(plan);
+    const double plan_dt = std::chrono::duration<double>(std::chrono::steady_clock::now() - plan_t0).count();
 
+    if (plan_err != moveit::core::MoveItErrorCode::SUCCESS) {
+        const std::string code = utils::moveItErrorCodeToString(plan_err);
+        RCLCPP_ERROR_STREAM(this->get_logger(),
+            "Planning failed (" << code << ") in " << plan_dt << " s; not executing.");
+        publishPlanStatus(false, code,
+                          "MoveIt planner did not return SUCCESS for this pose",
+                          cmdPose_, plan_dt, "JOINT_TRAJ_CTL");
+        return false;
+    }
+
+    const bool ok = execPlan_with_plan(plan, async_flag);
     if (ok) {
         std::lock_guard<std::mutex> lock(pose_cmd_mutex_);
         m_oldPoseCmd = cmdPose_;
+        RCLCPP_INFO_STREAM(this->get_logger(), "Plan succeeded; executing commanded path.");
+        publishPlanStatus(true, "SUCCESS", "Plan accepted; executing", cmdPose_, plan_dt, "JOINT_TRAJ_CTL");
+    } else {
+        publishPlanStatus(false, "EXECUTE_FAILED",
+                          "Plan succeeded but execute() did not start",
+                          cmdPose_, plan_dt, "JOINT_TRAJ_CTL");
     }
-
-    RCLCPP_INFO_STREAM(this->get_logger(), "Executing commanded path!");
     return ok;
 }
 
+bool m2SimpleIface::execPlan_with_plan(
+    const moveit::planning_interface::MoveGroupInterface::Plan &plan,
+    bool async_flag)
+{
+    if (trajectory_executing_.load(std::memory_order_acquire)) {
+        RCLCPP_WARN_THROTTLE(
+            this->get_logger(), *this->get_clock(), 3000,
+            "Trajectory already executing; skipping execute.");
+        return false;
+    }
+
+    stopBeforeAsyncExecute();
+
+    if (!async_flag) {
+        trajectory_executing_.store(true, std::memory_order_release);
+        const auto exec_err = m_moveGroupPtr->execute(plan);
+        trajectory_executing_.store(false, std::memory_order_release);
+        if (exec_err != moveit::core::MoveItErrorCode::SUCCESS) {
+            RCLCPP_WARN(this->get_logger(), "execute(plan) did not report SUCCESS");
+        }
+        return true;
+    }
+
+    trajectory_executing_.store(true, std::memory_order_release);
+    try {
+        std::thread([this, plan]() {
+            try {
+                const auto exec_err = m_moveGroupPtr->execute(plan);
+                if (exec_err != moveit::core::MoveItErrorCode::SUCCESS) {
+                    RCLCPP_WARN(this->get_logger(), "execute(plan) in async worker did not report SUCCESS");
+                }
+            } catch (const std::exception &ex) {
+                RCLCPP_ERROR(this->get_logger(), "execute(plan) async worker exception: %s", ex.what());
+            } catch (...) {
+                RCLCPP_ERROR(this->get_logger(), "execute(plan) async worker unknown exception");
+            }
+            trajectory_executing_.store(false, std::memory_order_release);
+        }).detach();
+    } catch (const std::system_error &e) {
+        trajectory_executing_.store(false, std::memory_order_release);
+        RCLCPP_ERROR(this->get_logger(), "Failed to spawn async execute thread: %s", e.what());
+        return false;
+    }
+
+    return true;
+}
+
+/* Legacy helper kept for callers that still want plan+execute in one shot.
+ * Prefer execPlan_with_plan() so the caller can attach planning metadata. */
 bool m2SimpleIface::execPlan(bool async_flag)
 {
     m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
     m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
+    if (pose_plan_time_sec_ > 0.0) {
+        m_moveGroupPtr->setPlanningTime(pose_plan_time_sec_);
+    }
 
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     const bool planned = (m_moveGroupPtr->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
@@ -573,10 +961,19 @@ bool m2SimpleIface::execPlan(bool async_flag)
 
 bool m2SimpleIface::planExecCartesian(bool async_flag)
 {
+    geometry_msgs::msg::PoseStamped pose_snap;
+    {
+        std::lock_guard<std::mutex> lock(pose_cmd_mutex_);
+        pose_snap = m_currPoseCmd;
+    }
+
     if (trajectory_executing_.load(std::memory_order_acquire)) {
         RCLCPP_WARN_THROTTLE(
             this->get_logger(), *this->get_clock(), 3000,
             "Trajectory still executing; ignoring Cartesian pose command.");
+        publishPlanStatus(false, "BUSY_TRAJECTORY_EXECUTING",
+                          "Trajectory still executing; ignored Cartesian pose command",
+                          pose_snap, 0.0, "CART_TRAJ_CTL");
         return false;
     }
 
@@ -584,16 +981,38 @@ bool m2SimpleIface::planExecCartesian(bool async_flag)
     m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
     m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
 
+    const auto plan_t0 = std::chrono::steady_clock::now();
     std::vector<geometry_msgs::msg::Pose> cartesianWaypoints =
-        utils::createCartesianWaypoints(m_currPoseState.pose, m_currPoseCmd.pose, NUM_CART_PTS);
+        utils::createCartesianWaypoints(m_currPoseState.pose, pose_snap.pose, NUM_CART_PTS);
     moveit_msgs::msg::RobotTrajectory trajectory;
     double jumpThr = 0.0;
     double eefStep = 0.02;
-    m_moveGroupPtr->computeCartesianPath(cartesianWaypoints, eefStep, jumpThr, trajectory);
+    /* computeCartesianPath returns the fraction of the path the planner managed
+     * to follow with valid IK + collision checks. <1.0 means the line trims to
+     * a partial path; we surface that to the GUI so the user knows. */
+    const double fraction = m_moveGroupPtr->computeCartesianPath(
+        cartesianWaypoints, eefStep, jumpThr, trajectory);
+    const double plan_dt = std::chrono::duration<double>(std::chrono::steady_clock::now() - plan_t0).count();
+
+    if (fraction <= 0.0 || trajectory.joint_trajectory.points.empty()) {
+        publishPlanStatus(false, "PLAN_NOT_FOUND",
+                          "Cartesian path could not be computed (fraction=" + std::to_string(fraction) + ")",
+                          pose_snap, plan_dt, "CART_TRAJ_CTL");
+        return false;
+    }
 
     const bool ok = execTrajectory(std::move(trajectory), async_flag);
     if (ok) {
-        m_oldPoseCmd = m_currPoseCmd;
+        std::lock_guard<std::mutex> lock(pose_cmd_mutex_);
+        m_oldPoseCmd = pose_snap;
+        const std::string reason = (fraction >= 0.999)
+            ? "Cartesian plan executing (full path)"
+            : "Cartesian plan executing (partial fraction=" + std::to_string(fraction) + ")";
+        publishPlanStatus(true, "SUCCESS", reason, pose_snap, plan_dt, "CART_TRAJ_CTL");
+    } else {
+        publishPlanStatus(false, "EXECUTE_FAILED",
+                          "Cartesian plan ready but execute() did not start",
+                          pose_snap, plan_dt, "CART_TRAJ_CTL");
     }
     return ok;
 }
@@ -618,6 +1037,7 @@ bool m2SimpleIface::execCartesian(bool async_flag)
 
     const bool ok = execTrajectory(std::move(trajectory), async_flag);
     if (ok) {
+        std::lock_guard<std::mutex> lock(pose_cmd_mutex_);
         m_oldPoseCmd = m_currPoseCmd;
     }
     return ok;
@@ -700,6 +1120,137 @@ void m2SimpleIface::getArmState()
     m_currPoseState.header.frame_id = PLANNING_FRAME;
 }
 
+bool m2SimpleIface::loadController(const std::string& controller_name)
+{
+    if (!load_controller_client_) {
+        RCLCPP_ERROR(this->get_logger(), "load_controller client is not initialized");
+        return false;
+    }
+    if (!load_controller_client_->wait_for_service(std::chrono::seconds(2))) {
+        RCLCPP_ERROR(this->get_logger(), "controller_manager/load_controller service not available");
+        return false;
+    }
+
+    auto request = std::make_shared<controller_manager_msgs::srv::LoadController::Request>();
+    request->name = controller_name;
+    auto future = load_controller_client_->async_send_request(request);
+    if (future.wait_for(std::chrono::seconds(3)) != std::future_status::ready) {
+        RCLCPP_ERROR(this->get_logger(), "load_controller('%s') timed out", controller_name.c_str());
+        return false;
+    }
+
+    const auto response = future.get();
+    if (!response->ok) {
+        RCLCPP_WARN(
+            this->get_logger(),
+            "load_controller('%s') returned false; continuing in case it is already loaded",
+            controller_name.c_str());
+    }
+    return true;
+}
+
+bool m2SimpleIface::configureController(const std::string& controller_name)
+{
+    if (!configure_controller_client_) {
+        RCLCPP_ERROR(this->get_logger(), "configure_controller client is not initialized");
+        return false;
+    }
+    if (!configure_controller_client_->wait_for_service(std::chrono::seconds(2))) {
+        RCLCPP_ERROR(this->get_logger(), "controller_manager/configure_controller service not available");
+        return false;
+    }
+
+    auto request = std::make_shared<controller_manager_msgs::srv::ConfigureController::Request>();
+    request->name = controller_name;
+    auto future = configure_controller_client_->async_send_request(request);
+    if (future.wait_for(std::chrono::seconds(3)) != std::future_status::ready) {
+        RCLCPP_ERROR(this->get_logger(), "configure_controller('%s') timed out", controller_name.c_str());
+        return false;
+    }
+
+    const auto response = future.get();
+    if (!response->ok) {
+        RCLCPP_WARN(
+            this->get_logger(),
+            "configure_controller('%s') returned false; continuing in case it is already configured",
+            controller_name.c_str());
+    }
+    return true;
+}
+
+bool m2SimpleIface::switchControllers(
+    const std::vector<std::string>& activate,
+    const std::vector<std::string>& deactivate)
+{
+    if (!switch_controller_client_) {
+        RCLCPP_ERROR(this->get_logger(), "switch_controller client is not initialized");
+        return false;
+    }
+    if (!switch_controller_client_->wait_for_service(std::chrono::seconds(2))) {
+        RCLCPP_ERROR(this->get_logger(), "controller_manager/switch_controller service not available");
+        return false;
+    }
+
+    auto request = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
+    request->activate_controllers = activate;
+    request->deactivate_controllers = deactivate;
+    request->strictness = controller_manager_msgs::srv::SwitchController::Request::BEST_EFFORT;
+    request->activate_asap = true;
+    request->timeout.sec = 2;
+    request->timeout.nanosec = 0;
+
+    auto future = switch_controller_client_->async_send_request(request);
+    if (future.wait_for(std::chrono::seconds(3)) != std::future_status::ready) {
+        RCLCPP_ERROR(this->get_logger(), "switch_controller call timed out");
+        return false;
+    }
+
+    const auto response = future.get();
+    if (!response->ok) {
+        RCLCPP_ERROR(
+            this->get_logger(),
+            "switch_controller failed (activate=%zu, deactivate=%zu)",
+            activate.size(),
+            deactivate.size());
+        return false;
+    }
+    return true;
+}
+
+bool m2SimpleIface::enterServoControllerMode()
+{
+    if (forward_position_controller_active_) {
+        return true;
+    }
+    (void)loadController("forward_position_controller");
+    (void)configureController("forward_position_controller");
+    const bool ok = switchControllers(
+        {"forward_position_controller"},
+        {"scaled_joint_trajectory_controller"});
+    if (ok) {
+        forward_position_controller_active_ = true;
+        RCLCPP_INFO(this->get_logger(), "forward_position_controller active for SERVO_CTL");
+    }
+    return ok;
+}
+
+bool m2SimpleIface::leaveServoControllerMode()
+{
+    if (!forward_position_controller_active_) {
+        return true;
+    }
+    (void)loadController("scaled_joint_trajectory_controller");
+    (void)configureController("scaled_joint_trajectory_controller");
+    const bool ok = switchControllers(
+        {"scaled_joint_trajectory_controller"},
+        {"forward_position_controller"});
+    if (ok) {
+        forward_position_controller_active_ = false;
+        RCLCPP_INFO(this->get_logger(), "scaled_joint_trajectory_controller restored");
+    }
+    return ok;
+}
+
 bool m2SimpleIface::run()
 {
     if(!nodeInit)       {RCLCPP_ERROR(this->get_logger(), "Node not fully initialized!"); return false;} 
@@ -722,29 +1273,35 @@ bool m2SimpleIface::run()
     }
 
     // Check if servo active, to deactivate before sending to another pose 
-    if (robotState != SERVO_CTL && servoEntered) {servoPtr->setCollisionChecking(false); servoEntered=false;} // New API: no setPaused 
+    if (robotState != SERVO_CTL && servoEntered) {
+        servoPtr->setCollisionChecking(false);
+        servoEntered = false;
+        new_twist_cmd_ = false;
+        (void)leaveServoControllerMode();
+    }
 
+    /* Single-shot semantics: a pose command is consumed exactly once. If planning
+     * fails, the failure is surfaced via /arm/state/plan_status; we do NOT silently
+     * retry the same goal on every tick (that turns one impossible click into
+     * a 5 s × ∞ planner spin and floods the logs). */
     if (robotState == JOINT_TRAJ_CTL)
     {
         if (recivCmd) {
-            if (execMove(async)) {
-                recivCmd = false;
-            }
+            recivCmd = false;
+            (void)execMove(async);
         }
     }
 
     if (robotState == CART_TRAJ_CTL)
     {
         if (recivCmd) {
-            if (planExecCartesian(async)) {
-                recivCmd = false;
-            }
+            recivCmd = false;
+            (void)planExecCartesian(async);
         }
 
         if (recivTraj) {
-            if (execCartesian(async)) {
-                recivTraj = false;
-            }
+            recivTraj = false;
+            (void)execCartesian(async);
         }
     }
 
@@ -752,10 +1309,32 @@ bool m2SimpleIface::run()
     {   
         if (!servoEntered)
         {   
-            // Moveit servo status codes: https://github.com/moveit/moveit2/blob/main/moveit_ros/moveit_servo/include/moveit_servo/utils/datatypes.hpp
-            servoPtr->setCollisionChecking(true); // New API: no start(), servo works on-demand 
+            latest_twist_cmd_ = geometry_msgs::msg::TwistStamped();
+            latest_twist_cmd_.header.frame_id = PLANNING_FRAME;
+            latest_twist_cmd_.twist.linear.x = 0.0;
+            latest_twist_cmd_.twist.linear.y = 0.0;
+            latest_twist_cmd_.twist.linear.z = 0.0;
+            latest_twist_cmd_.twist.angular.x = 0.0;
+            latest_twist_cmd_.twist.angular.y = 0.0;
+            latest_twist_cmd_.twist.angular.z = 0.0;
+            new_twist_cmd_ = false;
+            // The GUI sim can report near-collision continuously because the planning
+            // scene includes fixtures/gripper geometry close to the robot. Let the
+            // trajectory controller enforce execution while Servo handles kinematics.
+            servoPtr->setCollisionChecking(false);
+            if (!enterServoControllerMode()) {
+                RCLCPP_ERROR_THROTTLE(
+                    this->get_logger(),
+                    *this->get_clock(),
+                    1000,
+                    "Cannot enter SERVO_CTL: failed to activate forward_position_controller");
+                return false;
+            }
+            servo_entered_time_ = this->now();
             servoEntered = true; 
+            RCLCPP_INFO(this->get_logger(), "Servo mode activated! Send twist commands to moveit2_iface/servo_twist_cmd");
         }
+        processServoCommand();
     }
 
     return true;     

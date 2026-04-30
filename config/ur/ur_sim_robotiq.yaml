@@ -2,7 +2,7 @@
 # Use with MoveIt semantic_description_file:=srdf/ur_robotiq.srdf.xacro and use_robotiq_gripper:=true.
 robot:
   arm_name: ur_manipulator
-  ee_link_name: robotiq_85_left_finger_tip_link
+  ee_link_name: robotiq_tcp
   robot_desc: robot_description
   move_group_ns: ""
   planning_scene: planning_scene
@@ -11,6 +11,10 @@ robot:
   joint_states: joint_states
   max_vel_scaling_factor: 0.1
   max_acc_scaling_factor: 0.1
+  # Per-pose OMPL planning time budget (seconds). Default 1.5; lower for
+  # snappier rejection of impossible goals, higher only when the planner
+  # genuinely needs more time on hard collision-rich tasks.
+  pose_plan_time_sec: 1.5
   with_planner: true
   gripper_backend_action: robotiq_gripper_controller/gripper_cmd
   gripper_action_type: parallel_gripper_command
@@ -51,6 +55,9 @@ topic:
     gripper_state:
       name: arm/state/gripper_state
       queue: 1
+    plan_status:
+      name: arm/state/plan_status
+      queue: 1
 srv:
   disable_collision:
     name: /move_group/disable_collision
@@ -70,6 +77,8 @@ srv:
     name: arm/open_gripper
   close_gripper:
     name: arm/close_gripper
+  check_reachability:
+    name: arm/check_reachability
 action:
   move_to_pose:
     name: arm/move_to_pose

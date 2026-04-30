@@ -51,6 +51,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
 #include "std_msgs/msg/string.hpp"
+#include <moveit/move_group_interface/move_group_interface.hpp>
 
 namespace utils {
 
@@ -61,6 +62,10 @@ namespace utils {
     geometry_msgs::msg::PoseStamped                 normalizeOrientation        (geometry_msgs::msg::PoseStamped p);
     geometry_msgs::msg::PoseStamped                 convertIsometryToMsg        (Eigen::Isometry3d pose);
     std_msgs::msg::String                           stateToMsg                  (int state);
+    /* Map a MoveItErrorCode value to a stable, human/machine-readable string
+     * (e.g. "GOAL_STATE_INVALID"). Used in PlanStatus payloads so the GUI can
+     * surface MoveIt's reason directly. */
+    std::string                                     moveItErrorCodeToString     (const moveit::core::MoveItErrorCode &code);
 
 } // namespace utils
 

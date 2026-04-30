@@ -57,6 +57,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2/LinearMath/Matrix3x3.h"
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 //* moveit
 #include <moveit_servo/servo.hpp>
@@ -74,17 +76,26 @@
 //* msgs
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include "geometry_msgs/msg/twist_stamped.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "arm_api2_msgs/msg/cartesian_waypoints.hpp"
+#include "arm_api2_msgs/msg/plan_status.hpp"
 #include "moveit_msgs/msg/collision_object.hpp"
+#include "moveit_msgs/msg/servo_status.hpp"
 #include "shape_msgs/msg/solid_primitive.hpp"
+#include "trajectory_msgs/msg/joint_trajectory.hpp"
 
 //* srvs
 #include "arm_api2_msgs/srv/change_state.hpp"
 #include "arm_api2_msgs/srv/set_vel_acc.hpp"
 #include "arm_api2_msgs/srv/set_string_param.hpp"
 #include "arm_api2_msgs/srv/add_collision_object.hpp"
+#include "arm_api2_msgs/srv/check_reachability.hpp"
+#include "controller_manager_msgs/srv/configure_controller.hpp"
+#include "controller_manager_msgs/srv/load_controller.hpp"
+#include "controller_manager_msgs/srv/switch_controller.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
 // utils
@@ -137,6 +148,7 @@ class m2SimpleIface: public rclcpp::Node
         std::string PLANNING_FRAME; 
         std::string MOVE_GROUP_NS; 
         std::string JOINT_STATES; 
+        std::string SERVO_TRAJECTORY_TOPIC;
         int NUM_CART_PTS; 
         bool ENABLE_SERVO; 
 
@@ -167,11 +179,16 @@ class m2SimpleIface: public rclcpp::Node
         rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr        pose_cmd_sub_;
         rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr           joint_state_sub_;
         rclcpp::Subscription<arm_api2_msgs::msg::CartesianWaypoints>::SharedPtr ctraj_cmd_sub_; 
+        rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr       servo_twist_sub_;
 
         /* pubs */
         rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr       pose_state_pub_;
         rclcpp::Publisher<std_msgs::msg::String>::SharedPtr                 robot_state_pub_;
         rclcpp::Publisher<std_msgs::msg::String>::SharedPtr                 gripper_state_pub_;
+        rclcpp::Publisher<arm_api2_msgs::msg::PlanStatus>::SharedPtr        plan_status_pub_;
+        rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr  servo_trajectory_pub_;
+        rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr       servo_forward_position_pub_;
+        rclcpp::Publisher<moveit_msgs::msg::ServoStatus>::SharedPtr         servo_status_pub_;
 
         /* srvs */
         rclcpp::Service<arm_api2_msgs::srv::ChangeState>::SharedPtr              change_state_srv_;
@@ -180,10 +197,16 @@ class m2SimpleIface: public rclcpp::Node
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       open_gripper_srv_; 
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       close_gripper_srv_;
         rclcpp::Service<arm_api2_msgs::srv::AddCollisionObject>::SharedPtr       add_collision_object_srv_;
+        rclcpp::Service<arm_api2_msgs::srv::CheckReachability>::SharedPtr        check_reachability_srv_;
+        rclcpp::Client<controller_manager_msgs::srv::ConfigureController>::SharedPtr configure_controller_client_;
+        rclcpp::Client<controller_manager_msgs::srv::LoadController>::SharedPtr   load_controller_client_;
+        rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedPtr switch_controller_client_;
         /* topic callbacks */
         void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
         void cart_poses_cb(const arm_api2_msgs::msg::CartesianWaypoints::SharedPtr msg); 
         void joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg);
+        void servo_twist_cb(const geometry_msgs::msg::TwistStamped::SharedPtr msg);
+        void processServoCommand();
         
         /* srv callbacks*/
         void change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
@@ -198,7 +221,17 @@ class m2SimpleIface: public rclcpp::Node
                              const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
         void add_collision_object_cb(const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Request> req,
                                      const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Response> res);
-        bool run(); 
+        void check_reachability_cb(const std::shared_ptr<arm_api2_msgs::srv::CheckReachability::Request> req,
+                                   const std::shared_ptr<arm_api2_msgs::srv::CheckReachability::Response> res);
+        bool run();
+
+        /* Publishes a PlanStatus snapshot for the most recent plan attempt. */
+        void publishPlanStatus(bool success,
+                               const std::string &error_code,
+                               const std::string &reason,
+                               const geometry_msgs::msg::PoseStamped &requested_pose,
+                               double plan_time_sec,
+                               const std::string &mode);
 
         /* setters */
         bool setMoveGroup(rclcpp::Node::SharedPtr nodePtr, std::string groupName, std::string moveNs); 
@@ -207,10 +240,20 @@ class m2SimpleIface: public rclcpp::Node
 
         /* getters */
         void getArmState();  
+        bool loadController(const std::string& controller_name);
+        bool configureController(const std::string& controller_name);
+        bool switchControllers(const std::vector<std::string>& activate,
+                               const std::vector<std::string>& deactivate);
+        bool enterServoControllerMode();
+        bool leaveServoControllerMode();
 
         /* funcs */
         /** @return true if a new execution was started or completed (sync); false if busy or plan failed. */
         bool execPlan(bool async);
+        /** Execute an already-planned trajectory (joint-space Plan). Lets the
+         *  caller (execMove) own planning so it can publish PlanStatus with
+         *  meaningful timing/error metadata. */
+        bool execPlan_with_plan(const moveit::planning_interface::MoveGroupInterface::Plan &plan, bool async);
         bool execMove(bool async);
         bool execCartesian(bool async);
         bool planExecCartesian(bool async);
@@ -247,11 +290,22 @@ class m2SimpleIface: public rclcpp::Node
         bool recivCmd           = false; 
         bool recivTraj          = false; 
         bool servoEntered       = false; 
+        bool forward_position_controller_active_ = false;
+        rclcpp::Time servo_entered_time_;
+        geometry_msgs::msg::TwistStamped latest_twist_cmd_;
+        std::atomic<bool> new_twist_cmd_{false};
+        moveit_servo::KinematicState last_servo_state_;
         bool async              = true; 
 
         /* planner info */
         std::string current_planner_id_ = "pilz_industrial_motion_planner";
         std::string current_planner_type_ = "LIN";
+
+        /* planning budget for OMPL pose targets (seconds). 5 s is the MoveIt
+         * default, but for an interactive GUI 1.5 s is plenty: a healthy goal
+         * solves in << 100 ms, and an infeasible goal doesn't get more honest
+         * with more time. Reduces user-visible latency on bad clicks 3×. */
+        double pose_plan_time_sec_ = 1.5;
 
         /* ros vars */
         geometry_msgs::msg::PoseStamped m_currPoseCmd; 
@@ -267,7 +321,10 @@ class m2SimpleIface: public rclcpp::Node
         std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> m_pSceneMonitorPtr;
         moveit::planning_interface::PlanningSceneInterface m_planningSceneInterface;
         std::shared_ptr<servo::ParamListener> servo_param_listener_;
-        std::unique_ptr<moveit_servo::Servo> servoPtr; 
+        std::unique_ptr<moveit_servo::Servo> servoPtr;
+
+        std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+        std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
 }; 
 

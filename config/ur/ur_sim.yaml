@@ -2,7 +2,7 @@
 # Use with MoveIt semantic_description_file:=srdf/ur_robotiq.srdf.xacro and use_robotiq_gripper:=true.
 robot:
   arm_name: ur_manipulator
-  ee_link_name: tool0
+  ee_link_name: robotiq_tcp
   robot_desc: robot_description
   move_group_ns: ""
   planning_scene: planning_scene

@@ -27,7 +27,6 @@ import os
 # TODO: Make this changeable without ERROR for wrong param type
 use_sim_time = True
 use_servo = True
-dt = 0.1
 
 def get_moveit_configs(robot_name):
     """Load MoveIt configs for supported robots."""
@@ -44,6 +43,7 @@ def launch_setup(context, *args, **kwargs):
     arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))
     arg_launch_servo_watchdog = context.perform_substitution(LaunchConfiguration('launch_servo_watchdog', default=True))
     arg_use_sim_time    = context.perform_substitution(LaunchConfiguration('use_sim_time', default='false'))
+    arg_dt              = float(context.perform_substitution(LaunchConfiguration('dt')))
     print("arg_launch_joy: ", arg_launch_joy)   
 
     # TODO: Swap between sim and real arg depending on the robot type
@@ -79,7 +79,7 @@ def launch_setup(context, *args, **kwargs):
     node_params = [
         {"use_sim_time": arg_use_sim_time.lower() == 'true'},
         {"enable_servo": use_servo},
-        {"dt": dt},
+        {"dt": arg_dt},
         {"config_path": config_path},
     ]
     
@@ -155,7 +155,7 @@ def generate_launch_description():
 
     declared_arguments.append(
         DeclareLaunchArgument(name='dt', 
-                              default_value='0.1', 
+                              default_value='0.01', 
                               description='time step')
     )
 
