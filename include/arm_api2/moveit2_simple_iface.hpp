@@ -46,7 +46,6 @@
 #include <atomic>
 #include <cmath>
 #include <memory>
-#include <thread>
 #include <string>
 
 //* yaml params
@@ -113,6 +112,9 @@ class m2SimpleIface: public rclcpp::Node
         m2SimpleIface(const rclcpp::NodeOptions &options);  
         //~m2SimpleIface();
 
+        /** Inner node passed to MoveGroupInterface — must spin on same executor as this node (see main). */
+        rclcpp::Node::SharedPtr moveit_ros_node() const { return node_; }
+
         /* namespace param, maybe redundant */ 
         std::string ns_; 
 
@@ -120,8 +122,6 @@ class m2SimpleIface: public rclcpp::Node
 
         /* node related stuff */
         rclcpp::Node::SharedPtr node_;
-        rclcpp::Executor::SharedPtr executor_;
-        std::thread executor_thread_;
         
         /* Thread safety */
         std::mutex pose_cmd_mutex_;
@@ -219,6 +219,9 @@ class m2SimpleIface: public rclcpp::Node
         bool setRobotModel(rclcpp::Node::SharedPtr nodePtr, const std::string& robot_desc_param = "robot_description"); 
         bool setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::string name);
 
+        /** Copy RobotState fed by joint_state_cb — avoids blocking getCurrentState (starves SG executor). */
+        moveit::core::RobotStatePtr snapshotRobotStateFromJoints();
+
         /* getters */
         void getArmState();
 
@@ -226,11 +229,11 @@ class m2SimpleIface: public rclcpp::Node
         std::string resolve_topic_name(const std::string& name) const;  
 
         /* funcs */
-        void execPlan(bool async); 
-        void execMove(bool async);  
-        void execCartesian(bool async); 
-        void planExecCartesian(bool async); 
-        void execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async); 
+        bool execPlan(bool async, const geometry_msgs::msg::Pose& goal_pose); 
+        bool execMove(bool async);  
+        bool execCartesian(bool async); 
+        bool planExecCartesian(bool async); 
+        bool execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async); 
 
         // Simple state machine 
         enum state{
@@ -284,10 +287,13 @@ class m2SimpleIface: public rclcpp::Node
         std::vector<std::string> m_last_trajectory_joint_names_;
         std::vector<double> m_last_trajectory_final_positions_;
         std::atomic_bool execute_in_flight_{false};
+        bool execute_in_flight_deadline_valid_{false};
+        std::chrono::steady_clock::time_point execute_in_flight_deadline_start_{};
+        /** True while waiting to declare previous asyncExecute settled (two joint snapshots). */
+        int previous_exec_settle_ticks_{0};
 
-        /** Wait for previous async execution to complete (current joints near last trajectory end).
-         * Prevents race: new CART asyncExecute while previous JOINT asyncExecute still running. */
-        bool waitForPreviousExecution();
+        /** Non-blocking: true when OK to send a new plan/execute (single-thread executor safe). */
+        bool tryCompletePreviousExecution();
 
         /** Path constraints for next plan. Cleared after each plan. */
         moveit_msgs::msg::Constraints m_path_constraints_;

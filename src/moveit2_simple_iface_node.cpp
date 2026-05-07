@@ -41,21 +41,34 @@
 
 #include "arm_api2/moveit2_simple_iface.hpp"
 
+#include <cstdlib>
+#include <memory>
+
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/executors/single_threaded_executor.hpp>
+
 int main(int argc, char * argv [])
 {
+    /* Cap BLAS/OpenMP threads: parallel collision / OMPL can race MoveIt on small stacks. */
+    setenv("OMP_NUM_THREADS", "1", 0);
+    setenv("OPENBLAS_NUM_THREADS", "1", 0);
+    setenv("VECLIB_MAXIMUM_THREADS", "1", 0);
+    setenv("MKL_NUM_THREADS", "1", 0);
 
     rclcpp::init(argc, argv); 
-    // Set node options
     rclcpp::NodeOptions node_options;
     node_options.automatically_declare_parameters_from_overrides(true);
     node_options.use_intra_process_comms(false); 
 
-    // Create node 
-    auto move_group_node = std::make_shared<m2SimpleIface>(node_options); 
-    rclcpp::spin(move_group_node);
+    auto iface = std::make_shared<m2SimpleIface>(node_options);
 
-    // Test like this :) [Without executors]
-    //rclcpp::spin(node); 
+    /* Single-threaded: MoveGroupInterface + MoveIt callbacks must not run concurrently (SEGV).
+       tryCompletePreviousExecution() is non-blocking so this executor is not starved by sleep. */
+    rclcpp::executors::SingleThreadedExecutor executor;
+    executor.add_node(iface);
+    executor.add_node(iface->moveit_ros_node());
+    executor.spin();
+
     rclcpp::shutdown(); 
     return 0; 
 
