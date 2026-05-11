@@ -353,14 +353,41 @@ void m2Iface::add_grasped_object_cb(const std::shared_ptr<arm_api2_msgs::srv::Ad
                                     const std::shared_ptr<arm_api2_msgs::srv::AddGraspedObject::Response> res)
 {
 
-    moveit_msgs::msg::AttachedCollisionObject attached_object; 
+    moveit_msgs::msg::AttachedCollisionObject attached_object;
     attached_object.link_name = req->attach_object.link_name;
-    attached_object.object = req->grasped_object; 
+    attached_object.object = req->grasped_object;
     attached_object.touch_links = req->attach_object.touch_links;
-    // Preserve operation from request (ADD or REMOVE); do not overwrite
-    m_planningSceneInterface->applyAttachedCollisionObject(attached_object);
-    res->success = true;
-    RCLCPP_INFO(this->get_logger(), "Attached collision object to the end effector.");
+    const bool detach = req->grasped_object.operation == moveit_msgs::msg::CollisionObject::REMOVE;
+
+    const bool applied = m_planningSceneInterface->applyAttachedCollisionObject(attached_object);
+
+    if (detach && applied && !req->grasped_object.id.empty()) {
+        moveit_msgs::msg::CollisionObject co_rm;
+        co_rm.header = req->grasped_object.header;
+        if (co_rm.header.frame_id.empty()) {
+            co_rm.header.frame_id = PLANNING_FRAME;
+            co_rm.header.stamp = this->now();
+        }
+        co_rm.id = req->grasped_object.id;
+        co_rm.operation = moveit_msgs::msg::CollisionObject::REMOVE;
+        try {
+            m_planningSceneInterface->applyCollisionObjects(std::vector<moveit_msgs::msg::CollisionObject>{co_rm});
+        } catch (const std::exception& e) {
+            RCLCPP_WARN(this->get_logger(), "applyCollisionObjects(REMOVE) for id '%s' failed: %s",
+                        req->grasped_object.id.c_str(), e.what());
+        }
+    }
+
+    res->success = detach ? true : applied;
+    if (!res->success && !detach) {
+        RCLCPP_WARN(this->get_logger(), "applyAttachedCollisionObject (ADD) failed for id '%s'",
+                    req->grasped_object.id.c_str());
+    } else if (detach) {
+        RCLCPP_INFO(this->get_logger(), "Detached collision id '%s' (attached apply=%s)",
+                    req->grasped_object.id.c_str(), applied ? "ok" : "no-op");
+    } else {
+        RCLCPP_INFO(this->get_logger(), "Attached collision object id '%s'", req->grasped_object.id.c_str());
+    }
 }
 
 rclcpp_action::GoalResponse m2Iface::move_to_joint_goal_cb(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const arm_api2_msgs::action::MoveJoint::Goal> goal)

@@ -125,6 +125,7 @@ class m2SimpleIface: public rclcpp::Node
         
         /* Thread safety */
         std::mutex pose_cmd_mutex_;
+        std::mutex cart_waypoints_mutex_;
         std::mutex robot_state_mutex_;
         std::mutex move_group_mutex_;
 
@@ -252,8 +253,8 @@ class m2SimpleIface: public rclcpp::Node
             stringify (SERVO_CTL)
         }; 
 
-        // robot state
-        enum state robotState = IDLE; 
+        /* robot state machine (atomic: MultiThreadedExecutor runs timer + subscriptions concurrently) */
+        std::atomic<state> robotState{IDLE};
 
         /* flags*/
         bool moveGroupInit      = false;
@@ -261,8 +262,8 @@ class m2SimpleIface: public rclcpp::Node
         bool pSceneMonitorInit  = false;
         bool gripperInit        = false; 
         bool nodeInit           = false; 
-        bool recivCmd           = false; 
-        bool recivTraj          = false; 
+        std::atomic_bool recivCmd{false};
+        std::atomic_bool recivTraj{false};
         bool servoEntered       = false; 
         bool async              = true; 
 
@@ -292,8 +293,21 @@ class m2SimpleIface: public rclcpp::Node
         /** True while waiting to declare previous asyncExecute settled (two joint snapshots). */
         int previous_exec_settle_ticks_{0};
 
+        /** Set when stop() clears a stuck gate; next plan/execute waits one timer tick. */
+        bool postpone_next_moveit_attempt_{false};
+
         /** Non-blocking: true when OK to send a new plan/execute (single-thread executor safe). */
         bool tryCompletePreviousExecution();
+
+        /**
+         * Block until asyncExecute finishes (execute_in_flight_ is false). Planning-scene updates during
+         * trajectory execution SIGSEGV on some Humble builds; callers must wait. Requires a multi-threaded
+         * executor so the timer can still run tryCompletePreviousExecution() while this blocks.
+         */
+        bool waitForMoveGroupExecutionIdle(const char* caller_reason, double timeout_sec = 30.0);
+
+        /** tryComplete + optional one-cycle defer after stop(); avoids stop()+plan() same tick (SEGV on some MoveIt). */
+        bool readyForNewMoveItPlanOrExecute();
 
         /** Path constraints for next plan. Cleared after each plan. */
         moveit_msgs::msg::Constraints m_path_constraints_;

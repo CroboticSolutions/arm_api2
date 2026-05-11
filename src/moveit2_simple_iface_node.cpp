@@ -45,7 +45,7 @@
 #include <memory>
 
 #include <rclcpp/rclcpp.hpp>
-#include <rclcpp/executors/single_threaded_executor.hpp>
+#include <rclcpp/executors/multi_threaded_executor.hpp>
 
 int main(int argc, char * argv [])
 {
@@ -62,9 +62,10 @@ int main(int argc, char * argv [])
 
     auto iface = std::make_shared<m2SimpleIface>(node_options);
 
-    /* Single-threaded: MoveGroupInterface + MoveIt callbacks must not run concurrently (SEGV).
-       tryCompletePreviousExecution() is non-blocking so this executor is not starved by sleep. */
-    rclcpp::executors::SingleThreadedExecutor executor;
+    /* Multi-threaded: planning-scene service callbacks must block until asyncExecute completes; a
+     * single-threaded executor would deadlock (timer never clears execute_in_flight_). MoveGroup / PSI
+     * mutations are serialized with move_group_mutex_ inside m2SimpleIface. */
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 4);
     executor.add_node(iface);
     executor.add_node(iface->moveit_ros_node());
     executor.spin();
