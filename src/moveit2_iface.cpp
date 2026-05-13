@@ -40,12 +40,16 @@
  */
 
 #include "arm_api2/moveit2_iface.hpp"
+#include <algorithm>
+#include <cctype>
 #include <future>
+#include <optional>
 #include <vector>
+#include <tf2/exceptions.hpp>
 
 m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     : Node("moveit2_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_iface_node", options)), 
-     executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()), gripper(node_) 
+     executor_(std::make_shared<rclcpp::executors::MultiThreadedExecutor>()), gripper_(node_) 
 {   
     // USE_SIM_TIME HACK TO TEST SERVO!
     this->set_parameter(rclcpp::Parameter("use_sim_time", false));
@@ -76,23 +80,71 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
     eager_execution     = true; 
     max_vel_scaling_factor = config["robot"]["max_vel_scaling_factor"].as<float>();
     max_acc_scaling_factor = config["robot"]["max_acc_scaling_factor"].as<float>();
+    if (config["robot"]["num_cart_pts"]) {
+        num_cart_pts_ = config["robot"]["num_cart_pts"].as<int>();
+    }
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, this, false);
 
     {
-      RobotiqGripperConfig gcfg;
       const YAML::Node & r = config["robot"];
-      if (r["gripper_backend_action"]) {
-        gcfg.backend_action = r["gripper_backend_action"].as<std::string>();
-      }
+      std::optional<std::string> action_type_val;
       if (r["gripper_action_type"]) {
-        const std::string t = r["gripper_action_type"].as<std::string>();
-        if (t == "parallel_gripper_command" || t == "parallel") {
-          gcfg.backend = RobotiqGripperConfig::BackendKind::ParallelGripperCommand;
+        action_type_val = r["gripper_action_type"].as<std::string>();
+      }
+
+      if (action_type_val && *action_type_val == std::string("piper_joint")) {
+        PiperJointGripperConfig pcfg;
+        if (r["piper_joint_gripper_state_topic"]) {
+          pcfg.state_topic = r["piper_joint_gripper_state_topic"].as<std::string>();
         }
+        if (r["piper_joint_gripper_cmd_topic"]) {
+          pcfg.cmd_topic = r["piper_joint_gripper_cmd_topic"].as<std::string>();
+        }
+        if (r["piper_gripper_open_m"]) {
+          pcfg.open_stroke_m = r["piper_gripper_open_m"].as<double>();
+        }
+        if (r["piper_gripper_close_m"]) {
+          pcfg.close_stroke_m = r["piper_gripper_close_m"].as<double>();
+        }
+        if (r["piper_gripper_command_mode"]) {
+          std::string mode = r["piper_gripper_command_mode"].as<std::string>();
+          std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+          });
+          if (mode == std::string("joint_state")) {
+            pcfg.command_mode = PiperGripperCommandMode::JointState;
+          } else {
+            pcfg.command_mode = PiperGripperCommandMode::FollowJointTrajectory;
+          }
+        }
+        if (r["piper_gripper_trajectory_action"]) {
+          pcfg.trajectory_action = r["piper_gripper_trajectory_action"].as<std::string>();
+        }
+        if (r["piper_gripper_trajectory_joint_name"]) {
+          pcfg.trajectory_joint_name = r["piper_gripper_trajectory_joint_name"].as<std::string>();
+        }
+        if (r["piper_gripper_trajectory_time_sec"]) {
+          pcfg.trajectory_time_from_start_sec = r["piper_gripper_trajectory_time_sec"].as<double>();
+        }
+        piper_joint_gripper_ = std::make_unique<PiperJointGripper>(node_);
+        piper_joint_gripper_->configure(pcfg);
+      } else {
+        RobotiqGripperConfig gcfg;
+        if (r["gripper_backend_action"]) {
+          gcfg.backend_action = r["gripper_backend_action"].as<std::string>();
+        }
+        if (action_type_val) {
+          const std::string & t = *action_type_val;
+          if (t == "parallel_gripper_command" || t == "parallel") {
+            gcfg.backend = RobotiqGripperConfig::BackendKind::ParallelGripperCommand;
+          }
+        }
+        if (r["gripper_parallel_joint_name"]) {
+          gcfg.parallel_joint_name = r["gripper_parallel_joint_name"].as<std::string>();
+        }
+        gripper_.configure(gcfg);
       }
-      if (r["gripper_parallel_joint_name"]) {
-        gcfg.parallel_joint_name = r["gripper_parallel_joint_name"].as<std::string>();
-      }
-      gripper.configure(gcfg);
     }
 
     // Align MoveIt namespace defaults with node namespace when config is generic.
@@ -142,7 +194,15 @@ void m2Iface::init_subscribers()
     // Servo status publisher
     servo_status_pub_ = this->create_publisher<moveit_msgs::msg::ServoStatus>(
         "~/status", 10);
-    RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!"); 
+    if (config["topic"] && config["topic"]["sub"] && config["topic"]["sub"]["cmd_pose"] &&
+        config["topic"]["sub"]["cmd_pose"]["name"])
+    {
+        auto pose_cmd_name = config["topic"]["sub"]["cmd_pose"]["name"].as<std::string>();
+        pose_cmd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+            pose_cmd_name, 1, std::bind(&m2Iface::pose_cmd_cb, this, _1));
+        RCLCPP_INFO_STREAM(this->get_logger(), "Subscribed to pose cmd topic: " << pose_cmd_name);
+    }
+    RCLCPP_INFO_STREAM(this->get_logger(), "Initialized subscribers!");
 }
 
 void m2Iface::init_services()
@@ -222,11 +282,102 @@ std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()
 }
 
 void m2Iface::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg)
-{   
-    std::vector<std::string> jointNames = msg->name;
-    std::vector<double> jointPositions = msg->position;
-    if(robotModelInit) {m_robotStatePtr->setVariablePositions(jointNames, jointPositions);}; 
+{
+    if (!msg || !robotModelInit || !kinematic_model || !m_robotStatePtr) {
+        return;
+    }
 
+    std::vector<std::string> names;
+    std::vector<double> pos;
+    names.reserve(msg->name.size());
+    pos.reserve(msg->position.size());
+
+    bool gripper_seen = false;
+    double gripper_m = 0.0;
+
+    for (size_t i = 0; i < msg->name.size(); ++i) {
+        if (i >= msg->position.size()) {
+            break;
+        }
+        const std::string & joint_name = msg->name[i];
+        if (piper_joint_gripper_ && joint_name == std::string("gripper")) {
+            gripper_seen = true;
+            gripper_m = msg->position[i];
+            continue;
+        }
+        if (!kinematic_model->hasJointModel(joint_name)) {
+            continue;
+        }
+        names.push_back(joint_name);
+        pos.push_back(msg->position[i]);
+    }
+
+    const bool piper_map_gripper =
+        static_cast<bool>(piper_joint_gripper_) && gripper_seen &&
+        kinematic_model->hasJointModel("joint7") && kinematic_model->hasJointModel("joint8");
+
+    if (piper_map_gripper) {
+        std::vector<std::string> n2;
+        std::vector<double> p2;
+        n2.reserve(names.size() + 2);
+        p2.reserve(pos.size() + 2);
+        for (size_t k = 0; k < names.size(); ++k) {
+            if (names[k] == "joint7" || names[k] == "joint8") {
+                continue;
+            }
+            n2.push_back(names[k]);
+            p2.push_back(pos[k]);
+        }
+        const double half = gripper_m * 0.5;
+        n2.push_back("joint7");
+        p2.push_back(half);
+        n2.push_back("joint8");
+        p2.push_back(-half);
+        names.swap(n2);
+        pos.swap(p2);
+    }
+
+    if (names.empty()) {
+        return;
+    }
+
+    try {
+        m_robotStatePtr->setVariablePositions(names, pos);
+    } catch (const std::exception & e) {
+        RCLCPP_ERROR_THROTTLE(
+            this->get_logger(), *this->get_clock(), 5000,
+            "joint_state_cb: setVariablePositions failed (%s)", e.what());
+    }
+}
+
+void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
+{
+    if (robotState != CART_TRAJ_CTL) {
+        RCLCPP_WARN_THROTTLE(
+            this->get_logger(), *this->get_clock(), 3000,
+            "Ignoring cmd_pose: set robot to Cartesian control (CART_TRAJ_CTL / GUI CARTESIAN_CONTROL) first.");
+        return;
+    }
+    geometry_msgs::msg::PoseStamped cmd_plan;
+    const std::string source_frame = msg->header.frame_id;
+    if (source_frame.empty() || source_frame == PLANNING_FRAME) {
+        cmd_plan = *msg;
+        cmd_plan.header.frame_id = PLANNING_FRAME;
+    } else {
+        try {
+            cmd_plan = tf_buffer_->transform(*msg, PLANNING_FRAME);
+        } catch (const tf2::TransformException &ex) {
+            RCLCPP_WARN(
+                this->get_logger(),
+                "cmd_pose: cannot transform '%s' -> '%s': %s",
+                source_frame.c_str(), PLANNING_FRAME.c_str(), ex.what());
+            return;
+        }
+    }
+    std::lock_guard<std::mutex> lock(pose_topic_mutex_);
+    m_topicPoseCmd = cmd_plan;
+    m_topicPoseCmd.header.frame_id = PLANNING_FRAME;
+    recivTopicPoseCmd = true;
 }
 
 void m2Iface::servo_twist_cb(const geometry_msgs::msg::TwistStamped::SharedPtr msg)
@@ -1044,26 +1195,66 @@ bool m2Iface::run()
         float effort = goal->command.max_effort;
 
         auto result = std::make_shared<control_msgs::action::GripperCommand::Result>();
-        bool success = gripper.send_gripper_command(position, effort);
+        bool success = sendGripperCmd(position, effort);
 
         if(success){
             // TODO: Wrap this in methods
             RCLCPP_INFO_STREAM(this->get_logger(), "Gripper command succeeded!");
-            result->position = gripper.get_position();
-            result->effort = gripper.get_effort();
-            result->stalled = gripper.is_stalled();
-            result->reached_goal = gripper.reached_goal();
+            result->position = gripperMeasuredPositionNormalized();
+            result->effort = gripperMeasuredEffort();
+            result->stalled = gripperMeasuredStalled();
+            result->reached_goal = gripperMeasuredReachedGoal();
             m_gripperControlGoalHandle_->succeed(result);
         }
         else{
             RCLCPP_ERROR_STREAM(this->get_logger(), "Gripper command failed!");
-            result->reached_goal = gripper.reached_goal();
+            result->reached_goal = gripperMeasuredReachedGoal();
             m_gripperControlGoalHandle_->abort(result);
         }
         recivGripperCmd = false;
     }
 
     return true;     
+}
+
+bool m2Iface::sendGripperCmd(double normalized_position_robotiq, double max_effort)
+{
+  if (piper_joint_gripper_) {
+    return piper_joint_gripper_->send_gripper_command(normalized_position_robotiq, max_effort);
+  }
+  return gripper_.send_gripper_command(normalized_position_robotiq, max_effort);
+}
+
+float m2Iface::gripperMeasuredPositionNormalized()
+{
+  if (piper_joint_gripper_) {
+    return piper_joint_gripper_->get_position();
+  }
+  return gripper_.get_position();
+}
+
+float m2Iface::gripperMeasuredEffort()
+{
+  if (piper_joint_gripper_) {
+    return piper_joint_gripper_->get_effort();
+  }
+  return gripper_.get_effort();
+}
+
+bool m2Iface::gripperMeasuredStalled()
+{
+  if (piper_joint_gripper_) {
+    return piper_joint_gripper_->is_stalled();
+  }
+  return gripper_.is_stalled();
+}
+
+bool m2Iface::gripperMeasuredReachedGoal()
+{
+  if (piper_joint_gripper_) {
+    return piper_joint_gripper_->reached_goal();
+  }
+  return gripper_.reached_goal();
 }
 
 

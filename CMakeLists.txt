@@ -25,6 +25,7 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(trajectory_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(controller_manager_msgs REQUIRED)
 
@@ -36,6 +37,7 @@ add_executable(
   moveit2_iface
   src/moveit2_iface.cpp
   src/moveit2_iface_node.cpp
+  src/piper_joint_gripper.cpp
   src/robotiq_gripper.cpp
   src/utils.cpp)
 target_include_directories(moveit2_iface 
@@ -48,7 +50,7 @@ PUBLIC
 # Build moveit2_iface
 target_compile_features(moveit2_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
-  moveit2_iface moveit_ros_planning moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs
+  moveit2_iface moveit_ros_planning moveit_ros_planning_interface moveit_visual_tools rclcpp rclcpp_action control_msgs trajectory_msgs arm_api2_msgs moveit_servo sensor_msgs geometry_msgs tf2_ros tf2_geometry_msgs
 )
 
 # Install moveit2_iface
@@ -61,6 +63,7 @@ add_executable(
   moveit2_simple_iface
   src/moveit2_simple_iface.cpp
   src/moveit2_simple_iface_node.cpp
+  src/piper_joint_gripper.cpp
   src/robotiq_gripper.cpp
   src/utils.cpp)
 target_include_directories(moveit2_simple_iface 
@@ -72,7 +75,7 @@ PUBLIC
 
 target_compile_features(moveit2_simple_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
-  moveit2_simple_iface moveit_ros_planning moveit_ros_planning_interface moveit_visual_tools rclcpp arm_api2_msgs moveit_servo sensor_msgs geometry_msgs std_msgs tf2_ros tf2_geometry_msgs controller_manager_msgs
+  moveit2_simple_iface moveit_ros_planning moveit_ros_planning_interface moveit_visual_tools rclcpp rclcpp_action control_msgs trajectory_msgs arm_api2_msgs moveit_servo sensor_msgs geometry_msgs std_msgs tf2_ros tf2_geometry_msgs controller_manager_msgs
 )
 
 # Install moveit2_simple_iface

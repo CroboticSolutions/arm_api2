@@ -57,6 +57,9 @@
 #include "rclcpp_components/register_node_macro.hpp"
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2/LinearMath/Matrix3x3.h"
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+#include <mutex>
 
 //* moveit
 #include <moveit_servo/servo.hpp>
@@ -103,6 +106,7 @@
 // For starters just include robotiq_gripper
 // TODO: Think of a way to include different gripper based on the gripper type
 #include "arm_api2/grippers/gripper.hpp"
+#include "arm_api2/grippers/piper_joint_gripper.hpp"
 #include "arm_api2/grippers/robotiq_gripper.hpp"
 
 #define stringify( name ) #name
@@ -130,8 +134,9 @@ class m2Iface: public rclcpp::Node
         rclcpp::Executor::SharedPtr executor_;
         std::thread executor_thread_;
 
-        /* gripper */
-        RobotiqGripper gripper; 
+        /* gripper: Robotiq (action) OR Piper JointState shim */
+        RobotiqGripper gripper_;
+        std::unique_ptr<PiperJointGripper> piper_joint_gripper_; 
 
         /* arm_definition */ 
         std::string PLANNING_GROUP; 
@@ -156,6 +161,7 @@ class m2Iface: public rclcpp::Node
         float                                                               dt;
         float                                                               max_vel_scaling_factor;
         float                                                               max_acc_scaling_factor;
+        int                                                                 num_cart_pts_{20};
         
         /* planner info */
         std::string current_planner_id_ = "pilz_industrial_motion_planner";
@@ -176,6 +182,7 @@ class m2Iface: public rclcpp::Node
         
         /* subs */
         rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr           joint_state_sub_;
+        rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr       pose_cmd_sub_;
         rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr       servo_twist_sub_;
         rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr     servo_trajectory_pub_;
         rclcpp::Publisher<moveit_msgs::msg::ServoStatus>::SharedPtr            servo_status_pub_;
@@ -200,8 +207,10 @@ class m2Iface: public rclcpp::Node
 
         /* topic callbacks */
         void joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg);
+        void pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
         void servo_twist_cb(const geometry_msgs::msg::TwistStamped::SharedPtr msg);
         void processServoCommand();
+        void planAndExecTopicCartesian();
         
         /* srv callbacks*/
         void change_state_cb(const std::shared_ptr<arm_api2_msgs::srv::ChangeState::Request> req, 
@@ -250,6 +259,12 @@ class m2Iface: public rclcpp::Node
         void gripper_control_accepted_cb(
             std::shared_ptr<rclcpp_action::ServerGoalHandle<control_msgs::action::GripperCommand>> goal_handle);
 
+        bool sendGripperCmd(double normalized_position_robotiq, double max_effort = 140.0);
+        float gripperMeasuredPositionNormalized();
+        float gripperMeasuredEffort();
+        bool gripperMeasuredStalled();
+        bool gripperMeasuredReachedGoal();
+
         bool run(); 
 
         /* setters */
@@ -294,6 +309,7 @@ class m2Iface: public rclcpp::Node
         bool pSceneMonitorInit  = false;
         bool nodeInit           = false; 
         bool recivCmd           = false; 
+        bool recivTopicPoseCmd  = false;
         bool recivTraj          = false; 
         bool recivGripperCmd    = false;
         bool servoEntered       = false;
@@ -314,7 +330,10 @@ class m2Iface: public rclcpp::Node
         std::vector<double> m_currJointPosition;
         geometry_msgs::msg::PoseStamped m_currPoseState; 
         std::vector<geometry_msgs::msg::Pose> m_cartesianWaypoints; 
-        
+        geometry_msgs::msg::PoseStamped m_topicPoseCmd;
+        std::mutex pose_topic_mutex_;
+        std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+        std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
         moveit::planning_interface::MoveGroupInterfacePtr m_moveGroupPtr; 
         moveit::core::RobotStatePtr m_robotStatePtr;  

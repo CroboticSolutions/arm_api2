@@ -104,6 +104,7 @@
 // For starters just include robotiq_gripper
 // TODO: Think of a way to include different gripper based on the gripper type
 #include "arm_api2/grippers/gripper.hpp"
+#include "arm_api2/grippers/piper_joint_gripper.hpp"
 #include "arm_api2/grippers/robotiq_gripper.hpp"
 
 #define stringify( name ) #name
@@ -137,8 +138,9 @@ class m2SimpleIface: public rclcpp::Node
         /** Set while a trajectory is being executed (async: worker thread; sync: same thread). */
         std::atomic_bool trajectory_executing_{ false };
 
-        /* gripper */
-        RobotiqGripper gripper; 
+        /* gripper: Robotiq (action) OR Piper JointState shim */
+        RobotiqGripper gripper_;
+        std::unique_ptr<PiperJointGripper> piper_joint_gripper_; 
 
         /* arm_definition */ 
         std::string PLANNING_GROUP; 
@@ -246,6 +248,13 @@ class m2SimpleIface: public rclcpp::Node
                                const std::vector<std::string>& deactivate);
         bool enterServoControllerMode();
         bool leaveServoControllerMode();
+
+        /** Robotiq-compatible normalized stroke (0 open … 0.8 closed); Piper maps to metres. */
+        bool sendGripperCmd(double normalized_position_robotiq, double max_effort = 140.0);
+        float gripperMeasuredPositionNormalized();
+        float gripperMeasuredEffort();
+        bool gripperMeasuredStalled();
+        bool gripperMeasuredReachedGoal();
 
         /* funcs */
         /** @return true if a new execution was started or completed (sync); false if busy or plan failed. */

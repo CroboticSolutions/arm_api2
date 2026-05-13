@@ -126,15 +126,20 @@ def launch_setup(context, *args, **kwargs):
     if arg_use_gdb.lower() == 'true':
         prefix_cmd =['xterm -e gdb -ex run --args']
 
+    # Empty robot_ns means root; remapping /tf -> //tf is invalid for rcl.
+    tf_remappings = []
+    if arg_robot_ns:
+        tf_remappings = [
+            ('/tf', f'/{arg_robot_ns}/tf'),
+            ('/tf_static', f'/{arg_robot_ns}/tf_static'),
+        ]
+
     launch_arm_api2 = Node(
         package='arm_api2',
         executable='moveit2_simple_iface',
         namespace=arg_robot_ns,
         parameters=node_params,
-        remappings=[
-            ('/tf', f'/{arg_robot_ns}/tf'),
-            ('/tf_static', f'/{arg_robot_ns}/tf_static'),
-        ],
+        remappings=tf_remappings,
         prefix=prefix_cmd,
         output='screen'
     )
