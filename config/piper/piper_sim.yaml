@@ -21,6 +21,8 @@ robot:
   piper_joint_gripper_cmd_topic: /joint_states
   piper_gripper_open_m: 0.0
   piper_gripper_close_m: 0.035
+  # Real Piper often reports commanded stroke opposite to Robotiq 0=open / 0.8=closed; set false if Open/Close match already.
+  piper_gripper_invert_normalized: true
 topic:
   sub:
     cmd_pose:

@@ -33,6 +33,13 @@ double map_stroke_to_robotiq(double stroke_m, double open_m, double close_m)
   return t * 0.8;
 }
 
+/** Reflect Robotiq-normalized axis used by arm_api2 open/close services (domain [0, 0.8]). */
+double invert_robotiq_normalized(double normalized_robotiq)
+{
+  const double c = std::clamp(normalized_robotiq, 0.0, 0.8);
+  return 0.8 - c;
+}
+
 double effort_to_piper_effort_axis(double robotiq_effort_nominal_max_140ish)
 {
   // Piper driver clips effort[6] to [0.5, 3] (N·m scale in bridge trajectory).
@@ -143,13 +150,15 @@ void PiperJointGripper::configure(const PiperJointGripperConfig & config)
 
   RCLCPP_INFO(
     node_->get_logger(),
-    "PiperJointGripper configured: mode=%s state=%s cmd=%s stroke_open=%f m stroke_close=%f m",
+    "PiperJointGripper configured: mode=%s state=%s cmd=%s stroke_open=%f m stroke_close=%f m "
+    "invert_robotiq_normalized=%s",
     (cfg_.command_mode == PiperGripperCommandMode::JointState) ? "joint_state" : "follow_joint_trajectory",
     cfg_.state_topic.c_str(),
     (cfg_.command_mode == PiperGripperCommandMode::JointState) ? cfg_.cmd_topic.c_str()
                                                                  : cfg_.trajectory_action.c_str(),
     cfg_.open_stroke_m,
-    cfg_.close_stroke_m);
+    cfg_.close_stroke_m,
+    cfg_.invert_robotiq_normalized ? "true" : "false");
 }
 
 void PiperJointGripper::joint_state_cb(const sensor_msgs::msg::JointState::SharedPtr msg)
@@ -315,12 +324,15 @@ bool PiperJointGripper::send_gripper_command(double normalized_position_robotiq,
     }
   }
 
-  const double stroke =
-    map_robotiq_to_stroke(normalized_position_robotiq, cfg_.open_stroke_m, cfg_.close_stroke_m);
+  double n_cmd = normalized_position_robotiq;
+  if (cfg_.invert_robotiq_normalized) {
+    n_cmd = invert_robotiq_normalized(normalized_position_robotiq);
+  }
+  const double stroke = map_robotiq_to_stroke(n_cmd, cfg_.open_stroke_m, cfg_.close_stroke_m);
 
   bool ok = false;
   if (cfg_.command_mode == PiperGripperCommandMode::JointState) {
-    ok = send_gripper_command_joint_state(normalized_position_robotiq, max_effort);
+    ok = send_gripper_command_joint_state(n_cmd, max_effort);
   } else {
     ok = send_gripper_command_trajectory(stroke, max_effort);
   }
@@ -342,8 +354,12 @@ float PiperJointGripper::get_position() const
   }
   const float stroke =
     static_cast<float>(last_state_.position[idx]);
-  return static_cast<float>(
-    map_stroke_to_robotiq(static_cast<double>(stroke), cfg_.open_stroke_m, cfg_.close_stroke_m));
+  double r =
+    map_stroke_to_robotiq(static_cast<double>(stroke), cfg_.open_stroke_m, cfg_.close_stroke_m);
+  if (cfg_.invert_robotiq_normalized) {
+    r = invert_robotiq_normalized(r);
+  }
+  return static_cast<float>(r);
 }
 
 float PiperJointGripper::get_effort() const

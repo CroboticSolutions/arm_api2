@@ -44,6 +44,12 @@ struct PiperJointGripperConfig
   /// Must match MoveIt `gripper_controller` joints (meters stroke for Piper bridge).
   std::string trajectory_joint_name{"joint7"};
   double trajectory_time_from_start_sec{0.2};
+  /**
+   * When true, reflect Robotiq-normalized commands (0≈open, 0.8≈closed) before mapping to joint stroke,
+   * and reflect stroke→normalized on feedback. Use when hardware/driver stroke grows in the opposite
+   * direction so GUI Open/Close match physical motion.
+   */
+  bool invert_robotiq_normalized{false};
 };
 
 /**

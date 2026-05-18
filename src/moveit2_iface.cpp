@@ -127,6 +127,9 @@ m2Iface::m2Iface(const rclcpp::NodeOptions &options)
         if (r["piper_gripper_trajectory_time_sec"]) {
           pcfg.trajectory_time_from_start_sec = r["piper_gripper_trajectory_time_sec"].as<double>();
         }
+        if (r["piper_gripper_invert_normalized"]) {
+          pcfg.invert_robotiq_normalized = r["piper_gripper_invert_normalized"].as<bool>();
+        }
         piper_joint_gripper_ = std::make_unique<PiperJointGripper>(node_);
         piper_joint_gripper_->configure(pcfg);
       } else {

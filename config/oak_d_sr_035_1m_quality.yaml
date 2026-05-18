@@ -1,0 +1,64 @@
+/oak:
+  ros__parameters:
+    camera:
+      i_nn_type: none
+      i_pipeline_type: Depth
+
+    pipeline_gen:
+      i_enable_sync: true
+
+    right:
+      i_publish_topic: true
+      i_synced: true
+
+    stereo:
+      i_synced: true
+
+      # OAK-D SR grasping/tabletop range (0.35-1.0 m): prioritize close-range
+      # fill-rate. Extended disparity and subpixel are incompatible in
+      # depthai_ros_driver, and the SR's short baseline benefits from extended
+      # disparity in this workspace.
+      i_extended_disp: true
+      i_subpixel: false
+      i_subpixel_fractional_bits: 3
+
+      # LR check rejects stereo mismatches that otherwise appear as long
+      # floating sheets around occlusion edges.
+      i_lr_check: true
+      i_lrc_threshold: 10
+      # DepthAI confidence is inverted: higher threshold keeps more pixels.
+      # 245 filled holes but kept too many false surfaces. Lower values reject
+      # more uncertain matches, reducing fake sheets at the cost of small gaps.
+      i_stereo_conf_threshold: 150
+
+      i_enable_speckle_filter: true
+      # This full-resolution filtered OAK-D SR pipeline reports enough
+      # device memory for speckle range 12.
+      i_speckle_filter_speckle_range: 12
+
+      i_enable_spatial_filter: true
+      i_spatial_filter_hole_filling_radius: 1
+      i_spatial_filter_alpha: 0.7
+      i_spatial_filter_delta: 20
+      i_spatial_filter_num_iterations: 1
+
+      i_enable_temporal_filter: true
+      i_temporal_filter_alpha: 0.7
+      i_temporal_filter_delta: 20
+      i_temporal_filter_persistency: PERSISTENCY_OFF
+
+      # Keep a little margin around the desired 0.35-1.0 m workspace so
+      # valid object edges are not clipped by normal stereo noise.
+      i_enable_threshold_filter: true
+      i_threshold_filter_min_range: 250
+      i_threshold_filter_max_range: 1300
+
+      # Keep decimation off for the RGB-colored point cloud path:
+      # PointCloudXyzrgbNode expects depth and RGB/camera_info geometry to match.
+      i_enable_decimation_filter: false
+      i_decimation_filter_decimation_mode: NON_ZERO_MEDIAN
+      i_decimation_filter_decimation_factor: 1
+
+      i_enable_brightness_filter: false
+      i_brightness_filter_min_brightness: 5
+      i_brightness_filter_max_brightness: 250
