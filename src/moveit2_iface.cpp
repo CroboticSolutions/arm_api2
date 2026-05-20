@@ -943,6 +943,93 @@ void m2Iface::planAndExecPose()
     }
 }
 
+void m2Iface::planAndExecTopicPose()
+{
+    geometry_msgs::msg::PoseStamped goalPose;
+    {
+        std::lock_guard<std::mutex> lock(pose_topic_mutex_);
+        goalPose = m_topicPoseCmd;
+    }
+
+    RCLCPP_INFO_STREAM(this->get_logger(), "Planning to Cartesian Pose from cmd_pose topic!");
+    RCLCPP_INFO_STREAM(this->get_logger(), "Current pose is: " << m_currPoseState.pose.position.x << " " << m_currPoseState.pose.position.y << " " << m_currPoseState.pose.position.z);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Target pose is: " << goalPose.pose.position.x << " " << goalPose.pose.position.y << " " << goalPose.pose.position.z);
+
+    m_moveGroupPtr->setPoseTarget(goalPose);
+    m_moveGroupPtr->setMaxVelocityScalingFactor(max_vel_scaling_factor);
+    m_moveGroupPtr->setMaxAccelerationScalingFactor(max_acc_scaling_factor);
+
+    moveit::planning_interface::MoveGroupInterface::Plan plan;
+    const bool success = planTopicPoseFast(plan);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Planning to topic pose goal: " << (success ? "SUCCEEDED" : "FAILED"));
+
+    if (success && planOnly) {
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        RCLCPP_INFO_STREAM(this->get_logger(), "                   Plan only mode!");
+        RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
+        return;
+    }
+    if (success) {
+        auto errorcode = m_moveGroupPtr->execute(plan);
+        if (errorcode == moveit::core::MoveItErrorCode::SUCCESS) {
+            RCLCPP_INFO_STREAM(this->get_logger(), "Execution succeeded!");
+        } else {
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Execution failed with error code, time stamps:");
+            printTimestamps(plan.trajectory);
+        }
+    } else {
+        RCLCPP_ERROR(this->get_logger(), "Planning failed!");
+    }
+}
+
+bool m2Iface::planTopicPoseFast(moveit::planning_interface::MoveGroupInterface::Plan &plan)
+{
+    const double original_planning_time = m_moveGroupPtr->getPlanningTime();
+    const auto restore_planning_time = [this, original_planning_time]() {
+        m_moveGroupPtr->setPlanningTime(original_planning_time);
+    };
+
+    struct PlannerAttempt {
+        const char *pipeline;
+        const char *planner;
+        double planning_time;
+    };
+    const std::vector<PlannerAttempt> attempts = {
+        {"pilz_industrial_motion_planner", "LIN", 0.25},
+        {"ompl", "EST", 0.75},
+    };
+
+    for (size_t i = 0; i < attempts.size(); ++i) {
+        const auto &attempt = attempts[i];
+        m_moveGroupPtr->setPlanningPipelineId(attempt.pipeline);
+        m_moveGroupPtr->setPlannerId(attempt.planner);
+        m_moveGroupPtr->setPlanningTime(attempt.planning_time);
+
+        moveit::planning_interface::MoveGroupInterface::Plan candidate;
+        const bool success = static_cast<bool>(m_moveGroupPtr->plan(candidate));
+        if (success) {
+            RCLCPP_INFO(
+                this->get_logger(),
+                "%s found GUI topic pose plan %zu with %d points",
+                attempt.planner,
+                i,
+                int(candidate.trajectory.joint_trajectory.points.size()));
+            plan = candidate;
+            restore_planning_time();
+            return true;
+        }
+        RCLCPP_INFO(
+            this->get_logger(),
+            "%s failed GUI topic pose plan %zu",
+            attempt.planner,
+            i);
+    }
+
+    restore_planning_time();
+    RCLCPP_WARN(this->get_logger(), "GUI topic pose planning failed fast; skipping queued nudge.");
+    return false;
+}
+
 void m2Iface::planAndExecPosePath()
 {   
     const auto feedback = std::make_shared<arm_api2_msgs::action::MoveCartesianPath::Feedback>();
@@ -1148,6 +1235,11 @@ bool m2Iface::run()
             recivCmd = false; 
         } 
 
+        if (recivTopicPoseCmd) {
+            planAndExecTopicPose();
+            recivTopicPoseCmd = false;
+        }
+
         if (recivTraj){
             planAndExecPosePath();
             recivTraj = false; 
@@ -1259,6 +1351,3 @@ bool m2Iface::gripperMeasuredReachedGoal()
   }
   return gripper_.reached_goal();
 }
-
-
-

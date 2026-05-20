@@ -278,10 +278,12 @@ class m2Iface: public rclcpp::Node
         /* funcs */
         void planAndExecJoint();
         void planAndExecPose();
+        void planAndExecTopicPose();
         void planAndExecPosePath();
         void printTimestamps(const moveit_msgs::msg::RobotTrajectory &trajectory);
         void addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory &trajectory);
         bool planWithPlanner(moveit::planning_interface::MoveGroupInterface::Plan &plan, bool eagerExecution = true);
+        bool planTopicPoseFast(moveit::planning_interface::MoveGroupInterface::Plan &plan);
 
         // Simple state machine 
         enum state{
