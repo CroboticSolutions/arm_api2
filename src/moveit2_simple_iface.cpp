@@ -1141,6 +1141,14 @@ bool m2SimpleIface::planExecCartesian(bool async=false)
                 cartesianWaypoints, eefStep, jumpThr, trajectory);
         }
 
+        if (fraction < 0.999) {
+            RCLCPP_WARN(
+                this->get_logger(),
+                "planExecCartesian: refusing partial Cartesian path (fraction=%.3f); likely collision or IK failure",
+                fraction);
+            return false;
+        }
+
         /* Compute stays under lock; mark execution in-flight before unlocking so no other callback can
          * change pipeline/constraints between compute and execute. Use synchronous execute() for Cartesian:
          * overlapping asyncExecute with OMPL joint motion + Pilz has reproduced SIGSEGV on Humble. */
@@ -1239,8 +1247,11 @@ bool m2SimpleIface::execCartesian(bool async=false)
         const double fraction =
             m_moveGroupPtr->computeCartesianPath(waypoints_copy, eefStep, jumpThr, trajectory);
 
-        if (fraction <= 0.0) {
-            RCLCPP_WARN(this->get_logger(), "execCartesian: computeCartesianPath failed (fraction=%.2f)", fraction);
+        if (fraction < 0.999) {
+            RCLCPP_WARN(
+                this->get_logger(),
+                "execCartesian: refusing partial Cartesian path (fraction=%.3f); likely collision or IK failure",
+                fraction);
             return false;
         }
         const auto& jt = trajectory.joint_trajectory;
@@ -1417,6 +1428,5 @@ bool m2SimpleIface::run()
 
     return true;     
 }
-
 
 
