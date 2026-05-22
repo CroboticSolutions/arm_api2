@@ -47,6 +47,7 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 //* yaml params
 #include <yaml-cpp/yaml.h>
@@ -76,6 +77,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "arm_api2_msgs/msg/cartesian_waypoints.hpp"
 #include "moveit_msgs/msg/collision_object.hpp"
+#include "moveit_msgs/msg/attached_collision_object.hpp"
 #include "shape_msgs/msg/solid_primitive.hpp"
 
 //* srvs
@@ -128,6 +130,7 @@ class m2SimpleIface: public rclcpp::Node
         std::mutex cart_waypoints_mutex_;
         std::mutex robot_state_mutex_;
         std::mutex move_group_mutex_;
+        std::mutex attached_objects_mutex_;
 
         /* gripper */
         RobotiqGripper gripper; 
@@ -222,6 +225,15 @@ class m2SimpleIface: public rclcpp::Node
 
         /** Copy RobotState fed by joint_state_cb — avoids blocking getCurrentState (starves SG executor). */
         moveit::core::RobotStatePtr snapshotRobotStateFromJoints();
+
+        /** Validate planned joint trajectory, including interpolated states, against current planning scene. */
+        bool validateTrajectoryCollisionFree(const moveit::core::RobotState& start_state,
+                                             const moveit_msgs::msg::RobotTrajectory& trajectory,
+                                             const char* label);
+        bool processAttachedObjectLocally(const moveit_msgs::msg::AttachedCollisionObject& attached_object);
+        void cacheAttachedObject(const moveit_msgs::msg::AttachedCollisionObject& attached_object, bool detach);
+
+        std::unordered_map<std::string, moveit_msgs::msg::AttachedCollisionObject> cached_attached_objects_;
 
         /* getters */
         void getArmState();

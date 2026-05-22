@@ -42,6 +42,7 @@
 #include "arm_api2/moveit2_simple_iface.hpp"
 
 #include <atomic>
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <future>
@@ -610,6 +611,7 @@ void m2SimpleIface::add_grasped_object_cb(const std::shared_ptr<arm_api2_msgs::s
     const bool detach = req->grasped_object.operation == moveit_msgs::msg::CollisionObject::REMOVE;
 
     const bool applied = m_planningSceneInterface->applyAttachedCollisionObject(attached_object);
+    const bool local_applied = processAttachedObjectLocally(attached_object);
 
     /* removeCollisionObjects() SIGSEGVs here on Humble when no world entry exists. applyCollisionObjects
      * REMOVE is the supported diff path to drop a lingering world primitive (RViz green) after detach. */
@@ -630,15 +632,67 @@ void m2SimpleIface::add_grasped_object_cb(const std::shared_ptr<arm_api2_msgs::s
         }
     }
 
-    res->success = detach ? true : applied;
+    if (applied || detach) {
+        cacheAttachedObject(attached_object, detach);
+    }
+
+    res->success = detach ? true : (applied && local_applied);
     if (!res->success && !detach) {
-        RCLCPP_WARN(this->get_logger(), "applyAttachedCollisionObject (ADD) failed for id '%s'",
-                    req->grasped_object.id.c_str());
+        RCLCPP_WARN(this->get_logger(),
+                    "applyAttachedCollisionObject (ADD) failed for id '%s' (move_group=%s local=%s)",
+                    req->grasped_object.id.c_str(), applied ? "ok" : "failed",
+                    local_applied ? "ok" : "failed");
     } else if (detach) {
-        RCLCPP_INFO(this->get_logger(), "Detached collision id '%s' (attached apply=%s)",
-                    req->grasped_object.id.c_str(), applied ? "ok" : "no-op");
+        RCLCPP_INFO(this->get_logger(), "Detached collision id '%s' (attached apply=%s local=%s)",
+                    req->grasped_object.id.c_str(), applied ? "ok" : "no-op",
+                    local_applied ? "ok" : "no-op");
     } else {
-        RCLCPP_INFO(this->get_logger(), "Attached collision object id '%s'", req->grasped_object.id.c_str());
+        RCLCPP_INFO(this->get_logger(), "Attached collision object id '%s' (move_group+local scene)",
+                    req->grasped_object.id.c_str());
+    }
+}
+
+bool m2SimpleIface::processAttachedObjectLocally(
+    const moveit_msgs::msg::AttachedCollisionObject& attached_object)
+{
+    if (!m_pSceneMonitorPtr || !m_pSceneMonitorPtr->getPlanningScene()) {
+        RCLCPP_WARN(this->get_logger(),
+                    "processAttachedObjectLocally: planning scene monitor unavailable for id '%s'",
+                    attached_object.object.id.c_str());
+        return false;
+    }
+    try {
+        planning_scene_monitor::LockedPlanningSceneRW scene(m_pSceneMonitorPtr);
+        if (!scene) {
+            return false;
+        }
+        const bool ok = scene->processAttachedCollisionObjectMsg(attached_object);
+        if (!ok) {
+            RCLCPP_WARN(this->get_logger(),
+                        "Local planning scene rejected attached object id '%s'",
+                        attached_object.object.id.c_str());
+        }
+        return ok;
+    } catch (const std::exception& e) {
+        RCLCPP_WARN(this->get_logger(), "processAttachedObjectLocally id '%s' failed: %s",
+                    attached_object.object.id.c_str(), e.what());
+        return false;
+    }
+}
+
+void m2SimpleIface::cacheAttachedObject(
+    const moveit_msgs::msg::AttachedCollisionObject& attached_object,
+    bool detach)
+{
+    const std::string& id = attached_object.object.id;
+    if (id.empty()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(attached_objects_mutex_);
+    if (detach) {
+        cached_attached_objects_.erase(id);
+    } else {
+        cached_attached_objects_[id] = attached_object;
     }
 }
 
@@ -825,11 +879,157 @@ bool m2SimpleIface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std
 
 moveit::core::RobotStatePtr m2SimpleIface::snapshotRobotStateFromJoints()
 {
-    std::lock_guard<std::mutex> lock(robot_state_mutex_);
-    if (!m_robotStatePtr || !kinematic_model) {
-        return nullptr;
+    moveit::core::RobotStatePtr joint_snapshot;
+    {
+        std::lock_guard<std::mutex> lock(robot_state_mutex_);
+        if (!m_robotStatePtr || !kinematic_model) {
+            return nullptr;
+        }
+        joint_snapshot = std::make_shared<moveit::core::RobotState>(*m_robotStatePtr);
     }
-    return std::make_shared<moveit::core::RobotState>(*m_robotStatePtr);
+
+    /*
+     * Keep the latest joint positions, but preserve attached bodies from the planning scene.
+     *
+     * A plain copy of m_robotStatePtr only contains joint_state_cb positions. It does not include
+     * AttachedCollisionObject updates applied through add_grasped_object_cb. Passing that stripped
+     * state to MoveGroupInterface::setStartState() makes OMPL plan as if the carried board/stud is
+     * not attached, so joint-space moves can legally route the payload through holder pegs/racks.
+     */
+    if (m_pSceneMonitorPtr && m_pSceneMonitorPtr->getPlanningScene()) {
+        try {
+            planning_scene_monitor::LockedPlanningSceneRW scene(m_pSceneMonitorPtr);
+            if (scene) {
+                size_t cached_attached_count = 0;
+                {
+                    std::lock_guard<std::mutex> attached_lock(attached_objects_mutex_);
+                    cached_attached_count = cached_attached_objects_.size();
+                    for (const auto& kv : cached_attached_objects_) {
+                        scene->processAttachedCollisionObjectMsg(kv.second);
+                    }
+                }
+                auto scene_state =
+                    std::make_shared<moveit::core::RobotState>(scene->getCurrentState());
+                const std::vector<std::string>& vars = joint_snapshot->getVariableNames();
+                for (const auto& var : vars) {
+                    scene_state->setVariablePosition(var, joint_snapshot->getVariablePosition(var));
+                }
+                scene_state->update();
+                if (cached_attached_count > 0) {
+                    RCLCPP_INFO_THROTTLE(
+                        this->get_logger(), *this->get_clock(), 5000,
+                        "snapshotRobotStateFromJoints: start state includes %zu cached attached object(s)",
+                        cached_attached_count);
+                }
+                return scene_state;
+            }
+        } catch (const std::exception& e) {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                                 "snapshotRobotStateFromJoints: planning scene state merge failed (%s); "
+                                 "using joint-only state",
+                                 e.what());
+        }
+    }
+
+    joint_snapshot->update();
+    return joint_snapshot;
+}
+
+bool m2SimpleIface::validateTrajectoryCollisionFree(
+    const moveit::core::RobotState& start_state,
+    const moveit_msgs::msg::RobotTrajectory& trajectory,
+    const char* label)
+{
+    if (!m_pSceneMonitorPtr || !m_pSceneMonitorPtr->getPlanningScene()) {
+        RCLCPP_ERROR(this->get_logger(),
+                     "%s: cannot validate trajectory; planning scene monitor unavailable",
+                     label);
+        return false;
+    }
+
+    const auto& jt = trajectory.joint_trajectory;
+    if (jt.joint_names.empty() || jt.points.empty()) {
+        RCLCPP_WARN(this->get_logger(), "%s: empty joint trajectory during collision validation", label);
+        return false;
+    }
+
+    planning_scene_monitor::LockedPlanningSceneRO scene(m_pSceneMonitorPtr);
+    if (!scene) {
+        RCLCPP_ERROR(this->get_logger(), "%s: planning scene lock failed during validation", label);
+        return false;
+    }
+
+    constexpr double MAX_JOINT_STEP_RAD = 0.01;
+    constexpr double MAX_PRISMATIC_STEP_M = 0.005;
+
+    moveit::core::RobotState check_state(start_state);
+    check_state.update();
+
+    if (scene->isStateColliding(check_state, PLANNING_GROUP, false)) {
+        RCLCPP_ERROR(this->get_logger(),
+                     "%s: refusing execution; start state is already in collision "
+                     "(attached payload/static scene included)",
+                     label);
+        return false;
+    }
+
+    std::vector<double> prev;
+    prev.reserve(jt.joint_names.size());
+    try {
+        for (const auto& joint_name : jt.joint_names) {
+            prev.push_back(start_state.getVariablePosition(joint_name));
+        }
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(this->get_logger(), "%s: failed reading start joint positions: %s", label, e.what());
+        return false;
+    }
+
+    for (size_t point_idx = 0; point_idx < jt.points.size(); ++point_idx) {
+        const auto& point = jt.points[point_idx];
+        if (point.positions.size() != jt.joint_names.size()) {
+            RCLCPP_WARN(this->get_logger(),
+                        "%s: trajectory point %zu has %zu positions for %zu joints",
+                        label, point_idx, point.positions.size(), jt.joint_names.size());
+            return false;
+        }
+
+        size_t steps = 1;
+        for (size_t j = 0; j < jt.joint_names.size(); ++j) {
+            const double delta = std::abs(point.positions[j] - prev[j]);
+            const double step = jt.joint_names[j].find("finger") != std::string::npos
+                                    ? MAX_PRISMATIC_STEP_M
+                                    : MAX_JOINT_STEP_RAD;
+            steps = std::max(steps, static_cast<size_t>(std::ceil(delta / step)));
+        }
+
+        std::vector<double> interp(jt.joint_names.size(), 0.0);
+        for (size_t s = 1; s <= steps; ++s) {
+            const double t = static_cast<double>(s) / static_cast<double>(steps);
+            for (size_t j = 0; j < jt.joint_names.size(); ++j) {
+                interp[j] = prev[j] + (point.positions[j] - prev[j]) * t;
+            }
+            try {
+                check_state.setVariablePositions(jt.joint_names, interp);
+                check_state.update();
+            } catch (const std::exception& e) {
+                RCLCPP_ERROR(this->get_logger(), "%s: failed setting interpolated state: %s",
+                             label, e.what());
+                return false;
+            }
+
+            if (scene->isStateColliding(check_state, PLANNING_GROUP, false)) {
+                RCLCPP_ERROR(this->get_logger(),
+                             "%s: refusing execution; collision at trajectory point %zu/%zu "
+                             "interpolation %zu/%zu",
+                             label, point_idx + 1, jt.points.size(), s, steps);
+                return false;
+            }
+        }
+
+        prev.assign(point.positions.begin(), point.positions.end());
+    }
+
+    return true;
 }
 
 bool m2SimpleIface::waitForMoveGroupExecutionIdle(const char* caller_reason, double timeout_sec)
@@ -1041,6 +1241,10 @@ bool m2SimpleIface::execPlan(bool async, const geometry_msgs::msg::Pose& goal_po
             if (jt.points.empty() || jt.joint_names.empty() ||
                 jt.points.back().positions.size() != jt.joint_names.size()) {
                 RCLCPP_WARN(this->get_logger(), "execPlan: plan has invalid joint trajectory, skipping execute");
+                success = false;
+            } else if (!validateTrajectoryCollisionFree(*start_state, *traj_to_run, "execPlan")) {
+                RCLCPP_ERROR(this->get_logger(),
+                             "execPlan: planned trajectory failed collision validation; skipping execute");
                 success = false;
             } else {
                 execute_in_flight_.store(true);
@@ -1428,5 +1632,3 @@ bool m2SimpleIface::run()
 
     return true;     
 }
-
-
