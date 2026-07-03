@@ -146,7 +146,7 @@ def launch_setup(context, *args, **kwargs):
 
     launch_nodes_.append(launch_arm_api2)
 
-    if arg_launch_joy: 
+    if str(arg_launch_joy).lower() == "true":
 
         # https://index.ros.org/p/joy/ --> joy node as joystick (Create subscriber that takes cmd_vel)
         # Example of demo joint_jog

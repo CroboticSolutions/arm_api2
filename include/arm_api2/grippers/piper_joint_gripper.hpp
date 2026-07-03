@@ -43,6 +43,24 @@ struct PiperJointGripperConfig
   std::string trajectory_action{"/gripper_controller/follow_joint_trajectory"};
   /// Must match MoveIt `gripper_controller` joints (meters stroke for Piper bridge).
   std::string trajectory_joint_name{"joint7"};
+  /**
+   * Optional mirror finger joint (e.g. Piper sim `joint8`). When the
+   * `gripper_controller` owns two prismatic finger joints and rejects
+   * partial-joint goals (`allow_partial_joints_goal:=false`, the ros2_control
+   * default), a joint7-only goal is refused and the gripper never moves. Set
+   * this to the second joint so both fingers are commanded together; its
+   * position is `trajectory_mirror_sign * stroke` (Piper: joint8 = -joint7).
+   * Empty => single-joint goal (unchanged behaviour).
+   */
+  std::string trajectory_mirror_joint_name{};
+  double trajectory_mirror_sign{-1.0};
+  /**
+   * Optional second FollowJointTrajectory action for the mirror finger when sim
+   * splits joint7/joint8 across gripper_controller + gripper8_controller.
+   * When set, arm_api2 sends joint7 and joint8 goals together on each open/close.
+   */
+  std::string mirror_trajectory_action{};
+  std::string mirror_trajectory_joint_name{"joint8"};
   double trajectory_time_from_start_sec{0.2};
   /**
    * When true, reflect Robotiq-normalized commands (0≈open, 0.8≈closed) before mapping to joint stroke,
@@ -99,6 +117,7 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr state_sub_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr cmd_pub_;
   rclcpp_action::Client<FollowJointTrajectory>::SharedPtr fjt_client_;
+  rclcpp_action::Client<FollowJointTrajectory>::SharedPtr mirror_fjt_client_;
 
   mutable std::mutex state_mtx_;
   sensor_msgs::msg::JointState last_state_;

@@ -1,33 +1,25 @@
+# arm_api2 + FANUC CRX-10iA Gazebo sim (welding torch, no gripper).
+#
+# MoveIt planning group is `manipulator` (base_link -> welding_tcp, see
+# fanuc_gazebo/srdf/crx10ia.srdf). The model/planning frame is `world`
+# (SRDF virtual_joint world -> base_link; the URDF defines a `world` link so
+# robot_state_publisher provides the world->base_link TF).
+#
+# No gripper section: this is a welding cell, so `gripper_action_type` is
+# omitted and arm_api2 skips gripper backend setup (the open/close services
+# still exist as no-ops). Add a gripper block later if an EOAT is fitted.
 robot:
-  arm_name: arm
-  ee_link_name: arm_tcp
+  arm_name: manipulator
+  ee_link_name: welding_tcp
   robot_desc: robot_description
   move_group_ns: ""
   planning_scene: planning_scene
-  planning_frame: base_link
+  planning_frame: world
   num_cart_pts: 20
   joint_states: joint_states
   max_vel_scaling_factor: 0.1
   max_acc_scaling_factor: 0.1
   with_planner: true
-  # Piper + MoveIt: match RViz/piper_moveit_bridge — FollowJointTrajectory on gripper_controller.
-  # Use piper_gripper_command_mode: joint_state only with piper_ctrl_single_node (+ remap joint_ctrl_single).
-  gripper_action_type: piper_joint
-  piper_gripper_command_mode: follow_joint_trajectory
-  piper_gripper_trajectory_action: /gripper_controller/follow_joint_trajectory
-  piper_gripper_trajectory_joint_name: joint7
-  # Gazebo sim: arm_api2 commands joint7 only; piper_gazebo/joint8_ctrl.py
-  # mirrors joint8 from gripper_controller reference, matching AgileX sim.
-  piper_gripper_trajectory_mirror_joint_name: ""
-  piper_gripper_trajectory_mirror_sign: -1.0
-  piper_gripper_mirror_trajectory_action: ""
-  piper_gripper_mirror_trajectory_joint_name: ""
-  piper_gripper_trajectory_time_sec: 0.2
-  piper_joint_gripper_state_topic: /joint_states
-  piper_joint_gripper_cmd_topic: /joint_states
-  piper_gripper_open_m: 0.034
-  piper_gripper_close_m: 0.001
-  piper_gripper_invert_normalized: false
 topic:
   sub:
     cmd_pose:
@@ -73,7 +65,7 @@ srv:
     name: arm/set_eelink
   set_planonly:
     name: arm/set_planonly
-  open_gripper: 
+  open_gripper:
     name: arm/open_gripper
   close_gripper:
     name: arm/close_gripper

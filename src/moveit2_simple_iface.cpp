@@ -126,6 +126,21 @@ m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
         if (r["piper_gripper_trajectory_joint_name"]) {
           pcfg.trajectory_joint_name = r["piper_gripper_trajectory_joint_name"].as<std::string>();
         }
+        if (r["piper_gripper_trajectory_mirror_joint_name"]) {
+          pcfg.trajectory_mirror_joint_name =
+            r["piper_gripper_trajectory_mirror_joint_name"].as<std::string>();
+        }
+        if (r["piper_gripper_trajectory_mirror_sign"]) {
+          pcfg.trajectory_mirror_sign = r["piper_gripper_trajectory_mirror_sign"].as<double>();
+        }
+        if (r["piper_gripper_mirror_trajectory_action"]) {
+          pcfg.mirror_trajectory_action =
+            r["piper_gripper_mirror_trajectory_action"].as<std::string>();
+        }
+        if (r["piper_gripper_mirror_trajectory_joint_name"]) {
+          pcfg.mirror_trajectory_joint_name =
+            r["piper_gripper_mirror_trajectory_joint_name"].as<std::string>();
+        }
         if (r["piper_gripper_trajectory_time_sec"]) {
           pcfg.trajectory_time_from_start_sec = r["piper_gripper_trajectory_time_sec"].as<double>();
         }

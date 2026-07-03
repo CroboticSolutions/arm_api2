@@ -121,6 +121,7 @@ void PiperJointGripper::configure(const PiperJointGripperConfig & config)
   state_sub_.reset();
   cmd_pub_.reset();
   fjt_client_.reset();
+  mirror_fjt_client_.reset();
   have_state_ = false;
 
   rclcpp::QoS cmd_qos{rclcpp::KeepLast{10}};
@@ -141,6 +142,17 @@ void PiperJointGripper::configure(const PiperJointGripperConfig & config)
       node_->get_logger(),
       "PiperJointGripper trajectory client: %s joint=%s",
       resolved.c_str(), cfg_.trajectory_joint_name.c_str());
+    if (!cfg_.mirror_trajectory_action.empty()) {
+      const std::string mirror_resolved = resolve_action_name(cfg_.mirror_trajectory_action);
+      mirror_fjt_client_ =
+        rclcpp_action::create_client<FollowJointTrajectory>(node_, mirror_resolved);
+      RCLCPP_INFO(
+        node_->get_logger(),
+        "PiperJointGripper mirror trajectory client: %s joint=%s sign=%f",
+        mirror_resolved.c_str(),
+        cfg_.mirror_trajectory_joint_name.c_str(),
+        cfg_.trajectory_mirror_sign);
+    }
   }
 
   state_sub_ = node_->create_subscription<sensor_msgs::msg::JointState>(
@@ -195,6 +207,93 @@ bool PiperJointGripper::send_gripper_command_trajectory(double stroke_m, double 
     RCLCPP_ERROR(node_->get_logger(), "PiperJointGripper: trajectory action client not created.");
     return false;
   }
+
+  const bool use_split_mirror =
+    mirror_fjt_client_ && !cfg_.mirror_trajectory_joint_name.empty();
+
+  if (use_split_mirror) {
+    std::atomic<bool> main_done{false};
+    std::atomic<bool> main_success{false};
+    std::atomic<bool> mirror_done{false};
+    std::atomic<bool> mirror_success{false};
+
+    const double mirror_stroke = cfg_.trajectory_mirror_sign * stroke_m;
+
+    FollowJointTrajectory::Goal main_goal;
+    main_goal.trajectory.header.stamp = node_->now();
+    main_goal.trajectory.joint_names = {cfg_.trajectory_joint_name};
+    trajectory_msgs::msg::JointTrajectoryPoint main_pt;
+    main_pt.positions.push_back(stroke_m);
+    const double T = std::max(0.05, cfg_.trajectory_time_from_start_sec);
+    main_pt.time_from_start.sec = static_cast<int32_t>(std::trunc(T));
+    main_pt.time_from_start.nanosec =
+      static_cast<uint32_t>((T - main_pt.time_from_start.sec) * 1e9);
+    main_goal.trajectory.points.push_back(std::move(main_pt));
+
+    FollowJointTrajectory::Goal mirror_goal;
+    mirror_goal.trajectory.header.stamp = node_->now();
+    mirror_goal.trajectory.joint_names = {cfg_.mirror_trajectory_joint_name};
+    trajectory_msgs::msg::JointTrajectoryPoint mirror_pt;
+    mirror_pt.positions.push_back(mirror_stroke);
+    mirror_pt.time_from_start.sec = static_cast<int32_t>(std::trunc(T));
+    mirror_pt.time_from_start.nanosec =
+      static_cast<uint32_t>((T - mirror_pt.time_from_start.sec) * 1e9);
+    mirror_goal.trajectory.points.push_back(std::move(mirror_pt));
+
+    main_done.store(false);
+    main_success.store(false);
+    mirror_done.store(false);
+    mirror_success.store(false);
+
+    auto make_opts = [this](
+                       std::atomic<bool> & done, std::atomic<bool> & success, const char * label) {
+      rclcpp_action::Client<FollowJointTrajectory>::SendGoalOptions opts;
+      opts.goal_response_callback = [this, label, &done, &success](
+                                      std::shared_ptr<GoalHandleFj> goal_handle) {
+        if (!goal_handle) {
+          RCLCPP_ERROR(
+            node_->get_logger(), "PiperJointGripper: %s trajectory goal rejected.", label);
+          success.store(false);
+          done.store(true, std::memory_order_release);
+        }
+      };
+      opts.result_callback = [this, label, &done, &success](
+                               const GoalHandleFj::WrappedResult & result) {
+        switch (result.code) {
+          case rclcpp_action::ResultCode::SUCCEEDED:
+            success.store(true);
+            break;
+          case rclcpp_action::ResultCode::ABORTED:
+            RCLCPP_ERROR(
+              node_->get_logger(), "PiperJointGripper: %s trajectory aborted (%s)", label,
+              result.result ? result.result->error_string.c_str() : "");
+            success.store(false);
+            break;
+          case rclcpp_action::ResultCode::CANCELED:
+            RCLCPP_WARN(node_->get_logger(), "PiperJointGripper: %s trajectory canceled.", label);
+            success.store(false);
+            break;
+          default:
+            success.store(false);
+            break;
+        }
+        done.store(true, std::memory_order_release);
+      };
+      return opts;
+    };
+
+    fjt_client_->async_send_goal(main_goal, make_opts(main_done, main_success, "joint7"));
+    mirror_fjt_client_->async_send_goal(
+      mirror_goal, make_opts(mirror_done, mirror_success, "joint8"));
+
+    while (!main_done.load(std::memory_order_acquire) ||
+           !mirror_done.load(std::memory_order_acquire)) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    return main_success.load() && mirror_success.load();
+  }
+
   if (!fjt_client_->wait_for_action_server(std::chrono::seconds(8))) {
     RCLCPP_ERROR(
       node_->get_logger(),
@@ -208,6 +307,15 @@ bool PiperJointGripper::send_gripper_command_trajectory(double stroke_m, double 
   goal.trajectory.joint_names = {cfg_.trajectory_joint_name};
   trajectory_msgs::msg::JointTrajectoryPoint pt;
   pt.positions.push_back(stroke_m);
+  // Drive the mirror finger in the same goal. `gripper_controller` typically
+  // owns both prismatic joints and refuses partial-joint goals, so a
+  // single-joint goal is rejected outright (gripper never actuates). Appending
+  // the mirror joint (joint8 = -joint7 on Piper) makes the goal complete and
+  // moves both fingers symmetrically.
+  if (!cfg_.trajectory_mirror_joint_name.empty()) {
+    goal.trajectory.joint_names.push_back(cfg_.trajectory_mirror_joint_name);
+    pt.positions.push_back(cfg_.trajectory_mirror_sign * stroke_m);
+  }
   // ros2_joint_trajectory_controller rejects goals whose points include `effort` when
   // it does not use effort interpolation (typical Piper sim + ros2_control). Piper’s
   // hardware bridge defaults effort when omitted.
