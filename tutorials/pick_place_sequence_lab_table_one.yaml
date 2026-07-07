@@ -6,6 +6,11 @@
 robot_namespace: ur1
 planning_frame: world
 
+# Pilz PTP is a deterministic joint-interpolated planner (no random sampling like OMPL's
+# RRTConnect), so every JOINT_TRAJ_CTL move takes the same path every run instead of
+# occasionally contorting through an arbitrary IK/joint solution.
+default_planner: pilz_PTP
+
 convergence:
   position_tolerance_m: 0.012
   orientation_tolerance_rad: 0.08
@@ -99,6 +104,7 @@ steps:
     change_state: JOINT_TRAJ_CTL
 
   - name: approach_stack_blue
+    wait_timeout_sec: 240.0
     pose:
       position: {x: 0.04671, y: 0.5512, z: 1.50}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
@@ -148,6 +154,7 @@ steps:
     change_state: JOINT_TRAJ_CTL
 
   - name: approach_stack_yellow
+    wait_timeout_sec: 240.0
     pose:
       position: {x: 0.04671, y: 0.5512, z: 1.56}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
