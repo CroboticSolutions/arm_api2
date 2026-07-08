@@ -1,0 +1,84 @@
+robot:
+  arm_name: arm
+  ee_link_name: arm_tcp
+  robot_desc: robot_description
+  move_group_ns: ""
+  planning_scene: planning_scene
+  planning_frame: base_link
+  num_cart_pts: 20
+  joint_states: joint_states
+  max_vel_scaling_factor: 0.08
+  max_acc_scaling_factor: 0.08
+  with_planner: true
+  gripper_action_type: piper_joint
+  piper_gripper_command_mode: follow_joint_trajectory
+  piper_gripper_trajectory_action: /gripper_controller/follow_joint_trajectory
+  piper_gripper_trajectory_joint_name: joint7
+  piper_gripper_trajectory_mirror_joint_name: ""
+  piper_gripper_trajectory_mirror_sign: -1.0
+  piper_gripper_mirror_trajectory_action: ""
+  piper_gripper_mirror_trajectory_joint_name: ""
+  piper_gripper_trajectory_time_sec: 0.5
+  piper_joint_gripper_state_topic: /joint_states
+  piper_joint_gripper_cmd_topic: /joint_states
+  piper_gripper_open_m: 0.034
+  piper_gripper_close_m: 0.001
+  piper_gripper_invert_normalized: false
+topic:
+  sub:
+    cmd_pose:
+      name: arm/cmd/pose
+      queue: 1
+    cmd_traj:
+      name: arm/cmd/traj
+      queue: 1
+    cmd_tool_orientation:
+      name: tool/cmd/orient
+      queue: 1
+    cmd_delta_pose:
+      name: arm/cmd/delta_pose
+      queue: 1
+    joint_states:
+      name: joint_states
+      queue: 1
+  pub:
+    display_trajectory:
+      name: arm/display_path
+      queue: 1
+    current_pose:
+      name: arm/state/current_pose
+      queue: 1
+    current_robot_state:
+      name: arm/state/ctl_state
+      queue: 1
+    gripper_state:
+      name: arm/state/gripper_state
+      queue: 1
+srv:
+  disable_collision:
+    name: /move_group/disable_collision
+  add_collision:
+    name: /move_group/add_collision
+  change_robot_state:
+    name: arm/change_state
+  set_vel_acc:
+    name: arm/set_vel_acc
+  set_planner:
+    name: arm/set_planner
+  set_eelink:
+    name: arm/set_eelink
+  set_planonly:
+    name: arm/set_planonly
+  open_gripper:
+    name: arm/open_gripper
+  close_gripper:
+    name: arm/close_gripper
+action:
+  move_to_pose:
+    name: arm/move_to_pose
+  move_to_joint:
+    name: arm/move_to_joint
+  move_to_pose_path:
+    name: arm/move_to_pose_path
+  gripper_control:
+    name: arm/gripper_control

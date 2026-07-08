@@ -70,6 +70,7 @@
 #include <moveit/robot_model_loader/robot_model_loader.hpp>
 #include <moveit/robot_model/robot_model.hpp>
 #include <moveit/robot_state/robot_state.hpp>
+#include <moveit/robot_state/cartesian_interpolator.hpp>
 #include <moveit/planning_interface/planning_interface.hpp>
 #include <pluginlib/class_loader.hpp>
 
@@ -92,6 +93,7 @@
 #include "arm_api2_msgs/srv/set_vel_acc.hpp"
 #include "arm_api2_msgs/srv/set_string_param.hpp"
 #include "arm_api2_msgs/srv/add_collision_object.hpp"
+#include "arm_api2_msgs/srv/check_cartesian_path.hpp"
 #include "arm_api2_msgs/srv/check_reachability.hpp"
 #include "controller_manager_msgs/srv/configure_controller.hpp"
 #include "controller_manager_msgs/srv/load_controller.hpp"
@@ -200,6 +202,7 @@ class m2SimpleIface: public rclcpp::Node
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr                       close_gripper_srv_;
         rclcpp::Service<arm_api2_msgs::srv::AddCollisionObject>::SharedPtr       add_collision_object_srv_;
         rclcpp::Service<arm_api2_msgs::srv::CheckReachability>::SharedPtr        check_reachability_srv_;
+        rclcpp::Service<arm_api2_msgs::srv::CheckCartesianPath>::SharedPtr       check_cartesian_path_srv_;
         rclcpp::Client<controller_manager_msgs::srv::ConfigureController>::SharedPtr configure_controller_client_;
         rclcpp::Client<controller_manager_msgs::srv::LoadController>::SharedPtr   load_controller_client_;
         rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedPtr switch_controller_client_;
@@ -225,6 +228,8 @@ class m2SimpleIface: public rclcpp::Node
                                      const std::shared_ptr<arm_api2_msgs::srv::AddCollisionObject::Response> res);
         void check_reachability_cb(const std::shared_ptr<arm_api2_msgs::srv::CheckReachability::Request> req,
                                    const std::shared_ptr<arm_api2_msgs::srv::CheckReachability::Response> res);
+        void check_cartesian_path_cb(const std::shared_ptr<arm_api2_msgs::srv::CheckCartesianPath::Request> req,
+                                     const std::shared_ptr<arm_api2_msgs::srv::CheckCartesianPath::Response> res);
         bool run();
 
         /* Publishes a PlanStatus snapshot for the most recent plan attempt. */

@@ -69,21 +69,28 @@ def launch_setup(context, *args, **kwargs):
     arg_launch_joy      = context.perform_substitution(LaunchConfiguration('launch_joy', default=True))
     arg_use_gdb         = context.perform_substitution(LaunchConfiguration('use_gdb', default=False))
     arg_use_sim_time    = context.perform_substitution(LaunchConfiguration('use_sim_time', default='false'))
+    arg_config_profile  = context.perform_substitution(LaunchConfiguration('config_profile', default='sim'))
     arg_dt              = float(context.perform_substitution(LaunchConfiguration('dt')))
 
 
-    # TODO: Swap between sim and real arg depending on the robot type
-    robot_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
-    servo_yaml = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
+    robot_yaml = "{0}/{1}_{2}.yaml".format(arg_robot_name, arg_robot_name, arg_config_profile)
+    servo_yaml = "{0}/{1}_servo_{2}.yaml".format(arg_robot_name, arg_robot_name, arg_config_profile)
     kinematics_yaml = "config/{0}/{1}_kinematics.yaml".format(arg_robot_name, arg_robot_name)
     
     # Arm params (ctl, servo) --> sent just as path
     # 3 different ways of loading and using yaml files, DISGUSTING [FIX ASAP]
-    config_path = os.path.join(
-        get_package_share_directory('arm_api2'),
-        "config",
-        robot_yaml
-    )
+    arm_api2_share = get_package_share_directory('arm_api2')
+    config_path = os.path.join(arm_api2_share, "config", robot_yaml)
+    if not os.path.isfile(config_path):
+        fallback_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
+        fallback_path = os.path.join(arm_api2_share, "config", fallback_yaml)
+        print(f"Config profile '{arg_config_profile}' not found at {config_path}; falling back to {fallback_path}")
+        robot_yaml = fallback_yaml
+        config_path = fallback_path
+
+    servo_path = os.path.join(arm_api2_share, "config", servo_yaml)
+    if not os.path.isfile(servo_path):
+        servo_yaml = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
 
     # Servo params created with the help of ParameterBuilder
     servo_params = {
@@ -204,6 +211,12 @@ def generate_launch_description():
         DeclareLaunchArgument(name='use_sim_time', 
                               default_value='false', 
                               description='use simulation time')
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(name='config_profile',
+                              default_value='sim',
+                              description='arm_api2 config profile suffix: sim or real')
     )
 
     declared_arguments.append(

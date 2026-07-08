@@ -43,10 +43,27 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <optional>
 
+#include <Eigen/Geometry>
 #include <tf2/exceptions.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+
+namespace
+{
+Eigen::Isometry3d poseMsgToEigen(const geometry_msgs::msg::Pose &pose)
+{
+    Eigen::Isometry3d out = Eigen::Isometry3d::Identity();
+    Eigen::Quaterniond q(pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z);
+    if (std::isfinite(q.norm()) && q.norm() > 1e-9) {
+        q.normalize();
+        out.linear() = q.toRotationMatrix();
+    }
+    out.translation() = Eigen::Vector3d(pose.position.x, pose.position.y, pose.position.z);
+    return out;
+}
+}  // namespace
 
 m2SimpleIface::m2SimpleIface(const rclcpp::NodeOptions &options)
     : Node("moveit2_simple_iface", options), node_(std::make_shared<rclcpp::Node>("moveit2_simple_iface_node", options)), 
@@ -263,6 +280,14 @@ void m2SimpleIface::init_services()
     check_reachability_srv_ = this->create_service<arm_api2_msgs::srv::CheckReachability>(
         check_reachability_name,
         std::bind(&m2SimpleIface::check_reachability_cb, this, _1, _2));
+
+    std::string check_cartesian_path_name = "arm/check_cartesian_path";
+    if (config["srv"]["check_cartesian_path"] && config["srv"]["check_cartesian_path"]["name"]) {
+        check_cartesian_path_name = config["srv"]["check_cartesian_path"]["name"].as<std::string>();
+    }
+    check_cartesian_path_srv_ = this->create_service<arm_api2_msgs::srv::CheckCartesianPath>(
+        check_cartesian_path_name,
+        std::bind(&m2SimpleIface::check_cartesian_path_cb, this, _1, _2));
     configure_controller_client_ =
         node_->create_client<controller_manager_msgs::srv::ConfigureController>(
             "controller_manager/configure_controller");
@@ -840,6 +865,181 @@ void m2SimpleIface::check_reachability_cb(
         res->reason = last_collision_reason;
     } else {
         res->reason = "No IK solution found";
+    }
+}
+
+void m2SimpleIface::check_cartesian_path_cb(
+    const std::shared_ptr<arm_api2_msgs::srv::CheckCartesianPath::Request> req,
+    const std::shared_ptr<arm_api2_msgs::srv::CheckCartesianPath::Response> res)
+{
+    res->full_path = false;
+    res->fraction = 0.0;
+    res->trajectory_points = 0;
+    res->start_reachable = false;
+    res->in_collision = false;
+    res->start_ik_solutions_found = 0;
+    res->start_configs_checked = 0;
+    res->reason = "";
+
+    if (!moveGroupInit || !robotModelInit || !pSceneMonitorInit) {
+        res->reason = "MoveIt not fully initialized";
+        return;
+    }
+    if (!m_pSceneMonitorPtr || !m_pSceneMonitorPtr->getPlanningScene()) {
+        res->reason = "Planning scene unavailable";
+        return;
+    }
+
+    auto resolve_pose = [&](const geometry_msgs::msg::PoseStamped &pose,
+                            geometry_msgs::msg::PoseStamped &out,
+                            std::string &reason) -> bool {
+        const std::string source_frame = pose.header.frame_id;
+        if (source_frame.empty() || source_frame == PLANNING_FRAME) {
+            out = pose;
+            out.header.frame_id = PLANNING_FRAME;
+            return true;
+        }
+        try {
+            out = tf_buffer_->transform(pose, PLANNING_FRAME);
+            return true;
+        } catch (const tf2::TransformException &ex) {
+            reason = std::string("TF: cannot transform '") + source_frame +
+                     "' -> '" + PLANNING_FRAME + "': " + ex.what();
+            return false;
+        }
+    };
+
+    geometry_msgs::msg::PoseStamped start_pose;
+    geometry_msgs::msg::PoseStamped target_pose;
+    std::string tf_reason;
+    if (!resolve_pose(req->start_pose, start_pose, tf_reason) ||
+        !resolve_pose(req->target_pose, target_pose, tf_reason)) {
+        res->reason = tf_reason;
+        return;
+    }
+
+    planning_scene_monitor::LockedPlanningSceneRO ls(m_pSceneMonitorPtr);
+    moveit::core::RobotState scene_state(ls->getCurrentState());
+    const moveit::core::JointModelGroup *jmg = scene_state.getJointModelGroup(PLANNING_GROUP);
+    if (jmg == nullptr) {
+        res->reason = "Joint model group '" + PLANNING_GROUP + "' not found";
+        return;
+    }
+    const moveit::core::LinkModel *link = scene_state.getLinkModel(EE_LINK_NAME);
+    if (link == nullptr) {
+        res->reason = "End-effector link '" + EE_LINK_NAME + "' not found";
+        return;
+    }
+
+    auto state_valid = [&](moveit::core::RobotState *state,
+                           const moveit::core::JointModelGroup *group,
+                           const double *values) -> bool {
+        if (group != nullptr && values != nullptr) {
+            state->setJointGroupPositions(group, values);
+        }
+        state->update();
+        if (req->ignore_collisions) {
+            return ls->isStateFeasible(*state, false);
+        }
+        return ls->isStateValid(*state, PLANNING_GROUP, false);
+    };
+
+    const unsigned int attempts = (req->ik_attempts == 0) ? 4u : static_cast<unsigned int>(req->ik_attempts);
+    const double per_attempt_timeout = (req->ik_timeout_sec > 0.0) ? req->ik_timeout_sec : 0.05;
+
+    // Distinct valid start configurations. With check_all_start_configs the
+    // Cartesian segment is interpolated from EVERY one of them (worst fraction
+    // wins): a joint-space plan that moves the arm to start_pose first may
+    // settle in any of these, so a single-seed pass is not a guarantee.
+    std::vector<moveit::core::RobotState> start_states;
+    unsigned int start_solutions = 0;
+    bool any_in_collision = false;
+    const std::vector<const moveit::core::JointModel *> &joint_models = jmg->getActiveJointModels();
+    auto config_is_new = [&](const moveit::core::RobotState &candidate) -> bool {
+        for (const auto &existing : start_states) {
+            double max_delta = 0.0;
+            for (const auto *jm : joint_models) {
+                const double d = std::fabs(candidate.getVariablePosition(jm->getFirstVariableIndex()) -
+                                           existing.getVariablePosition(jm->getFirstVariableIndex()));
+                max_delta = std::max(max_delta, d);
+            }
+            if (max_delta < 0.05) {
+                return false;
+            }
+        }
+        return true;
+    };
+    for (unsigned int i = 0; i < attempts; ++i) {
+        moveit::core::RobotState attempt_state(scene_state);
+        if (i > 0) {
+            attempt_state.setToRandomPositions(jmg);
+        }
+        if (!attempt_state.setFromIK(jmg, start_pose.pose, EE_LINK_NAME, per_attempt_timeout)) {
+            continue;
+        }
+        attempt_state.update();
+
+        const bool valid = state_valid(&attempt_state, jmg, nullptr);
+        if (!valid) {
+            if (!req->ignore_collisions && ls->isStateColliding(attempt_state, PLANNING_GROUP, false)) {
+                any_in_collision = true;
+            }
+            continue;
+        }
+        ++start_solutions;
+        if (config_is_new(attempt_state)) {
+            start_states.push_back(attempt_state);
+            if (!req->check_all_start_configs) {
+                break;
+            }
+        }
+    }
+
+    res->start_ik_solutions_found = static_cast<uint8_t>(std::min<unsigned int>(start_solutions, 255u));
+    if (start_states.empty()) {
+        res->start_reachable = false;
+        res->in_collision = any_in_collision;
+        res->reason = any_in_collision ? "Start pose collides with environment or self" : "No IK solution found for start pose";
+        return;
+    }
+    res->start_reachable = true;
+
+    const double eef_step = (req->eef_step > 0.0) ? req->eef_step : 0.02;
+    moveit::core::MaxEEFStep max_step(eef_step);
+    moveit::core::CartesianPrecision precision;
+
+    double worst_fraction = 1.0;
+    uint32_t worst_points = 0;
+    for (auto &start : start_states) {
+        std::vector<moveit::core::RobotStatePtr> trajectory;
+        const auto percentage = moveit::core::CartesianInterpolator::computeCartesianPath(
+            &start,
+            jmg,
+            trajectory,
+            link,
+            poseMsgToEigen(target_pose.pose),
+            true,
+            max_step,
+            precision,
+            state_valid,
+            kinematics::KinematicsQueryOptions());
+        if (percentage.value <= worst_fraction) {
+            worst_fraction = percentage.value;
+            worst_points = static_cast<uint32_t>(trajectory.size());
+        }
+    }
+
+    res->start_configs_checked = static_cast<uint8_t>(std::min<size_t>(start_states.size(), 255u));
+    res->fraction = worst_fraction;
+    res->trajectory_points = worst_points;
+    res->full_path = res->fraction >= 0.999;
+    if (res->full_path) {
+        res->reason = "OK";
+    } else if (res->fraction > 0.0) {
+        res->reason = "Cartesian path is partial (fraction=" + std::to_string(res->fraction) +
+                      ", worst of " + std::to_string(start_states.size()) + " start configs)";
+    } else {
+        res->reason = "Cartesian path could not be computed";
     }
 }
 
@@ -1506,6 +1706,3 @@ bool m2SimpleIface::run()
 
     return true;     
 }
-
-
-
