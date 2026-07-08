@@ -1,45 +1,45 @@
 # arm_api2
 
-:mechanical_arm: API for robotic manipulators based on ROS 2 and MoveIt2! 
+:mechanical_arm: API for robotic manipulators based on ROS 2 and MoveIt2!
 
 Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/arm_api2).
 
-### Use prebuilt docker 
+### Use prebuilt docker
 
-Pull and run docker container `arm_api2_cont`: 
+Pull and run docker container `arm_api2_cont`:
 ```
-git clone git@github.com:CroboticSolutions/docker_files.git 
+git clone git@github.com:CroboticSolutions/docker_files.git
 cd ./docker_files/ros2/humble/arm_api2
 ./pull_and_run_docker.sh
 <robot>_sim (start robot in simulation)
 ```
-Run move_group for that robot (see particular instructions for supported arms in How to use section). 
-And after that run: 
+Run move_group for that robot (see particular instructions for supported arms in How to use section).
+And after that run:
 ```
-ros2 launch arm_api2 moveit2_simple_iface.launch.py robot_name:=<robot_name>
+ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=<robot_name>
 ```
-Currently supported robot names are: `ur`, `kinova`, `franka`, `piper`. 
+Currently available robot config names include: `ur`, `kinova`, `franka`, `piper`, `abb`, `crx10ia`, and `so_arm100`.
 
 For full instructions check section How to use arm_api2?
 
-### Build your own docker 
+### Build your own docker
 
-In order to build it easily, run following comands: 
+In order to build it easily, run following commands:
 ```
 git clone git@github.com:CroboticSolutions/docker_files.git
 cd ./docker_files/ros2/humble/arm_api2
 docker build -t arm_api2_img:humble .
-./run_docker.sh 
+./run_docker.sh
 ```
 
-After running docker, you can enter container with: 
+After running docker, you can enter container with:
 ```
 docker exec -it arm_api2_cont bash
 ```
 
 Docker for building required environment can be found [here](https://github.com/CroboticSolutions/docker_files/tree/master/ros2/humble/kinova).
 
-For building ROS 2 packages and moveit, it is neccessary to use [colcon](https://colcon.readthedocs.io/en/released/user/quick-start.html).
+For building ROS 2 packages and MoveIt, it is necessary to use [colcon](https://colcon.readthedocs.io/en/released/user/quick-start.html).
 
 ## Tell us anonymously what arms we should support [here](https://forms.gle/d1fdfAbwZunDUcSi9). :smile:
 
@@ -47,7 +47,7 @@ For building ROS 2 packages and moveit, it is neccessary to use [colcon](https:/
 
 - [arm_api2_msgs](https://github.com/CroboticSolutions/arm_api2_msgs)
 
-Aditional dependencies are (depending on the arm you use):
+Additional dependencies are (depending on the arm you use):
 
 - [kinova](https://github.com/CroboticSolutions/ros2_kortex)
 - [panda_sim](https://github.com/AndrejOrsula/panda_ign_moveit2)
@@ -118,19 +118,42 @@ Example service call:
 ros2 service call /arm/set_planonly std_srvs/srv/SetBool "{data: true}"
 ```
 
-### Simple interface (topic)
+### Unified interface
 
-Run minimal simple interface with: 
+`moveit2_iface` is the single arm_api2 node. It always exposes the topic-based
+interface; the `mode` argument selects the interface profile:
+
+```bash
+# simple: topic interface only
+ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=<robot> mode:=simple
+
+# advanced (default): topic interface + action servers
+ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=<robot> mode:=advanced
 ```
-ros2 launch arm_api2 moveit2_simple_iface.launch.py robot_name=<robot>
+
+Fine-grained overrides are still available with `enable_topics:=<true|false>` and
+`enable_actions:=<true|false>`; when left empty they are derived from `mode`.
+
+Multi-robot setups pass semicolon-separated namespaces; one arm_api2 instance is
+spawned per namespace:
+
+```bash
+ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=ur robot_namespaces:=ur1\;ur2
 ```
 
-Simple interface contains topics to command robot pose, path and 
-retrieve arm information. 
-Topic names are defined in the `config/<robot_name>_sim` file. 
+### Topic interface
+
+Run minimal simple interface with:
+```
+ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=<robot> mode:=simple
+```
+
+Simple interface contains topics to command robot pose, path and
+retrieve arm information.
+Topic names are defined in the `config/<robot_name>_sim` file.
 
 
-**Command robot pose**: 
+**Command robot pose**:
 - name: `arm/cmd/pose`
 - msg: `geometry_msgs/msg/PoseStamped.msg`
 
@@ -138,11 +161,11 @@ Topic names are defined in the `config/<robot_name>_sim` file.
 ros2 topic pub /arm/cmd/pose geometry_msgs/msg/PoseStamped <wanted_pose>
 ```
 
-**Command cartesian path**:   
+**Command cartesian path**:
 - name: `arm/cmd/traj`
 - msg: `arm_api2_msgs/msg/CartesianWaypoints.msg`
 
-**Get current end effector pose**: 
+**Get current end effector pose**:
 - name `arm/current/pose`
 - msg: `geometry_msgs/msg/PoseStamped.msg`
 
@@ -150,9 +173,9 @@ ros2 topic pub /arm/cmd/pose geometry_msgs/msg/PoseStamped <wanted_pose>
 ros2 topic echo /arm/current/pose
 ```
 
-### Advanced interface (action)
+### Action interface
 
-Run advanced interface with: 
+Run the unified node with actions enabled:
 ```
 ros2 launch arm_api2 moveit2_iface.launch.py robot_name=<robot>
 ```
@@ -164,12 +187,12 @@ A robot pose where the robot should move to can be commanded via ROS2 action.
 - action: `arm_api2_msgs/action/MoveCartesian.action`
 
 ```
-ros2 action send_goal /arm/move_to_pose arm_api_msgs/action/MoveCartesian <wanted_pose>
+ros2 action send_goal /arm/move_to_pose arm_api2_msgs/action/MoveCartesian <wanted_pose>
 ```
 
 **Command cartesian path**:
 
-A catesian path can be commanded via ROS2 action.
+A Cartesian path can be commanded via ROS2 action.
 - name: `arm/move_to_pose_path`
 - action: `arm_api2_msgs/action/MoveCartesianPath.action`
 
@@ -206,7 +229,7 @@ colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -
 Full verbose build command:
 
 ```
-colcon build --symlink-install --packages-select moveit2_tutorials --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_VERBOSE_MAKEFILE=ON
+colcon build --symlink-install --packages-select arm_api2 --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_VERBOSE_MAKEFILE=ON
 ```
 
 </details>
@@ -248,13 +271,13 @@ Start ur sim with:
 ur_sim
 ```
 
-Start iface by changing `robot_name` argument to `kinova`, `ur`, `franka`, `piper`. Depending which arm you want to use, when running:
+Start iface by changing the `robot_name` argument to the arm config you want to use, for example `kinova`, `ur`, `franka`, or `piper`:
 
 ```bash
 ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=<robot_name>
 ```
 
-#### Tmunxinator
+#### Tmuxinator
 
 Start kinova with:
 
@@ -272,13 +295,13 @@ located in `utils/tmux_configs`. Navigate between
 panes with `Ctrl+B`+(arrows).
 
 <details>
-<summary><h3>How to use Kinova? </summary> 
+<summary><h3>How to use Kinova? </summary>
 
-First clone and build kinova repository in your workspace with: 
+First clone and build kinova repository in your workspace with:
 ```
 cd <ros2_ws>/src
 git clone https://github.com/CroboticSolutions/ros2_kortex
-cd <ros2_ws> 
+cd <ros2_ws>
 colcon build --packages-select ros2_kortex
 source <ros2_ws>/install/setup.bash
 ```
@@ -355,7 +378,7 @@ sudo apt-get install ros-humble-ur
 After that, in your ROS 2 workspace clone:
 
 - [ur_gz_sim](https://github.com/CroboticSolutions/Universal_Robots_ROS2_GZ_Simulation/tree/humble)
-- [ur_ros2_driver](https://github.com/CroboticSolutions/Universal_Robots_ROS2_Driver/tree/humble)  
+- [ur_ros2_driver](https://github.com/CroboticSolutions/Universal_Robots_ROS2_Driver/tree/humble)
   and build your workspace. Source it, and you're good to go.
 
 Note, those are forks of the official UR repositories on the `humble` branch,
@@ -406,7 +429,7 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 - [UR_ros2](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver)
 </details>
 
-<details> 
+<details>
 <summary><h3> Useful learning links</h3></summary>
 
 - [Declare variables as const](https://www.cppstories.com/2016/12/please-declare-your-variables-as-const/)
@@ -438,9 +461,9 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 - [x] Create standardized joystick class
 - [x] Test on the real robot
 - [x] Test on the real UR
-- [ ] Test on the real Franka 
+- [ ] Test on the real Franka
 - [ ] Test on the real Kinova
-- [ ] Test on the real FANUC 
+- [ ] Test on the real FANUC
 
 ### TODO [Low priority]:
 
@@ -464,7 +487,7 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 | Kinova       | +             | +              | +         | +   | -    | -        |
 | UR           | +             | +              | +         | +   | +    | -        |
 | IIWA         | -             | -              | -         | -   | -    | -        |
-| Piper        | -             | +              | +         | -   | +    | -        |
+| Piper        | +             | +              | +         | +   | +    | -        |
 
 </details>
 
@@ -473,7 +496,7 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 
 <details>
 
-MoveIt2! status codes that can be used to debug moveit servo: 
+MoveIt2! status codes that can be used to debug moveit servo:
 
 ```
 INVALID = -1,

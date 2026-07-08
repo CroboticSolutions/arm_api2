@@ -1,11 +1,39 @@
 #!/usr/bin/env python3
-# Copyright 2026
 # SPDX-License-Identifier: BSD-3-Clause
+# Copyright 2024-2026 Crobotic Solutions d.o.o.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    * Redistributions of source code must retain the above copyright
+#      notice, this list of conditions and the following disclaimer.
+#
+#    * Redistributions in binary form must reproduce the above copyright
+#      notice, this list of conditions and the following disclaimer in the
+#      documentation and/or other materials provided with the distribution.
+#
+#    * Neither the name of the copyright holder nor the names of its
+#      contributors may be used to endorse or promote products derived from
+#      this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
 """Run arm_api2 pick-and-place steps from YAML; wait for each motion to converge before the next.
 
-moveit2_simple_iface drives planning/execution; this script waits until /arm/state/current_pose
+moveit2_iface drives planning/execution; this script waits until /arm/state/current_pose
 matches each target (stable samples).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,7 +67,9 @@ except ImportError:
     SetStringParam = None  # type: ignore
 
 
-def _quaternion_angle_rad(q1: tuple[float, float, float, float], q2: tuple[float, float, float, float]) -> float:
+def _quaternion_angle_rad(
+    q1: tuple[float, float, float, float], q2: tuple[float, float, float, float]
+) -> float:
     """Minimal rotation angle between two unit quaternions (uses absolute dot for q/-q equivalence)."""
     dot = abs(q1[0] * q2[0] + q1[1] * q2[1] + q1[2] * q2[2] + q1[3] * q2[3])
     dot = min(1.0, max(0.0, dot))
@@ -98,7 +128,9 @@ class PickPlaceSequence(Node):
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__("pick_place_sequence")
         if ChangeState is None:
-            raise RuntimeError("arm_api2_msgs is not importable; source the workspace overlay that built arm_api2.")
+            raise RuntimeError(
+                "arm_api2_msgs is not importable; source the workspace overlay that built arm_api2."
+            )
         self._config = config
         ns = str(config.get("robot_namespace", "ur1")).strip("/")
         frame = str(config.get("planning_frame", "world"))
@@ -142,7 +174,9 @@ class PickPlaceSequence(Node):
         self._cli_open = self.create_client(Trigger, f"{prefix}/arm/open_gripper")
         self._cli_close = self.create_client(Trigger, f"{prefix}/arm/close_gripper")
         self._cli_set_planner = (
-            self.create_client(SetStringParam, f"{prefix}/arm/set_planner") if SetStringParam is not None else None
+            self.create_client(SetStringParam, f"{prefix}/arm/set_planner")
+            if SetStringParam is not None
+            else None
         )
         self._current_planner: str | None = None
 
@@ -235,9 +269,7 @@ class PickPlaceSequence(Node):
                 )
             if elapsed >= timeout:
                 last = f"last error: {status.error_code}" if status is not None else "no response"
-                raise TimeoutError(
-                    f"Pose command kept being rejected for {elapsed:.1f}s ({last})"
-                )
+                raise TimeoutError(f"Pose command kept being rejected for {elapsed:.1f}s ({last})")
             time.sleep(retry_period)
             elapsed += retry_period
 
@@ -316,7 +348,9 @@ class PickPlaceSequence(Node):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run arm_api2 pick-and-place from a YAML sequence file.")
+    parser = argparse.ArgumentParser(
+        description="Run arm_api2 pick-and-place from a YAML sequence file."
+    )
     parser.add_argument(
         "config_file",
         nargs="?",
@@ -325,7 +359,11 @@ def main() -> None:
     )
     args, ros_rest = parser.parse_known_args(args=sys.argv[1:])
     rclpy.init(args=[sys.argv[0]] + ros_rest)
-    default_cfg = Path(get_package_share_directory("arm_api2")) / "tutorials" / "pick_place_sequence_lab_table_one.yaml"
+    default_cfg = (
+        Path(get_package_share_directory("arm_api2"))
+        / "tutorials"
+        / "pick_place_sequence_lab_table_one.yaml"
+    )
     cfg_path = Path(args.config_file).expanduser() if args.config_file else default_cfg
     if not cfg_path.is_file():
         print(f"Config not found: {cfg_path}", file=sys.stderr)

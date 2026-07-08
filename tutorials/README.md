@@ -51,12 +51,12 @@ Wait until MoveIt and controllers are up before continuing.
 
 ---
 
-## 2. Start arm_api2 (simple interface)
+## 2. Start arm_api2 (simple mode)
 
 Terminal 2:
 
 ```bash
-ros2 launch arm_api2 moveit2_simple_iface.launch.py \
+ros2 launch arm_api2 moveit2_iface.launch.py mode:=simple \
   robot_name:=ur robot_ns:=ur1 use_sim_time:=true
 ```
 
@@ -190,7 +190,7 @@ The helper script `pick_place_sequence.py` is a thin **rclpy** node: it publishe
 - **Tunable in YAML:** `convergence` (position / angle tolerance, stable samples, timeouts) and `gripper_settle_sec` match your sim or hardware without touching Python.
 - **Extensible:** Copy the YAML, duplicate or reorder `steps`, add rows for extra picks; the script does not hard-code the lab world.
 
-**Run it** (with simulation and `moveit2_simple_iface` from sections 1–2):
+**Run it** (with simulation and `moveit2_iface` (simple mode) from sections 1–2):
 
 ```bash
 ros2 run arm_api2 pick_place_sequence.py

@@ -1,7 +1,31 @@
-/*******************************************************************************
- * Copyright (c) 2025, Crobotic Solutions d.o.o.
- * SPDX-License-Identifier: BSD-3-Clause
- ******************************************************************************/
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright 2024-2026 Crobotic Solutions d.o.o.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+//    * Redistributions of source code must retain the above copyright
+//      notice, this list of conditions and the following disclaimer.
+//
+//    * Redistributions in binary form must reproduce the above copyright
+//      notice, this list of conditions and the following disclaimer in the
+//      documentation and/or other materials provided with the distribution.
+//
+//    * Neither the name of the copyright holder nor the names of its
+//      contributors may be used to endorse or promote products derived from
+//      this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
 
 #include "arm_api2/grippers/piper_joint_gripper.hpp"
 
@@ -87,13 +111,13 @@ std::string PiperJointGripper::resolve_action_name(const std::string & action) c
 size_t PiperJointGripper::stroke_feedback_index(const std::vector<std::string> & names) const
 {
   auto find_name = [&](const std::string & n) -> size_t {
-    for (size_t i = 0; i < names.size(); ++i) {
-      if (names[i] == n) {
-        return i;
+      for (size_t i = 0; i < names.size(); ++i) {
+        if (names[i] == n) {
+          return i;
+        }
       }
-    }
-    return static_cast<size_t>(-1);
-  };
+      return static_cast<size_t>(-1);
+    };
 
   if (!cfg_.trajectory_joint_name.empty()) {
     const size_t ix = find_name(cfg_.trajectory_joint_name);
@@ -164,10 +188,11 @@ void PiperJointGripper::configure(const PiperJointGripperConfig & config)
     node_->get_logger(),
     "PiperJointGripper configured: mode=%s state=%s cmd=%s stroke_open=%f m stroke_close=%f m "
     "invert_robotiq_normalized=%s",
-    (cfg_.command_mode == PiperGripperCommandMode::JointState) ? "joint_state" : "follow_joint_trajectory",
+    (cfg_.command_mode ==
+    PiperGripperCommandMode::JointState) ? "joint_state" : "follow_joint_trajectory",
     cfg_.state_topic.c_str(),
-    (cfg_.command_mode == PiperGripperCommandMode::JointState) ? cfg_.cmd_topic.c_str()
-                                                                 : cfg_.trajectory_action.c_str(),
+    (cfg_.command_mode == PiperGripperCommandMode::JointState) ? cfg_.cmd_topic.c_str() :
+                                                                   cfg_.trajectory_action.c_str(),
     cfg_.open_stroke_m,
     cfg_.close_stroke_m,
     cfg_.invert_robotiq_normalized ? "true" : "false");
@@ -212,6 +237,21 @@ bool PiperJointGripper::send_gripper_command_trajectory(double stroke_m, double 
     mirror_fjt_client_ && !cfg_.mirror_trajectory_joint_name.empty();
 
   if (use_split_mirror) {
+    if (!fjt_client_->wait_for_action_server(std::chrono::seconds(8))) {
+      RCLCPP_ERROR(
+        node_->get_logger(),
+        "PiperJointGripper: FollowJointTrajectory server not ready (%s)",
+        cfg_.trajectory_action.c_str());
+      return false;
+    }
+    if (!mirror_fjt_client_->wait_for_action_server(std::chrono::seconds(8))) {
+      RCLCPP_ERROR(
+        node_->get_logger(),
+        "PiperJointGripper: mirror FollowJointTrajectory server not ready (%s)",
+        cfg_.mirror_trajectory_action.c_str());
+      return false;
+    }
+
     std::atomic<bool> main_done{false};
     std::atomic<bool> main_success{false};
     std::atomic<bool> mirror_done{false};
@@ -246,48 +286,56 @@ bool PiperJointGripper::send_gripper_command_trajectory(double stroke_m, double 
     mirror_success.store(false);
 
     auto make_opts = [this](
-                       std::atomic<bool> & done, std::atomic<bool> & success, const char * label) {
-      rclcpp_action::Client<FollowJointTrajectory>::SendGoalOptions opts;
-      opts.goal_response_callback = [this, label, &done, &success](
-                                      std::shared_ptr<GoalHandleFj> goal_handle) {
-        if (!goal_handle) {
-          RCLCPP_ERROR(
+      std::atomic<bool> & done, std::atomic<bool> & success, const char * label) {
+        rclcpp_action::Client<FollowJointTrajectory>::SendGoalOptions opts;
+        opts.goal_response_callback = [this, label, &done, &success](
+          std::shared_ptr<GoalHandleFj> goal_handle) {
+            if (!goal_handle) {
+              RCLCPP_ERROR(
             node_->get_logger(), "PiperJointGripper: %s trajectory goal rejected.", label);
-          success.store(false);
-          done.store(true, std::memory_order_release);
-        }
-      };
-      opts.result_callback = [this, label, &done, &success](
-                               const GoalHandleFj::WrappedResult & result) {
-        switch (result.code) {
-          case rclcpp_action::ResultCode::SUCCEEDED:
-            success.store(true);
-            break;
-          case rclcpp_action::ResultCode::ABORTED:
-            RCLCPP_ERROR(
+              success.store(false);
+              done.store(true, std::memory_order_release);
+            }
+          };
+        opts.result_callback = [this, label, &done, &success](
+          const GoalHandleFj::WrappedResult & result) {
+            switch (result.code) {
+              case rclcpp_action::ResultCode::SUCCEEDED:
+                success.store(true);
+                break;
+              case rclcpp_action::ResultCode::ABORTED:
+                RCLCPP_ERROR(
               node_->get_logger(), "PiperJointGripper: %s trajectory aborted (%s)", label,
               result.result ? result.result->error_string.c_str() : "");
-            success.store(false);
-            break;
-          case rclcpp_action::ResultCode::CANCELED:
-            RCLCPP_WARN(node_->get_logger(), "PiperJointGripper: %s trajectory canceled.", label);
-            success.store(false);
-            break;
-          default:
-            success.store(false);
-            break;
-        }
-        done.store(true, std::memory_order_release);
+                success.store(false);
+                break;
+              case rclcpp_action::ResultCode::CANCELED:
+                RCLCPP_WARN(node_->get_logger(), "PiperJointGripper: %s trajectory canceled.",
+            label);
+                success.store(false);
+                break;
+              default:
+                success.store(false);
+                break;
+            }
+            done.store(true, std::memory_order_release);
+          };
+        return opts;
       };
-      return opts;
-    };
 
     fjt_client_->async_send_goal(main_goal, make_opts(main_done, main_success, "joint7"));
     mirror_fjt_client_->async_send_goal(
       mirror_goal, make_opts(mirror_done, mirror_success, "joint8"));
 
+    const auto deadline = std::chrono::steady_clock::now() +
+      std::chrono::milliseconds(static_cast<int>(std::max(1.0, T + 8.0) * 1000.0));
     while (!main_done.load(std::memory_order_acquire) ||
-           !mirror_done.load(std::memory_order_acquire)) {
+      !mirror_done.load(std::memory_order_acquire))
+    {
+      if (std::chrono::steady_clock::now() > deadline) {
+        RCLCPP_ERROR(node_->get_logger(), "PiperJointGripper: split trajectory result timed out.");
+        return false;
+      }
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
@@ -329,37 +377,43 @@ bool PiperJointGripper::send_gripper_command_trajectory(double stroke_m, double 
 
   auto opts = rclcpp_action::Client<FollowJointTrajectory>::SendGoalOptions();
   opts.goal_response_callback = [this](std::shared_ptr<GoalHandleFj> goal_handle) {
-    if (!goal_handle) {
-      RCLCPP_ERROR(node_->get_logger(), "PiperJointGripper: gripper trajectory goal rejected.");
-      traj_success_.store(false);
-      traj_done_.store(true, std::memory_order_release);
-    }
-  };
+      if (!goal_handle) {
+        RCLCPP_ERROR(node_->get_logger(), "PiperJointGripper: gripper trajectory goal rejected.");
+        traj_success_.store(false);
+        traj_done_.store(true, std::memory_order_release);
+      }
+    };
 
   opts.result_callback = [this](const GoalHandleFj::WrappedResult & result) {
-    switch (result.code) {
-      case rclcpp_action::ResultCode::SUCCEEDED:
-        traj_success_.store(true);
-        break;
-      case rclcpp_action::ResultCode::ABORTED:
-        RCLCPP_ERROR(node_->get_logger(), "PiperJointGripper: trajectory aborted (%s)",
+      switch (result.code) {
+        case rclcpp_action::ResultCode::SUCCEEDED:
+          traj_success_.store(true);
+          break;
+        case rclcpp_action::ResultCode::ABORTED:
+          RCLCPP_ERROR(node_->get_logger(), "PiperJointGripper: trajectory aborted (%s)",
           result.result ? result.result->error_string.c_str() : "");
-        traj_success_.store(false);
-        break;
-      case rclcpp_action::ResultCode::CANCELED:
-        RCLCPP_WARN(node_->get_logger(), "PiperJointGripper: trajectory canceled.");
-        traj_success_.store(false);
-        break;
-      default:
-        traj_success_.store(false);
-        break;
-    }
-    traj_done_.store(true, std::memory_order_release);
-  };
+          traj_success_.store(false);
+          break;
+        case rclcpp_action::ResultCode::CANCELED:
+          RCLCPP_WARN(node_->get_logger(), "PiperJointGripper: trajectory canceled.");
+          traj_success_.store(false);
+          break;
+        default:
+          traj_success_.store(false);
+          break;
+      }
+      traj_done_.store(true, std::memory_order_release);
+    };
 
   fjt_client_->async_send_goal(goal, opts);
 
+  const auto deadline = std::chrono::steady_clock::now() +
+    std::chrono::milliseconds(static_cast<int>(std::max(1.0, T + 8.0) * 1000.0));
   while (!traj_done_.load(std::memory_order_acquire)) {
+    if (std::chrono::steady_clock::now() > deadline) {
+      RCLCPP_ERROR(node_->get_logger(), "PiperJointGripper: trajectory result timed out.");
+      return false;
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
@@ -457,7 +511,8 @@ float PiperJointGripper::get_position() const
   std::scoped_lock lk(state_mtx_);
   const size_t idx = stroke_feedback_index(last_state_.name);
   if (
-    !have_state_ || idx == static_cast<size_t>(-1) || idx >= last_state_.position.size()) {
+    !have_state_ || idx == static_cast<size_t>(-1) || idx >= last_state_.position.size())
+  {
     return last_cmd_normalized_.load();
   }
   const float stroke =
@@ -475,7 +530,8 @@ float PiperJointGripper::get_effort() const
   std::scoped_lock lk(state_mtx_);
   const size_t idx = stroke_feedback_index(last_state_.name);
   if (
-    !have_state_ || idx == static_cast<size_t>(-1) || idx >= last_state_.effort.size()) {
+    !have_state_ || idx == static_cast<size_t>(-1) || idx >= last_state_.effort.size())
+  {
     return last_effort_.load();
   }
   return static_cast<float>(last_state_.effort[idx]);

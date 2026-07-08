@@ -2,14 +2,12 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>arm_api2</name>
-  <version>0.0.0</version>
+  <version>0.1.0</version>
   <description>MoveIt2 interface for robot manipulators</description>
-  <maintainer email="filip.zoric@crobotics.tech">root</maintainer>
-  <license>TODO: License declaration</license>
+  <maintainer email="filip.zoric@crobotics.tech">Crobotic Solutions d.o.o.</maintainer>
+  <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-  <buildtool_depend>ament_cmake_python</buildtool_depend>
-  <buildtool_depend>rosidl_default_generators</buildtool_depend>
 
   <depend>moveit_ros_planning_interface</depend>
   <depend>moveit_ros</depend>
@@ -32,8 +30,14 @@
   <depend>controller_manager_msgs</depend>
   <depend>python3</depend>
 
-  <test_depend>ament_lint_auto</test_depend>
-  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_cppcheck</test_depend>
+  <test_depend>ament_cmake_copyright</test_depend>
+  <test_depend>ament_cmake_cpplint</test_depend>
+  <test_depend>ament_cmake_flake8</test_depend>
+  <test_depend>ament_cmake_lint_cmake</test_depend>
+  <test_depend>ament_cmake_pep257</test_depend>
+  <test_depend>ament_cmake_uncrustify</test_depend>
+  <test_depend>ament_cmake_xmllint</test_depend>
 
   <exec_depend>ros2launch</exec_depend>
   <exec_depend>ament_index_python</exec_depend>
@@ -42,7 +46,5 @@
   <export>
     <build_type>ament_cmake</build_type>
   </export>
-
-  <member_of_group>rosidl_interface_packages</member_of_group>
 
 </package>

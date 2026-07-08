@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.10)
 project(arm_api2)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -15,7 +15,6 @@ find_package(joy REQUIRED)
 find_package(moveit_servo REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(arm_api2_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
@@ -40,7 +39,7 @@ add_executable(
   src/piper_joint_gripper.cpp
   src/robotiq_gripper.cpp
   src/utils.cpp)
-target_include_directories(moveit2_iface 
+target_include_directories(moveit2_iface
 PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
@@ -50,45 +49,38 @@ PUBLIC
 # Build moveit2_iface
 target_compile_features(moveit2_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
-  moveit2_iface moveit_ros_planning moveit_ros_planning_interface moveit_visual_tools rclcpp rclcpp_action control_msgs trajectory_msgs arm_api2_msgs moveit_servo sensor_msgs geometry_msgs tf2_ros tf2_geometry_msgs
+  moveit2_iface
+  moveit_ros_planning
+  moveit_ros_planning_interface
+  moveit_visual_tools
+  rclcpp
+  rclcpp_action
+  control_msgs
+  trajectory_msgs
+  arm_api2_msgs
+  moveit_servo
+  sensor_msgs
+  geometry_msgs
+  std_msgs
+  std_srvs
+  tf2_ros
+  tf2_geometry_msgs
+  controller_manager_msgs
 )
 
 # Install moveit2_iface
-install(TARGETS 
+install(TARGETS
   moveit2_iface
   DESTINATION lib/${PROJECT_NAME})
 
-# Build moveit2_simple_iface
-add_executable(
-  moveit2_simple_iface
-  src/moveit2_simple_iface.cpp
-  src/moveit2_simple_iface_node.cpp
-  src/piper_joint_gripper.cpp
-  src/robotiq_gripper.cpp
-  src/utils.cpp)
-target_include_directories(moveit2_simple_iface 
-PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-  PRIVATE
-  include/)
-
-target_compile_features(moveit2_simple_iface PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
-ament_target_dependencies(
-  moveit2_simple_iface moveit_ros_planning moveit_ros_planning_interface moveit_visual_tools rclcpp rclcpp_action control_msgs trajectory_msgs arm_api2_msgs moveit_servo sensor_msgs geometry_msgs std_msgs tf2_ros tf2_geometry_msgs controller_manager_msgs
-)
-
-# Install moveit2_simple_iface
-install(TARGETS 
-  moveit2_simple_iface
-  DESTINATION lib/${PROJECT_NAME})
-
 # Install launch directory
-install(DIRECTORY 
+install(DIRECTORY
   launch
   config
   utils
   DESTINATION share/${PROJECT_NAME}
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "*.pyc" EXCLUDE
 )
 
 # Tutorial assets (YAML + README); pick_place_sequence.py is installed as PROGRAMS below.
@@ -104,16 +96,16 @@ install(
 # Install C++ files
 add_executable(joy_ctl src/arm_joy_node.cpp src/arm_joy.cpp)
 
-target_include_directories(joy_ctl 
-  PRIVATE 
+target_include_directories(joy_ctl
+  PRIVATE
   include/
 )
 
-# python dependencies 
+# python dependencies
 ament_target_dependencies(joy_ctl
   rclcpp std_msgs geometry_msgs std_srvs sensor_msgs control_msgs)
 
-install(TARGETS 
+install(TARGETS
 joy_ctl
 DESTINATION lib/${PROJECT_NAME})
 
@@ -143,15 +135,51 @@ install(PROGRAMS
 )
 
 if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # comment the line when a copyright and license is added to all source files
-  set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
-  set(ament_cmake_cpplint_FOUND TRUE)
-  ament_lint_auto_find_test_dependencies()
+  find_package(ament_cmake_cppcheck REQUIRED)
+  find_package(ament_cmake_copyright REQUIRED)
+  find_package(ament_cmake_cpplint REQUIRED)
+  find_package(ament_cmake_flake8 REQUIRED)
+  find_package(ament_cmake_lint_cmake REQUIRED)
+  find_package(ament_cmake_pep257 REQUIRED)
+  find_package(ament_cmake_uncrustify REQUIRED)
+  find_package(ament_cmake_xmllint REQUIRED)
+
+  ament_cppcheck()
+  ament_copyright()
+  ament_cpplint(
+    FILTERS
+      -build/header_guard
+      -build/include_order
+      -build/include_what_you_use
+      -build/namespaces
+      -readability/braces
+      -readability/casting
+      -readability/todo
+      -runtime/explicit
+      -runtime/int
+      -runtime/string
+      -whitespace/blank_line
+      -whitespace/comments
+      -whitespace/line_length
+  )
+  ament_flake8(CONFIG_FILE ${CMAKE_CURRENT_SOURCE_DIR}/setup.cfg)
+  ament_lint_cmake()
+  ament_pep257(
+    --add-ignore
+      D200
+      D202
+      D205
+      D209
+      D213
+      D400
+      D401
+      D406
+      D407
+      D413
+      D415
+  )
+  ament_uncrustify()
+  ament_xmllint()
 endif()
 
 ament_package()
