@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.10)
 project(arm_api2)
 
+# Silence CMP0167 dev warnings from MoveIt config extras that still call
+# find_package(Boost): use Boost's own CMake config instead of the removed
+# FindBoost module.
+if(POLICY CMP0167)
+  cmake_policy(SET CMP0167 NEW)
+endif()
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
