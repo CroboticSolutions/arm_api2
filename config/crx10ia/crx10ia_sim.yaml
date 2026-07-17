@@ -1,7 +1,7 @@
 # arm_api2 + FANUC CRX-10iA Gazebo sim (welding torch, no gripper).
 #
 # MoveIt planning group is `manipulator` (base_link -> welding_tcp, see
-# fanuc_gazebo/srdf/crx10ia.srdf). The model/planning frame is `world`
+# seam_ros2_pkg/srdf/crx10ia.srdf). The model/planning frame is `world`
 # (SRDF virtual_joint world -> base_link; the URDF defines a `world` link so
 # robot_state_publisher provides the world->base_link TF).
 #
