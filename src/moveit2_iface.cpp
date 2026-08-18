@@ -1451,7 +1451,13 @@ void m2Iface::planAndExecPosePath()
     result->success = true;
     m_moveToPosePathGoalHandle_->succeed(result);
   } else if(success) {
-    addTimestampsToTrajectory(trajectory);
+    if (!addTimestampsToTrajectory(trajectory)) {
+      RCLCPP_ERROR_STREAM(this->get_logger(),
+        "Cartesian path planned but timestamping failed (no current robot state).");
+      result->success = false;
+      m_moveToPosePathGoalHandle_->abort(result);
+      return;
+    }
 
     feedback->set__status("executing");
     m_moveToPosePathGoalHandle_->publish_feedback(feedback);
@@ -1533,7 +1539,12 @@ void m2Iface::planAndExecTopicPosePath()
     return;
   }
 
-  addTimestampsToTrajectory(trajectory);
+  if (!addTimestampsToTrajectory(trajectory)) {
+    publishPlanStatus(false, "EXECUTE_FAILED",
+                          "Cartesian plan ready but timestamping failed (no current robot state)",
+                          target_pose, plan_dt, "CART_TRAJ_CTL");
+    return;
+  }
   const bool ok = execTrajectory(std::move(trajectory), async);
   if (ok) {
     const std::string reason = (fraction >= 0.999) ?
@@ -1560,23 +1571,37 @@ void m2Iface::printTimestamps(const moveit_msgs::msg::RobotTrajectory & trajecto
   }
 }
 
-void m2Iface::addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory & trajectory)
+bool m2Iface::addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory & trajectory)
 {
     // The trajectory created with computeCartesianPath() needs to be modified so it will include velocities as well.
     // reference: https://groups.google.com/g/moveit-users/c/MOoFxy2exT4
+  if (!m_moveGroupPtr) {
+    RCLCPP_ERROR(this->get_logger(),
+      "addTimestampsToTrajectory: move group is not ready");
+    return false;
+  }
+  auto current_state = m_moveGroupPtr->getCurrentState(1.0);
+  if (!current_state) {
+    RCLCPP_ERROR(this->get_logger(),
+      "addTimestampsToTrajectory: failed to get current robot state");
+    return false;
+  }
     // First to create a RobotTrajectory object
-  robot_trajectory::RobotTrajectory rt(m_moveGroupPtr->getCurrentState()->getRobotModel(),
-    PLANNING_GROUP);
+  robot_trajectory::RobotTrajectory rt(current_state->getRobotModel(), PLANNING_GROUP);
     // Second get a RobotTrajectory from trajectory
-  rt.setRobotTrajectoryMsg(*m_moveGroupPtr->getCurrentState(), trajectory);
+  rt.setRobotTrajectoryMsg(*current_state, trajectory);
     // Thrid create a TimeOptimalTrajectoryGeneration object
   trajectory_processing::TimeOptimalTrajectoryGeneration iptp;
     // Fourth compute computeTimeStamps
   bool success = iptp.computeTimeStamps(rt, max_vel_scaling_factor, max_acc_scaling_factor);
   RCLCPP_INFO_STREAM(this->get_logger(),
     "Computed time stamp " << (success ? "SUCCEEDED" : "FAILED"));
+  if (!success) {
+    return false;
+  }
     // Get RobotTrajectory_msg from RobotTrajectory
   rt.getRobotTrajectoryMsg(trajectory);
+  return true;
 }
 
 bool m2Iface::planWithPlanner(
@@ -1653,10 +1678,21 @@ bool m2Iface::planWithPlanner(
 
 void m2Iface::getArmState()
 {
-  if (!m_robotStatePtr || !m_moveGroupPtr) {
+  if (!m_moveGroupPtr) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "MoveIt state is not ready");
     return;
   }
+
+  // Single fetch — never call getCurrentState() twice (second call can nullptr
+  // under joint_states/DDS stalls and used to segfault on ->getFrameTransform).
+  auto current_state = m_moveGroupPtr->getCurrentState(0.1);
+  if (!current_state) {
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+      "Failed to get current state");
+    return;
+  }
+  m_robotStatePtr = current_state;
+
   const moveit::core::JointModelGroup * joint_model_group =
     m_robotStatePtr->getJointModelGroup(PLANNING_GROUP);
   if (!joint_model_group) {
@@ -1669,16 +1705,9 @@ void m2Iface::getArmState()
     return;
   }
   m_robotStatePtr->copyJointGroupPositions(joint_model_group, m_currJointPosition);
-  m_robotStatePtr = m_moveGroupPtr->getCurrentState(0.1);
-  if (!m_robotStatePtr) {
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-      "Failed to get current state");
-    return;
-  }
   m_robotStatePtr->update();
 
-  Eigen::Isometry3d currentPose_ =
-    m_moveGroupPtr->getCurrentState()->getFrameTransform(EE_LINK_NAME);
+  Eigen::Isometry3d currentPose_ = m_robotStatePtr->getFrameTransform(EE_LINK_NAME);
   m_currPoseState = utils::convertIsometryToMsg(currentPose_);
   auto frame_id = m_moveGroupPtr->getPlanningFrame().c_str();
   m_currPoseState.header.frame_id = frame_id;

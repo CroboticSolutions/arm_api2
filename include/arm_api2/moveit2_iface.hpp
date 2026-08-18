@@ -408,7 +408,7 @@ private:
         /** Stop active trajectory before planning a new one. Overlap is also prevented by trajectory_executing_. */
   void stopBeforeAsyncExecute();
   void printTimestamps(const moveit_msgs::msg::RobotTrajectory & trajectory);
-  void addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory & trajectory);
+  bool addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory & trajectory);
   bool planWithPlanner(
     moveit::planning_interface::MoveGroupInterface::Plan & plan,
     bool eagerExecution = true);
