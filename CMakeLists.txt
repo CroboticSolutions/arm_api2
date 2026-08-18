@@ -88,6 +88,7 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE
+  PATTERN "*.txt" EXCLUDE
 )
 
 # Tutorial assets (YAML + README); pick_place_sequence.py is installed as PROGRAMS below.
@@ -108,7 +109,6 @@ target_include_directories(joy_ctl
   include/
 )
 
-# python dependencies
 ament_target_dependencies(joy_ctl
   rclcpp std_msgs geometry_msgs std_srvs sensor_msgs control_msgs)
 

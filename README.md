@@ -53,6 +53,7 @@ Additional dependencies are (depending on the arm you use):
 - [panda_sim](https://github.com/AndrejOrsula/panda_ign_moveit2)
 - [ur](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver)
 - [ur_sim](https://github.com/CroboticSolutions/Universal_Robots_ROS2_GZ_Simulation)
+- abb, crx10ia, piper and so_arm100 each ship their own MoveIt config under `config/<robot_name>/`; see the respective `_moveit_config`/driver package for that arm
 
 ### How to use arm_api2?
 
@@ -141,6 +142,43 @@ spawned per namespace:
 ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=ur robot_namespaces:=ur1\;ur2
 ```
 
+**All launch arguments** (`launch/moveit2_iface.launch.py`):
+
+| Argument | Default | Description |
+| --- | --- | --- |
+| `robot_name` | `kinova` | Robot config to load (see supported names above) |
+| `robot_ns` | `""` | ROS namespace for a single arm_api2 instance (e.g. `ur1`). Empty keeps the root namespace |
+| `robot_namespaces` | `""` | Semicolon-separated namespaces for multi-robot setups; overrides `robot_ns` |
+| `mode` | `advanced` | `simple` exposes just the topic interface, `advanced` adds the action servers |
+| `enable_topics` | `""` | Override topic interface on/off; empty derives it from `mode` |
+| `enable_actions` | `""` | Override action interface on/off; empty derives it from `mode` |
+| `config_profile` | `sim` | Config profile suffix to load, e.g. `sim` or `real` (looks for `config/<robot>/<robot>_<profile>.yaml`) |
+| `use_sim_time` | `false` | Use simulation time |
+| `dt` | `0.01` | Servo control loop time step |
+| `launch_joy` | `false` | Also launch the `joy_ctl` joystick control node |
+| `launch_servo_watchdog` | `false` | Also launch the `servo_watchdog.py` node |
+| `use_gdb` | `false` | Run `moveit2_iface` under `gdb` in an xterm window, for debugging |
+
+### Additional nodes
+
+Besides `moveit2_iface`, the package builds/installs these executables:
+
+- **`joy_ctl`** (`src/arm_joy_node.cpp`, `src/arm_joy.cpp`) — joystick teleoperation node, converts `sensor_msgs/msg/Joy` input into servo twist/joint commands. Launch it standalone or together with `moveit2_iface` via `launch_joy:=true`.
+- **`keyboard_ctl`** (`src/servo_keyboard_input.cpp`) — keyboard teleoperation node for servo mode.
+- **`servo_watchdog.py`** (`examples/scripts/servo_watchdog.py`) — monitors twist/jog commands and publishes zero velocity if no command is received for a few seconds; enable with `launch_servo_watchdog:=true`.
+
+### Example scripts
+
+`examples/scripts/` contains standalone Python clients that can be run against a live `moveit2_iface` node, useful as a reference for writing your own client:
+
+| Script | Purpose |
+| --- | --- |
+| `pose_sender_action_client.py` / `_async.py` | Send a Cartesian pose goal via the `arm/move_to_pose` action (blocking / async) |
+| `joint_sender_action_client.py` / `_async.py` | Send a joint-position goal via the `arm/move_to_joint` action (blocking / async) |
+| `trajectory_sender_action_client.py` / `_async.py` | Send a Cartesian path goal via the `arm/move_to_pose_path` action (blocking / async) |
+| `servo_twist_sender.py` | Publish example Cartesian twist commands for servo mode |
+| `servo_watchdog.py` | Same node as installed under `launch_servo_watchdog`; can also be run standalone |
+
 ### Topic interface
 
 Run minimal simple interface with:
@@ -150,7 +188,7 @@ ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=<robot> mode:=simple
 
 Simple interface contains topics to command robot pose, path and
 retrieve arm information.
-Topic names are defined in the `config/<robot_name>_sim` file.
+Topic names are defined in the `config/<robot_name>/<robot_name>_<config_profile>.yaml` file.
 
 
 **Command robot pose**:
@@ -166,12 +204,47 @@ ros2 topic pub /arm/cmd/pose geometry_msgs/msg/PoseStamped <wanted_pose>
 - msg: `arm_api2_msgs/msg/CartesianWaypoints.msg`
 
 **Get current end effector pose**:
-- name `arm/current/pose`
+- name `arm/state/current_pose`
 - msg: `geometry_msgs/msg/PoseStamped.msg`
 
 ```
-ros2 topic echo /arm/current/pose
+ros2 topic echo /arm/state/current_pose
 ```
+
+**Other state topics** (published by the node, names configurable per robot in `config/<robot_name>/`):
+
+| Topic | Msg type | Description |
+| --- | --- | --- |
+| `arm/state/ctl_state` | `std_msgs/msg/String` | Currently active control state (`JOINT_TRAJ_CTL`, `CART_TRAJ_CTL`, `SERVO_CTL`) |
+| `arm/state/gripper_state` | `std_msgs/msg/String` | Current gripper state, published on gripper actuation |
+| `arm/state/plan_status` | `arm_api2_msgs/msg/PlanStatus` | Result/status of the last planning attempt (transient-local, latched) |
+
+### Service interface (additional)
+
+Beyond `arm/change_state`, `arm/set_vel_acc`, `arm/set_eelink` and `arm/set_planonly` documented above:
+
+**Set motion planner**:
+- name: `arm/set_planner`
+- srv: `arm_api2_msgs/srv/SetStringParam.srv`
+- values `value` (string), format `"<pipeline>_<planner_id>"`, e.g. `pilz_LIN`, `ompl_EST`, `ompl_PRM`, or `cumotion` (tried first, with automatic fallback to LIN/EST/PRM if it fails)
+
+```bash
+ros2 service call /arm/set_planner arm_api2_msgs/srv/SetStringParam "{value: 'ompl_EST'}"
+```
+
+**Open / close gripper**:
+- names: `arm/open_gripper`, `arm/close_gripper`
+- srv: `std_srvs/srv/Trigger.srv`
+
+```bash
+ros2 service call /arm/open_gripper std_srvs/srv/Trigger
+```
+
+**Check reachability / Cartesian path feasibility**:
+- names: `arm/check_reachability`, `arm/check_cartesian_path`
+- srv: `arm_api2_msgs/srv/CheckReachability.srv`, `arm_api2_msgs/srv/CheckCartesianPath.srv`
+
+Both let you validate a target pose or waypoint list before committing to a move, without executing it.
 
 ### Action interface
 
@@ -183,7 +256,7 @@ ros2 launch arm_api2 moveit2_iface.launch.py robot_name=<robot>
 **Command robot pose**:
 
 A robot pose where the robot should move to can be commanded via ROS2 action.
-- name: `arm/move_to_pose`<<
+- name: `arm/move_to_pose`
 - action: `arm_api2_msgs/action/MoveCartesian.action`
 
 ```
@@ -199,8 +272,14 @@ A Cartesian path can be commanded via ROS2 action.
 **Command joint position**:
 
 A robot joint position where the robot should move to can be commanded via ROS2 action.
-- name: `arm/move_to_pose`
-- msg: `arm_api2_msgs/action/MoveJoint.msg`
+- name: `arm/move_to_joint`
+- action: `arm_api2_msgs/action/MoveJoint.action`
+
+**Command gripper**:
+
+The gripper can be commanded via a standard ROS2 `GripperCommand` action.
+- name: `arm/gripper_control`
+- action: `control_msgs/action/GripperCommand.action`
 
 
 <summary><h3>How to build package?</h3></summary>
@@ -486,7 +565,9 @@ b) Launch `moveit2_iface.launch.py` with correct `robot` param.
 | Franka Emika | +             | +              | +         | +   | -    | -        |
 | Kinova       | +             | +              | +         | +   | -    | -        |
 | UR           | +             | +              | +         | +   | +    | -        |
-| IIWA         | -             | -              | -         | -   | -    | -        |
+| ABB          | +             | +              | +         | +   | -    | -        |
+| CRX-10iA     | +             | +              | +         | +   | +    | -        |
+| SO-ARM100    | +             | +              | +         | +   | -    | -        |
 | Piper        | +             | +              | +         | +   | +    | -        |
 
 </details>
@@ -515,11 +596,13 @@ DECELERATE_FOR_LEAVING_SINGULARITY = 6
 
 ```mermaid
 timeline
-    6/2025 : Merge latest developments
-    6/2025 : Decouple joy for different joys
-    6/2025 : Test with cumotion
-    9/2025 : Integrated with GUI
-    10/2025 : Tested on 5 manipulators
+    2025 : Merged latest developments
+         : Tested with cumotion
+         : Integrated with GUI
+         : Tested on 5+ manipulators (UR, Kinova, Franka, Piper, ABB)
+    2026 : Ported to ROS 2 Jazzy, added SO-ARM100 and CRX-10iA support
+         : Added Cartesian path validation and reachability checks
+         : Consolidated moveit2_iface, removed legacy launch/interface duplication
 ```
 
-If you want to contribute, please check **Status** section and check [CONTRIBUTE](./CONTRIBUTE.md).
+If you want to contribute, please check **Status** section and check [CONTRIBUTING](./CONTRIBUTING.md).

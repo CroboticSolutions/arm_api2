@@ -10,7 +10,8 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>moveit_ros_planning_interface</depend>
-  <depend>moveit_ros</depend>
+  <depend>moveit_ros_planning</depend>
+  <depend>moveit_msgs</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_action</depend>
   <depend>rclcpp_components</depend>
@@ -28,6 +29,7 @@
   <depend>tf2_geometry_msgs</depend>
   <depend>std_srvs</depend>
   <depend>controller_manager_msgs</depend>
+  <depend>joy</depend>
   <depend>python3</depend>
 
   <test_depend>ament_cmake_cppcheck</test_depend>
