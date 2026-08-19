@@ -6,7 +6,7 @@
 # override_velocity_scaling_factor = 0.0 # valid range [0.0:1.0]
 
 ## Properties of outgoing commands
-publish_period: 0.05 # 1/Nominal publish rate [seconds]
+publish_period: 0.01 # 1/Nominal publish rate [seconds] (needs to be < max_expected_latency/3 for Servo on Jazzy)
 low_latency_mode: false # Set this to true to publish as soon as an incoming Twist command is received (publish_period is ignored)
 
 command_in_type: "unitless"  # "unitless"> in the range [-1:1], as if from joystick. "speed_units"> cmds are in m/s and rad/s
@@ -42,8 +42,8 @@ move_group_name: arm # Often 'manipulator' or 'arm'
 planning_frame: base_link # The MoveIt planning frame. Often 'base_link' or 'world'
 
 ## Other frames
-ee_frame_name: link6 # The name of the end effector link, used to return the EE pose
-robot_link_command_frame: link6 # commands must be given in the frame of a robot link. Usually either the base or end effector
+ee_frame_name: arm_tcp # The name of the end effector link, used to return the EE pose
+robot_link_command_frame: arm_tcp # commands must be given in the frame of a robot link. Usually either the base or end effector
 
 ## Stopping behaviour
 incoming_command_timeout: 0.25 # Stop servoing if X seconds elapse without a new command

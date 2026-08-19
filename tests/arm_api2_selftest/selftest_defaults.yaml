@@ -1,0 +1,79 @@
+# Default tuning for arm_api2_selftest.py.
+#
+# All motion checks are RELATIVE nudges computed from the robot's current
+# state at test start (current_pose / joint_states), so this file has no
+# per-robot absolute poses to keep in sync with a specific world/scene.
+#
+# Copy this file, adjust as needed, and pass it as the first argument to
+# arm_api2_selftest.py to override these values.
+
+robot_namespace: ""          # e.g. "ur1"; empty = root namespace
+
+# Optional exact ros2_control arm controller name. When empty, the selftest
+# discovers the active non-gripper controller heuristically. Set this in
+# multi-controller systems to avoid selecting an unrelated active controller.
+arm_controller_name: ""
+
+skip:
+  gripper: false             # set true for robots with no gripper configured (e.g. plain ABB)
+  servo: false                # set true to skip SERVO_CTL motion check
+
+# arm_api2's own ee_link_name (from config/<robot>/<robot>_<profile>.yaml).
+# Needed to exercise arm/set_eelink safely (it is set back to this same
+# value, so the check has no side effect on later tests). Leave empty to
+# skip the eelink check entirely.
+eelink_default: ""
+
+# Name of an SRDF <group_state> to move to (via arm/move_to_joint) if the
+# robot's current pose turns out to be unusable for the Cartesian/servo motion
+# checks in every probed direction - e.g. a fully-extended elbow or a wrist
+# singularity at spawn. Read live from move_group's robot_description_semantic
+# parameter, so no joint values are hard-coded here. Many MoveIt configs
+# define a "test_configuration" (or similar) state for exactly this purpose;
+# set to "" to disable this fallback (the run will just fail with a clear
+# reason if the spawn pose is unusable).
+warmup_group_state: "test_configuration"
+
+motion:
+  # arm/set_vel_acc test values. Deliberately gentle, matching the common
+  # config default (e.g. config/ur/ur_sim.yaml's max_vel_scaling_factor /
+  # max_acc_scaling_factor: 0.1 each) - there's no "get current vel/acc" or
+  # reset-to-default call, so whatever this sets stays in effect for every
+  # real-motion check later in the same run. A higher value here makes small
+  # (~2cm) nudges execute fast enough to look like a sharp jerk rather than a
+  # smooth motion, especially right after a multi-second stall-detect pause
+  # in the arm/cmd/pose|traj retries.
+  vel_acc_max_vel: 0.1
+  vel_acc_max_acc: 0.1
+  cartesian_nudge_m: 0.02              # nudge used while probing all 6 Cartesian axes
+  joint_nudge_rad: 0.05                # safe-direction nudge, followed by return to baseline
+  position_tolerance_m: 0.012
+  orientation_tolerance_rad: 0.08
+  joint_tolerance_rad: 0.03
+  settle_time_sec: 1.0
+  max_wait_sec_per_step: 60.0
+
+servo:
+  twist_linear_z: 0.02                 # m/s magnitude while probing all 6 Cartesian axes
+  # MoveIt Servo smooths outgoing commands (e.g. a Butterworth low-pass filter),
+  # so output ramps up over time rather than jumping to full speed - keep this
+  # generous enough that a burst reliably clears min_expected_displacement_m
+  # even while the filter is still ramping up.
+  burst_duration_sec: 2.0
+  min_expected_displacement_m: 0.003   # minimum movement to count SERVO_CTL as working
+
+# Planners exercised via arm/set_planner + a planonly plan (never executed).
+# "cumotion" is left out by default since it needs the optional cuMotion
+# planner plugin installed; add it back if your image has it.
+planners:
+  - "ompl_EST"
+  - "ompl_PRM"
+  - "pilz_LIN"
+
+timeouts:
+  wait_for_service_sec: 15.0
+  service_call_sec: 20.0
+  action_result_sec: 30.0
+  baseline_wait_sec: 15.0
+  state_freshness_sec: 1.0
+  topic_max_retries: 2

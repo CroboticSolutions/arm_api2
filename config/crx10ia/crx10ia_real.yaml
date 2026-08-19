@@ -1,14 +1,20 @@
-robot: 
-  arm_name: manipulator  
-  ee_link_name: gripper_base
+# arm_api2 + FANUC CRX-10iA physical (ROBO WH-PP W500 torch, RealSense D435).
+#
+# Same MoveIt semantics as crx10ia_sim.yaml (group manipulator, ee welding_tcp,
+# planning_frame world). Lower default velocity for first site bring-up.
+#
+# Launch with: config_profile:=real use_sim_time:=false
+robot:
+  arm_name: manipulator
+  ee_link_name: welding_tcp
   robot_desc: robot_description
-  move_group_ns: 
+  move_group_ns: ""
   planning_scene: planning_scene
-  planning_frame: base_link
+  planning_frame: world
   num_cart_pts: 20
   joint_states: joint_states
-  max_vel_scaling_factor: 0.5
-  max_acc_scaling_factor: 0.5
+  max_vel_scaling_factor: 0.05
+  max_acc_scaling_factor: 0.05
   with_planner: true
 topic:
   sub:
@@ -37,6 +43,9 @@ topic:
     current_robot_state:
       name: arm/state/ctl_state
       queue: 1
+    gripper_state:
+      name: arm/state/gripper_state
+      queue: 1
 srv:
   disable_collision:
     name: /move_group/disable_collision
@@ -52,7 +61,7 @@ srv:
     name: arm/set_eelink
   set_planonly:
     name: arm/set_planonly
-  open_gripper: 
+  open_gripper:
     name: arm/open_gripper
   close_gripper:
     name: arm/close_gripper

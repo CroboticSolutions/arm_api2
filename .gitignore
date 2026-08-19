@@ -2,3 +2,7 @@
 .vscode
 build
 */__pycache__/*
+*.pyc
+*.copy.yaml
+* copy.yaml
+.pytest_cache/

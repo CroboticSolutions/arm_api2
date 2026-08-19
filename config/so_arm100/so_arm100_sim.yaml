@@ -1,15 +1,16 @@
 robot: 
   arm_name: manipulator  
-  ee_link_name: gripper_base
+  ee_link_name: wrist_2_link
   robot_desc: robot_description
-  move_group_ns: 
+  move_group_ns: ""
   planning_scene: planning_scene
-  planning_frame: base_link
+  planning_frame: base
   num_cart_pts: 20
   joint_states: joint_states
-  max_vel_scaling_factor: 0.5
-  max_acc_scaling_factor: 0.5
+  max_vel_scaling_factor: 0.3
+  max_acc_scaling_factor: 0.3
   with_planner: true
+  enable_servo: true
 topic:
   sub:
     cmd_pose:

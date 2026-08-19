@@ -28,6 +28,30 @@
 - set proper planner priority: 1. cumotion, if failed then PRM, EST, LIN (each 3 times)
 - add planonly mode
 
+## Mar - Aug 2025
+- create `moveit2_simple_iface`, a topic/service-only interface (later merged back into `moveit2_iface`)
+- add init config for ABB and Piper (sim)
+- add service to add collision objects to the planning scene
+- add service to change motion planner (`arm/set_planner`)
+- standardize yaml configuration files across all supported robots
+
+## Sep - Dec 2025
+- port arm_api2 to ROS 2 Jazzy
+- add SO-ARM100 support
+- implement MoveIt Servo control for the Jazzy API
+- add multi-robot launch support (spawn multiple UR robots via namespaces)
+- add joystick-driven fingertip trajectory following in servo mode
+- fix IK solver / kinematics-loading bug for UR robot
+
+## 2026
+- add Piper joint gripper support; extend Piper gripper control
+- add Robotiq gripper support (parallel gripper action + legacy backend)
+- add Cartesian path validation and reachability-check services (`arm/check_cartesian_path`, `arm/check_reachability`)
+- add CRX-10iA sim, real and servo-real config profiles
+- refactor: consolidate `moveit2_iface` and `moveit2_simple_iface`, removing the duplicated legacy interface and launch files
+- fix CMP0167 Boost `find_package` warnings in CMake
+- update `package.xml` dependencies (add `joy`, `moveit_msgs`; align `moveit_ros` -> `moveit_ros_planning`)
+
 # Future potential features
 
 - realtime pose follower (teleoperation: servo via absolute position)

@@ -1,36 +1,31 @@
-/*********************************************************************
- * Software License Agreement (BSD License)
- *
- *  Copyright (c) 2024, KIT
- *  All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted provided that the following conditions
- *  are met:
- *
- *   * Redistributions of source code must retain the above copyright
- *     notice, this list of conditions and the following disclaimer.
- *   * Redistributions in binary form must reproduce the above
- *     copyright notice, this list of conditions and the following
- *     disclaimer in the documentation and/or other materials provided
- *     with the distribution.
- *   * Neither the name of PickNik LLC nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
- *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- *  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- *  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- *  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- *  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- *  POSSIBILITY OF SUCH DAMAGE.
- *********************************************************************/
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright 2024 KIT
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+//    * Redistributions of source code must retain the above copyright
+//      notice, this list of conditions and the following disclaimer.
+//
+//    * Redistributions in binary form must reproduce the above copyright
+//      notice, this list of conditions and the following disclaimer in the
+//      documentation and/or other materials provided with the distribution.
+//
+//    * Neither the name of the copyright holder nor the names of its
+//      contributors may be used to endorse or promote products derived from
+//      this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
 
 /*      Title     : servo_keyboard_input.cpp
  *      Project   : arm_api2
@@ -97,7 +92,8 @@ const std::string BASE_FRAME_ID = "base_link";
 class KeyboardReader
 {
 public:
-  KeyboardReader() : kfd(0)
+  KeyboardReader()
+  : kfd(0)
   {
     // get the console in raw mode
     tcgetattr(kfd, &cooked);
@@ -109,11 +105,10 @@ public:
     raw.c_cc[VEOF] = 2;
     tcsetattr(kfd, TCSANOW, &raw);
   }
-  void readOne(char* c)
+  void readOne(char * c)
   {
     int rc = read(kfd, c, 1);
-    if (rc < 0)
-    {
+    if (rc < 0) {
       throw std::runtime_error("read failed");
     }
   }
@@ -154,21 +149,25 @@ private:
   std::vector<std::string> joint_names_;
 };
 
-KeyboardServo::KeyboardServo() : frame_to_publish_(BASE_FRAME_ID), joint_vel_cmd_(1.0), vel_scale_(0.5), joint_states_received_(false)
+KeyboardServo::KeyboardServo()
+: frame_to_publish_(BASE_FRAME_ID), joint_vel_cmd_(1.0), vel_scale_(0.5),
+  joint_states_received_(false)
 {
   nh_ = rclcpp::Node::make_shared("servo_keyboard_input");
 
   twist_pub_ = nh_->create_publisher<geometry_msgs::msg::TwistStamped>(TWIST_TOPIC, ROS_QUEUE_SIZE);
   joint_pub_ = nh_->create_publisher<control_msgs::msg::JointJog>(JOINT_TOPIC, ROS_QUEUE_SIZE);
   joint_state_sub_ = nh_->create_subscription<sensor_msgs::msg::JointState>(
-      JOINT_STATE_TOPIC, ROS_QUEUE_SIZE,
-      [this](const sensor_msgs::msg::JointState::SharedPtr msg) {
-        (void)msg;
-        joint_states_received_ = true;
-        // save joint names
-        joint_names_ = msg->name;
-      });
-  gripper_client_ = rclcpp_action::create_client<control_msgs::action::GripperCommand>(nh_,GRIPPER_SERVICE);
+    JOINT_STATE_TOPIC, ROS_QUEUE_SIZE,
+    [this](const sensor_msgs::msg::JointState::SharedPtr msg) {
+      (void)msg;
+      joint_states_received_ = true;
+      // save joint names
+      joint_names_ = msg->name;
+    });
+  gripper_client_ = rclcpp_action::create_client<control_msgs::action::GripperCommand>(
+    nh_,
+    GRIPPER_SERVICE);
 }
 
 KeyboardReader input;
@@ -181,7 +180,7 @@ void quit(int sig)
   exit(0);
 }
 
-int main(int argc, char** argv)
+int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
   KeyboardServo keyboard_servo;
@@ -197,8 +196,7 @@ int main(int argc, char** argv)
 
 void KeyboardServo::spin()
 {
-  while (rclcpp::ok())
-  {
+  while (rclcpp::ok()) {
     rclcpp::spin_some(nh_);
   }
 }
@@ -209,24 +207,23 @@ int KeyboardServo::keyLoop()
   bool publish_twist = false;
   bool publish_joint = false;
 
-  std::thread{ std::bind(&KeyboardServo::spin, this) }.detach();
+  std::thread{std::bind(&KeyboardServo::spin, this)}.detach();
 
-  while(!joint_states_received_)
-  {
+  while (!joint_states_received_) {
     RCLCPP_INFO(nh_->get_logger(), "Waiting for joint states...");
     rclcpp::sleep_for(std::chrono::seconds(1));
   }
 
   // print joint names with index (starting from 1)
-  for (size_t i = 0; i < joint_names_.size(); ++i)
-  {
+  for (size_t i = 0; i < joint_names_.size(); ++i) {
     RCLCPP_INFO(nh_->get_logger(), "Joint %d: %s", int(i + 1), joint_names_[i].c_str());
   }
 
   puts("Reading from keyboard");
   puts("---------------------------");
   puts("Use arrow keys and the '.' and ';' keys to Cartesian jog");
-  puts("Use 'I' and 'K' to pitch(y rotate), 'J' and 'L' to yaw(z rotate), and 'M' and ',' to roll(x rotate)");
+  puts(
+    "Use 'I' and 'K' to pitch(y rotate), 'J' and 'L' to yaw(z rotate), and 'M' and ',' to roll(x rotate)");
   puts("Use 'W' to Cartesian jog in the world frame, and 'E' for the End-Effector frame");
   puts("Use 1|2|3|4|5|6|7 keys to joint jog. 'R' to reverse the direction of jogging.");
   puts("Use '+' and '-' to increase/decrease the speed.");
@@ -235,15 +232,11 @@ int KeyboardServo::keyLoop()
   puts("'Q' to quit.");
   puts("  ");
 
-  for (;;)
-  {
+  for (;; ) {
     // get the next event from the keyboard
-    try
-    {
+    try {
       input.readOne(&c);
-    }
-    catch (const std::runtime_error&)
-    {
+    } catch (const std::runtime_error &) {
       perror("read():");
       return -1;
     }
@@ -256,8 +249,7 @@ int KeyboardServo::keyLoop()
 
 
     // Use read key-press
-    switch (c)
-    {
+    switch (c) {
       // Cartesian motions
       case KEYCODE_LEFT:
         RCLCPP_DEBUG(nh_->get_logger(), "LEFT");
@@ -289,7 +281,7 @@ int KeyboardServo::keyLoop()
         twist_msg->twist.linear.z = 1.0 * vel_scale_;
         publish_twist = true;
         break;
-      
+
       // rotational motions
       case KEYCODE_J:
         RCLCPP_DEBUG(nh_->get_logger(), "J");
@@ -376,8 +368,7 @@ int KeyboardServo::keyLoop()
         publish_joint = true;
         break;
       case KEYCODE_7:
-        if (joint_names_.size() < 7)
-        {
+        if (joint_names_.size() < 7) {
           RCLCPP_WARN(nh_->get_logger(), "Not enough joints for key 7");
           break;
         }
@@ -391,13 +382,13 @@ int KeyboardServo::keyLoop()
         RCLCPP_INFO(nh_->get_logger(), "R");
         joint_vel_cmd_ *= -1;
         break;
-      
+
       // Stop actions
       case KEYCODE_Q:
         RCLCPP_INFO(nh_->get_logger(), "quit");
         return 0;
       case KEYCODE_SPACE:
-        RCLCPP_INFO(nh_ -> get_logger(), "STOP");
+        RCLCPP_INFO(nh_->get_logger(), "STOP");
         twist_msg->twist.linear.x = 0.0;
         twist_msg->twist.linear.y = 0.0;
         twist_msg->twist.linear.z = 0.0;
@@ -421,8 +412,7 @@ int KeyboardServo::keyLoop()
       case KEYCODE_MINUS:
         RCLCPP_DEBUG(nh_->get_logger(), "MINUS");
         vel_scale_ -= 0.01;
-        if (vel_scale_ < 0.01)
-        {
+        if (vel_scale_ < 0.01) {
           vel_scale_ = 0.01;
         }
         RCLCPP_INFO(nh_->get_logger(), "Velocity scale: %f", vel_scale_);
@@ -440,15 +430,12 @@ int KeyboardServo::keyLoop()
     }
 
     // If a key requiring a publish was pressed, publish the message now
-    if (publish_twist)
-    {
+    if (publish_twist) {
       twist_msg->header.stamp = nh_->now();
       twist_msg->header.frame_id = frame_to_publish_;
       twist_pub_->publish(std::move(twist_msg));
       publish_twist = false;
-    }
-    else if (publish_joint)
-    {
+    } else if (publish_joint) {
       joint_msg->header.stamp = nh_->now();
       joint_msg->header.frame_id = BASE_FRAME_ID;
       joint_pub_->publish(std::move(joint_msg));
@@ -460,12 +447,12 @@ int KeyboardServo::keyLoop()
 
 void KeyboardServo::send_gripper_command(double position)
 {
-    if (!gripper_client_->wait_for_action_server(std::chrono::seconds(5))) {
-        return;
-    }
-    auto goal = control_msgs::action::GripperCommand::Goal();
-    goal.command.position = position;
-    goal.command.max_effort = 140.0;
-    
-    auto result = gripper_client_->async_send_goal(goal);
+  if (!gripper_client_->wait_for_action_server(std::chrono::seconds(5))) {
+    return;
+  }
+  auto goal = control_msgs::action::GripperCommand::Goal();
+  goal.command.position = position;
+  goal.command.max_effort = 140.0;
+
+  auto result = gripper_client_->async_send_goal(goal);
 }

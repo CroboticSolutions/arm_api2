@@ -1,15 +1,25 @@
-robot: 
-  arm_name: ur_manipulator  
+# arm_api2 + UR Gazebo sim with PickNik Robotiq 2F-85 and parallel_gripper_action_controller.
+# Use with MoveIt semantic_description_file:=srdf/ur_robotiq.srdf.xacro and use_robotiq_gripper:=true.
+robot:
+  arm_name: ur_manipulator
   ee_link_name: tool0
   robot_desc: robot_description
   move_group_ns: ""
   planning_scene: planning_scene
-  planning_frame: world #or base
+  planning_frame: world
   num_cart_pts: 20
   joint_states: joint_states
+  servo_trajectory_topic: joint_trajectory_controller/joint_trajectory
+  servo_default_controller: joint_trajectory_controller
+  # forward_position_controller is the standard, low-latency path for servo output.
+  # arm_api2 auto activates it on SERVO_CTL entry.
+  servo_output: forward_position
   max_vel_scaling_factor: 0.1
   max_acc_scaling_factor: 0.1
   with_planner: true
+  gripper_backend_action: robotiq_gripper_controller/gripper_cmd
+  gripper_action_type: parallel_gripper_command
+  gripper_parallel_joint_name: robotiq_85_left_knuckle_joint
 topic:
   sub:
     cmd_pose:
@@ -24,12 +34,6 @@ topic:
     cmd_delta_pose:
       name: arm/cmd/delta_pose
       queue: 1
-    cmd_pose:
-      name: arm/cmd/pose
-      queue: 1
-    cmd_traj:
-      name: arm/cmd/traj
-      queue: 1
     joint_states:
       name: joint_states
       queue: 1
@@ -42,6 +46,9 @@ topic:
       queue: 1
     current_robot_state:
       name: arm/state/ctl_state
+      queue: 1
+    gripper_state:
+      name: arm/state/gripper_state
       queue: 1
 srv:
   disable_collision:
@@ -62,7 +69,6 @@ srv:
     name: arm/open_gripper
   close_gripper:
     name: arm/close_gripper
-
 action:
   move_to_pose:
     name: arm/move_to_pose

@@ -16,9 +16,9 @@ cd ./docker_files/ros2/humble/arm_api2
 Run move_group for that robot (see particular instructions for supported arms in How to use section). 
 And after that run: 
 ```
-ros2 launch arm_api2 moveit2_simple_iface.launch.py robot_name:=<robot_name>
+ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=<robot_name>
 ```
-Currently supported robot names are: `ur`, `kinova`, `franka`, `piper`. 
+Currently supported robot config names include: `ur`, `kinova`, `franka`, `piper`, `abb`, `crx10ia`, `so_arm100`.
 
 For full instructions check section How to use arm_api2?
 
@@ -118,66 +118,39 @@ Example service call:
 ros2 service call /arm/set_planonly std_srvs/srv/SetBool "{data: true}"
 ```
 
-### Simple interface (topic)
+### Topic interface (simple, topic-based)
 
-Run minimal simple interface with: 
-```
-ros2 launch arm_api2 moveit2_simple_iface.launch.py robot_name=<robot>
-```
-
-Simple interface contains topics to command robot pose, path and 
-retrieve arm information. 
-Topic names are defined in the `config/<robot_name>_sim` file. 
-
-
-**Command robot pose**: 
-- name: `arm/cmd/pose`
-- msg: `geometry_msgs/msg/PoseStamped.msg`
+Run the topic-only interface with:
 
 ```
-ros2 topic pub /arm/cmd/pose geometry_msgs/msg/PoseStamped <wanted_pose>
+ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=<robot> mode:=simple
 ```
 
-**Command cartesian path**:   
-- name: `arm/cmd/traj`
-- msg: `arm_api2_msgs/msg/CartesianWaypoints.msg`
+Topic names are relative to the `arm_api2` namespace (e.g. `/<robot_ns>/arm/...`):
 
-**Get current end effector pose**: 
-- name `arm/current/pose`
-- msg: `geometry_msgs/msg/PoseStamped.msg`
+- **Command robot pose**: `/arm/cmd/pose` (`geometry_msgs/msg/PoseStamped`)
+- **Command cartesian path / waypoints**: `/arm/cmd/traj` (`arm_api2_msgs/msg/CartesianWaypoints`)
 
-```
-ros2 topic echo /arm/current/pose
-```
+Useful state topics:
 
-### Advanced interface (action)
+- **Current end effector pose**: `/arm/state/current_pose` (`geometry_msgs/msg/PoseStamped`)
+- **Control state**: `/arm/state/ctl_state` (`std_msgs/msg/String`)
+- **PlanStatus snapshot**: `/arm/state/plan_status` (`arm_api2_msgs/msg/PlanStatus`)
 
-Run advanced interface with: 
-```
-ros2 launch arm_api2 moveit2_iface.launch.py robot_name=<robot>
-```
+### Action interface (advanced, action-based)
 
-**Command robot pose**:
-
-A robot pose where the robot should move to can be commanded via ROS2 action.
-- name: `arm/move_to_pose`<<
-- action: `arm_api2_msgs/action/MoveCartesian.action`
+Run the action-based interface with:
 
 ```
-ros2 action send_goal /arm/move_to_pose arm_api_msgs/action/MoveCartesian <wanted_pose>
+ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=<robot> mode:=advanced
 ```
 
-**Command cartesian path**:
+Actions (relative to namespace, e.g. `/<robot_ns>/arm/...`):
 
-A catesian path can be commanded via ROS2 action.
-- name: `arm/move_to_pose_path`
-- action: `arm_api2_msgs/action/MoveCartesianPath.action`
-
-**Command joint position**:
-
-A robot joint position where the robot should move to can be commanded via ROS2 action.
-- name: `arm/move_to_pose`
-- msg: `arm_api2_msgs/action/MoveJoint.msg`
+- `/arm/move_to_pose` (`arm_api2_msgs/action/MoveCartesian`)
+- `/arm/move_to_pose_path` (`arm_api2_msgs/action/MoveCartesianPath`)
+- `/arm/move_to_joint` (`arm_api2_msgs/action/MoveJoint`)
+- `/arm/gripper_control` (`control_msgs/action/GripperCommand`)
 
 
 <summary><h3>How to build package?</h3></summary>

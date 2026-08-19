@@ -1,14 +1,24 @@
-robot: 
-  arm_name: manipulator  
-  ee_link_name: gripper_base
+# arm_api2 + FANUC CRX-10iA Gazebo sim (welding torch, no gripper).
+#
+# MoveIt planning group is `manipulator` (base_link -> welding_tcp, see
+# seam_ros2_pkg/srdf/crx10ia.srdf). The model/planning frame is `world`
+# (SRDF virtual_joint world -> base_link; the URDF defines a `world` link so
+# robot_state_publisher provides the world->base_link TF).
+#
+# No gripper section: this is a welding cell, so `gripper_action_type` is
+# omitted and arm_api2 skips gripper backend setup (the open/close services
+# still exist as no-ops). Add a gripper block later if an EOAT is fitted.
+robot:
+  arm_name: manipulator
+  ee_link_name: welding_tcp
   robot_desc: robot_description
-  move_group_ns: 
+  move_group_ns: ""
   planning_scene: planning_scene
-  planning_frame: base_link
+  planning_frame: world
   num_cart_pts: 20
   joint_states: joint_states
-  max_vel_scaling_factor: 0.5
-  max_acc_scaling_factor: 0.5
+  max_vel_scaling_factor: 0.1
+  max_acc_scaling_factor: 0.1
   with_planner: true
 topic:
   sub:
@@ -37,6 +47,9 @@ topic:
     current_robot_state:
       name: arm/state/ctl_state
       queue: 1
+    gripper_state:
+      name: arm/state/gripper_state
+      queue: 1
 srv:
   disable_collision:
     name: /move_group/disable_collision
@@ -52,7 +65,7 @@ srv:
     name: arm/set_eelink
   set_planonly:
     name: arm/set_planonly
-  open_gripper: 
+  open_gripper:
     name: arm/open_gripper
   close_gripper:
     name: arm/close_gripper
