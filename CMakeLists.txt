@@ -101,6 +101,16 @@ install(
   PATTERN "*.gif"
 )
 
+# Selftest assets (YAML + README); arm_api2_selftest.py is installed as PROGRAMS below.
+install(
+  DIRECTORY tests/arm_api2_selftest/
+  DESTINATION share/${PROJECT_NAME}/tests/arm_api2_selftest
+  FILES_MATCHING
+  PATTERN "*.yaml"
+  PATTERN "*.md"
+  PATTERN "__pycache__" EXCLUDE
+)
+
 # Install C++ files
 add_executable(joy_ctl src/arm_joy_node.cpp src/arm_joy.cpp)
 
@@ -130,6 +140,7 @@ install(TARGETS
 
 install(PROGRAMS
   tutorials/pick_place_sequence.py
+  tests/arm_api2_selftest/arm_api2_selftest.py
   examples/scripts/joint_sender_action_client_async.py
   examples/scripts/joint_sender_action_client.py
   examples/scripts/pose_sender_action_client_async.py
@@ -148,6 +159,7 @@ if(BUILD_TESTING)
   find_package(ament_cmake_flake8 REQUIRED)
   find_package(ament_cmake_lint_cmake REQUIRED)
   find_package(ament_cmake_pep257 REQUIRED)
+  find_package(ament_cmake_pytest REQUIRED)
   find_package(ament_cmake_uncrustify REQUIRED)
   find_package(ament_cmake_xmllint REQUIRED)
 
@@ -184,6 +196,11 @@ if(BUILD_TESTING)
       D407
       D413
       D415
+  )
+  ament_add_pytest_test(
+    arm_api2_selftest_unit
+    tests/test_arm_api2_selftest.py
+    TIMEOUT 30
   )
   ament_uncrustify()
   ament_xmllint()

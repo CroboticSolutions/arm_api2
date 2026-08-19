@@ -1,0 +1,11 @@
+# Example selftest override for the UR + Robotiq 2F-85 sim configs
+# (config/ur/ur_sim.yaml), matching e.g. the ur_simulation_gz lab_gripper_one
+# tutorial profile. Copy/adjust for your own robot_ns.
+#
+# Usage:
+#   ros2 run arm_api2 arm_api2_selftest.py \
+#     $(ros2 pkg prefix arm_api2)/share/arm_api2/tests/arm_api2_selftest/examples/ur.yaml \
+#     --robot-ns ur1 --move
+
+# Matches robot.ee_link_name in config/ur/ur_sim.yaml.
+eelink_default: "tool0"

@@ -706,7 +706,9 @@ void m2Iface::set_vel_acc_cb(
   const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Request> req,
   const std::shared_ptr<arm_api2_msgs::srv::SetVelAcc::Response> res)
 {
-  if(req->max_vel < 0 || req->max_acc < 0 || req->max_vel > 1 || req->max_acc > 1) {
+  if (!std::isfinite(req->max_vel) || !std::isfinite(req->max_acc) ||
+    req->max_vel < 0 || req->max_acc < 0 || req->max_vel > 1 || req->max_acc > 1)
+  {
     res->success = false;
     RCLCPP_ERROR_STREAM(this->get_logger(),
       "Velocity and acceleration must be in the range [0, 1]!");
@@ -724,10 +726,23 @@ void m2Iface::set_eelink_cb(
   const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Request> req,
   const std::shared_ptr<arm_api2_msgs::srv::SetStringParam::Response> res)
 {
+  if (!m_moveGroupPtr || !m_moveGroupPtr->getRobotModel() || req->value.empty() ||
+    !m_moveGroupPtr->getRobotModel()->hasLinkModel(req->value))
+  {
+    res->success = false;
+    RCLCPP_ERROR_STREAM(this->get_logger(),
+      "Cannot set end effector link: '" << req->value << "' is not in the robot model");
+    return;
+  }
+  if (!m_moveGroupPtr->setEndEffectorLink(req->value)) {
+    res->success = false;
+    RCLCPP_ERROR_STREAM(this->get_logger(),
+      "MoveGroup rejected end effector link '" << req->value << "'");
+    return;
+  }
   EE_LINK_NAME = req->value;
-  m_moveGroupPtr->setEndEffectorLink(EE_LINK_NAME);
   res->success = true;
-  RCLCPP_INFO_STREAM(this->get_logger(), "Set end effector link to " << req->value);
+  RCLCPP_INFO_STREAM(this->get_logger(), "Set end effector link to " << EE_LINK_NAME);
 }
 
 void m2Iface::set_planner_cb(

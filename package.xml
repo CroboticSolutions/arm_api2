@@ -16,6 +16,8 @@
   <depend>rclcpp_action</depend>
   <depend>rclcpp_components</depend>
   <depend>rclpy</depend>
+  <depend>action_msgs</depend>
+  <depend>rcl_interfaces</depend>
   <depend>std_msgs</depend>
   <depend>moveit_visual_tools</depend>
   <depend>arm_api2_msgs</depend>
@@ -38,6 +40,7 @@
   <test_depend>ament_cmake_flake8</test_depend>
   <test_depend>ament_cmake_lint_cmake</test_depend>
   <test_depend>ament_cmake_pep257</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>ament_cmake_uncrustify</test_depend>
   <test_depend>ament_cmake_xmllint</test_depend>
 

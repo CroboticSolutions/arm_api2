@@ -9,6 +9,12 @@ robot:
   planning_frame: world
   num_cart_pts: 20
   joint_states: joint_states
+  servo_trajectory_topic: scaled_joint_trajectory_controller/joint_trajectory
+  # ScaledJointTrajectoryController doesn't reliably execute the rapid single-point
+  # trajectories MoveIt Servo streams at high rate; forward_position_controller
+  # (defined in ur_controllers.yaml) is the standard, low-latency path for servo
+  # output. arm_api2 auto load/configure/activates it on SERVO_CTL entry.
+  servo_output: forward_position
   max_vel_scaling_factor: 0.1
   max_acc_scaling_factor: 0.1
   with_planner: true

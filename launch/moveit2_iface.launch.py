@@ -73,6 +73,30 @@ def get_moveit_configs(robot_name):
     return {}
 
 
+# robot_name -> (package, path relative to that package's share dir) for the MoveIt
+# joint_limits.yaml (acceleration limits). moveit2_iface builds its own internal
+# RobotModel separate from the external move_group node, so it needs this loaded
+# and passed explicitly too - otherwise Cartesian path time-parameterization
+# (arm/move_to_pose_path) fails with "No acceleration limit was defined for joint
+# ...!" even though move_group itself has the limits. Add an entry here if another
+# robot hits that error.
+JOINT_LIMITS_SOURCES = {
+    "ur": ("ur_moveit_config", "config/joint_limits.yaml"),
+}
+
+
+def get_joint_limits_params(robot_name):
+    """Load robot_description_planning (joint_limits.yaml) for supported robots."""
+    source = JOINT_LIMITS_SOURCES.get(robot_name)
+    if source is None:
+        return {}
+    package_name, rel_path = source
+    joint_limits = load_yaml(package_name, rel_path)
+    if not joint_limits:
+        return {}
+    return {"robot_description_planning": joint_limits}
+
+
 def launch_setup(context, *args, **kwargs):
 
     launch_nodes_ = []
@@ -132,6 +156,9 @@ def launch_setup(context, *args, **kwargs):
     # Load kinematic params
     kinematic_params = load_yaml("arm_api2", kinematics_yaml) or {}
 
+    # Load joint_limits.yaml (acceleration limits) for supported robots
+    joint_limits_params = get_joint_limits_params(arg_robot_name)
+
     # Load MoveIt configs for the robot (robot_description, robot_description_semantic, etc.)
     moveit_configs = get_moveit_configs(arg_robot_name)
 
@@ -155,6 +182,10 @@ def launch_setup(context, *args, **kwargs):
     # Add kinematic params if available
     if kinematic_params:
         node_params.append({"robot_description_kinematics": kinematic_params})
+
+    # Add joint_limits (acceleration limits) if available
+    if joint_limits_params:
+        node_params.append(joint_limits_params)
 
     # Add servo params if available
     if servo_params:
