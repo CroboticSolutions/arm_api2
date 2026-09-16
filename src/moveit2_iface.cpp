@@ -1108,15 +1108,14 @@ bool m2Iface::setPlanningSceneMonitor(rclcpp::Node::SharedPtr nodePtr, std::stri
     // https://github.com/moveit/moveit2_tutorials/blob/main/doc/examples/planning_scene/src/planning_scene_tutorial.cpp
   m_pSceneMonitorPtr = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(nodePtr,
     name);
-  m_pSceneMonitorPtr->startSceneMonitor(PLANNING_SCENE);
+  m_pSceneMonitorPtr->startSceneMonitor("/monitored_planning_scene");
   if (m_pSceneMonitorPtr->getPlanningScene()) {
     m_pSceneMonitorPtr->startStateMonitor(JOINT_STATES);
     m_pSceneMonitorPtr->setPlanningScenePublishingFrequency(25);
     m_pSceneMonitorPtr->startPublishingPlanningScene(
       planning_scene_monitor::PlanningSceneMonitor::UPDATE_SCENE,
                                                          "/moveit_servo/publish_planning_scene");
-    m_pSceneMonitorPtr->startSceneMonitor();
-    m_pSceneMonitorPtr->providePlanningSceneService();
+    m_pSceneMonitorPtr->providePlanningSceneService("/arm_api2/get_planning_scene");
   } else {
     RCLCPP_ERROR(this->get_logger(), "Planning scene not configured!");
     return false;
