@@ -82,6 +82,7 @@ def get_moveit_configs(robot_name):
 # robot hits that error.
 JOINT_LIMITS_SOURCES = {
     "ur": ("ur_moveit_config", "config/joint_limits.yaml"),
+    "piper": ("piper_with_gripper_moveit", "config/joint_limits.yaml"),
 }
 
 
@@ -206,11 +207,24 @@ def launch_setup(context, *args, **kwargs):
     else:
         namespaces = [arg_robot_ns]
 
+    # MoveGroupInterface's own built-in current-state monitor always subscribes to the
+    # ROS-default "joint_states" topic name, regardless of the robot yaml's
+    # robot.joint_states value (that value only wires up moveit2_iface's *separate*
+    # PlanningSceneMonitor). On rigs that publish joint states under a different name
+    # (e.g. this repo's Piper rig uses /joint_state_broadcaster/joint_states -- see
+    # ditto_bridge/send_to_piper.py), remap it here or MoveGroupInterface can never
+    # fetch a current state and every plan fails.
+    robot_cfg = parse_yaml(config_path) or {}
+    robot_joint_states_topic = ((robot_cfg.get("robot") or {}).get("joint_states") or "").strip()
+    joint_states_remap = []
+    if robot_joint_states_topic and robot_joint_states_topic not in ("joint_states", "/joint_states"):
+        joint_states_remap = [("/joint_states", robot_joint_states_topic)]
+
     for idx, robot_ns in enumerate(namespaces):
         # Empty robot_ns means root; remapping /tf -> //tf is invalid for rcl.
-        tf_remappings = []
+        tf_remappings = list(joint_states_remap)
         if robot_ns:
-            tf_remappings = [
+            tf_remappings += [
                 ("/tf", f"/{robot_ns}/tf"),
                 ("/tf_static", f"/{robot_ns}/tf_static"),
             ]

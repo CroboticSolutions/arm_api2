@@ -6,7 +6,7 @@ robot:
   planning_scene: planning_scene
   planning_frame: base_link
   num_cart_pts: 20
-  joint_states: joint_states
+  joint_states: /joint_states
   max_vel_scaling_factor: 0.08
   max_acc_scaling_factor: 0.08
   with_planner: true
