@@ -14,6 +14,11 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+# geometric_shapes (pulled in transitively by moveit_core) exports a link
+# interface to random_numbers::random_numbers; that imported target only
+# resolves if this package has also called find_package(random_numbers)
+# itself, otherwise geometric_shapesConfig.cmake fails at generate time.
+find_package(random_numbers REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_ros_planning REQUIRED)
 find_package(control_msgs REQUIRED)
