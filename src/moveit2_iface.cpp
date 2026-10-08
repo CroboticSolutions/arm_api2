@@ -446,11 +446,44 @@ void m2Iface::init_moveit()
   moveGroupInit = setMoveGroup(node_, PLANNING_GROUP, MOVE_GROUP_NS);
   pSceneMonitorInit = setPlanningSceneMonitor(node_, ROBOT_DESC);
   robotModelInit = setRobotModel(node_);
+  init_tcp_state();
     // Sanitize the namespace string. If "null", use empty string (root/default).
   std::string interface_ns = (MOVE_GROUP_NS == "null") ? "" : MOVE_GROUP_NS;
   m_planningSceneInterface =
     std::make_shared<moveit::planning_interface::PlanningSceneInterface>(interface_ns);
   RCLCPP_INFO(this->get_logger(), "PlanningSceneInterface initialized!");
+}
+
+void m2Iface::init_tcp_state()
+{
+  arm_api2::TcpStateConfig cfg;
+  cfg.joint_states_topic = JOINT_STATES;
+  cfg.group = PLANNING_GROUP;
+  cfg.tip_link = EE_LINK_NAME;
+  const YAML::Node t = config["tcp_state"];
+  if (t) {
+    if (t["enabled"]) {cfg.enabled = t["enabled"].as<bool>();}
+    if (t["pose_topic"]) {cfg.pose_topic = t["pose_topic"].as<std::string>();}
+    if (t["twist_topic"]) {cfg.twist_topic = t["twist_topic"].as<std::string>();}
+    if (t["filter_tau_s"]) {cfg.filter_tau_s = t["filter_tau_s"].as<double>();}
+    if (t["max_dt_s"]) {cfg.max_dt_s = t["max_dt_s"].as<double>();}
+    if (t["velocity_source"]) {
+      const auto src = t["velocity_source"].as<std::string>();
+      if (src == "joint_velocity") {
+        cfg.velocity_source = arm_api2::TcpVelocitySource::JointVelocity;
+      } else if (src == "finite_difference") {
+        cfg.velocity_source = arm_api2::TcpVelocitySource::FiniteDifference;
+      } else if (src != "auto") {
+        RCLCPP_WARN(this->get_logger(), "Unknown tcp_state.velocity_source '%s', using auto",
+          src.c_str());
+      }
+    }
+  }
+  if (!cfg.enabled || !kinematic_model) {
+    return;
+  }
+  tcp_state_pub_ = std::make_unique<arm_api2::TcpStatePublisher>(node_, *this, kinematic_model,
+    cfg);
 }
 
 std::unique_ptr<moveit_servo::Servo> m2Iface::init_servo()

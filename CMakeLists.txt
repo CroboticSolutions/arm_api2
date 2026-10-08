@@ -50,6 +50,7 @@ add_executable(
   src/moveit2_iface_node.cpp
   src/piper_joint_gripper.cpp
   src/robotiq_gripper.cpp
+  src/tcp_state_publisher.cpp
   src/utils.cpp)
 target_include_directories(moveit2_iface
 PUBLIC

@@ -145,6 +145,7 @@
 #include "arm_api2/grippers/gripper.hpp"
 #include "arm_api2/grippers/piper_joint_gripper.hpp"
 #include "arm_api2/grippers/robotiq_gripper.hpp"
+#include "arm_api2/tcp_state_publisher.hpp"
 
 #define stringify(name) #name
 
@@ -478,6 +479,10 @@ private:
   moveit::planning_interface::MoveGroupInterfacePtr m_moveGroupPtr;
   moveit::core::RobotStatePtr m_robotStatePtr;
   moveit::core::RobotModelPtr kinematic_model;
+
+        /* TCP pose + twist on every joint_states message (runs on the internal node executor) */
+  std::unique_ptr<arm_api2::TcpStatePublisher> tcp_state_pub_;
+  void init_tcp_state();
   std::shared_ptr<planning_scene_monitor::PlanningSceneMonitor> m_pSceneMonitorPtr;
   std::shared_ptr<servo::ParamListener> servo_param_listener_;
   std::unique_ptr<moveit_servo::Servo> servoPtr;

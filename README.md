@@ -211,6 +211,30 @@ ros2 topic pub /arm/cmd/pose geometry_msgs/msg/PoseStamped <wanted_pose>
 ros2 topic echo /arm/state/current_pose
 ```
 
+**Get TCP pose and velocity** (every robot, published on each `joint_states` message):
+- `arm/state/tcp_pose`: `geometry_msgs/msg/PoseStamped`, pose of `robot.ee_link_name` in the robot model frame
+- `arm/state/tcp_twist`: `geometry_msgs/msg/TwistStamped`, linear [m/s] and angular [rad/s] velocity of the TCP origin, expressed in the same frame; TCP speed is the norm of `twist.linear`
+
+Both use the `joint_states` stamp and keep publishing while a synchronous action executes
+(unlike `arm/state/current_pose`). Optional settings in the robot yaml:
+
+```yaml
+tcp_state:
+  enabled: true
+  pose_topic: arm/state/tcp_pose
+  twist_topic: arm/state/tcp_twist
+  # auto: J(q)·q̇ from joint_states velocities, falls back to differentiating TCP poses if
+  #       velocities are missing or disagree with the motion (e.g. mock hardware reports 0)
+  # joint_velocity | finite_difference: force one method
+  velocity_source: auto
+  filter_tau_s: 0.02   # low-pass for the finite-difference twist, 0 = off
+  max_dt_s: 0.5        # longer joint_states gaps restart differentiation
+```
+
+```
+ros2 topic echo /arm/state/tcp_twist
+```
+
 **Other state topics** (published by the node, names configurable per robot in `config/<robot_name>/`):
 
 | Topic | Msg type | Description |
