@@ -39,6 +39,10 @@ find_package(sensor_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(controller_manager_msgs REQUIRED)
+# moveit2_iface uses yaml-cpp directly; don't rely on it arriving transitively through MoveIt
+# (true only when the system libyaml-cpp-dev is installed). The vendor sets yaml-cpp_DIR.
+find_package(yaml_cpp_vendor REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 # include headers
 include_directories(include)
@@ -80,6 +84,11 @@ ament_target_dependencies(
   tf2_geometry_msgs
   controller_manager_msgs
 )
+if(TARGET yaml-cpp::yaml-cpp)
+  target_link_libraries(moveit2_iface yaml-cpp::yaml-cpp)
+else()
+  target_link_libraries(moveit2_iface yaml-cpp)
+endif()
 
 # Install moveit2_iface
 install(TARGETS
