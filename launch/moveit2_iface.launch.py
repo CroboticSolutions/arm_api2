@@ -83,6 +83,7 @@ def get_moveit_configs(robot_name):
 JOINT_LIMITS_SOURCES = {
     "ur": ("ur_moveit_config", "config/joint_limits.yaml"),
     "piper": ("piper_with_gripper_moveit", "config/joint_limits.yaml"),
+    "crx10ia_l": ("crx10ia_l_moveit_config", "config/joint_limits.yaml"),
 }
 
 

@@ -208,6 +208,10 @@ private:
   float                                                               max_vel_scaling_factor;
   float                                                               max_acc_scaling_factor;
   int                                                                 num_cart_pts_{20};
+  /* Absolute per-point joint change allowed in Cartesian paths (rad, 0 = off).
+     Consecutive points are <= eefStep apart, so more is an IK branch flip or a
+     +-2pi wrap (full J4/J6 turn on CRX); computeCartesianPath has no jump check. */
+  double                                                              max_joint_step_rad_{0.5};
 
         /* planning budget for OMPL pose targets (seconds). 5 s is the MoveIt
          * default, but for an interactive GUI 1.5 s is plenty: a healthy goal
@@ -410,6 +414,9 @@ private:
   void stopBeforeAsyncExecute();
   void printTimestamps(const moveit_msgs::msg::RobotTrajectory & trajectory);
   bool addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory & trajectory);
+  /* false (and reason) when two consecutive points differ by more than max_joint_step_rad_ */
+  bool jointPathContinuous(const moveit_msgs::msg::RobotTrajectory & trajectory,
+    std::string & reason) const;
   bool planWithPlanner(
     moveit::planning_interface::MoveGroupInterface::Plan & plan,
     bool eagerExecution = true);

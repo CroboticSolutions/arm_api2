@@ -1,0 +1,85 @@
+# arm_api2 + FANUC CRX-10iA/L Gazebo sim (seam_ros2_pkg crx_gz_sim model:=crx10ia_l,
+# welding torch, no gripper). Same links/frames as the CRX-10iA sim; robot_name
+# crx10ia_l gives this arm its own kinematics (crx10ia_l_kinematics.yaml, TRAC-IK)
+# and the CRX-10iA/L joint/acceleration limits (crx10ia_l_moveit_config).
+#
+# MoveIt planning group is `manipulator` (base_link -> welding_tcp, see
+# seam_ros2_pkg/srdf/crx10ia.srdf). The model/planning frame is `world`
+# (SRDF virtual_joint world -> base_link; the URDF defines a `world` link so
+# robot_state_publisher provides the world->base_link TF).
+#
+# No gripper section: this is a welding cell, so `gripper_action_type` is
+# omitted and arm_api2 skips gripper backend setup (the open/close services
+# still exist as no-ops). Add a gripper block later if an EOAT is fitted.
+robot:
+  arm_name: manipulator
+  ee_link_name: welding_tcp
+  robot_desc: robot_description
+  move_group_ns: ""
+  planning_scene: planning_scene
+  planning_frame: world
+  num_cart_pts: 20
+  # reject Cartesian paths with a joint change > this between points (IK flip / 2pi wrap)
+  max_joint_step_rad: 0.5
+  joint_states: joint_states
+  max_vel_scaling_factor: 0.1
+  max_acc_scaling_factor: 0.1
+  with_planner: true
+topic:
+  sub:
+    cmd_pose:
+      name: arm/cmd/pose
+      queue: 1
+    cmd_traj:
+      name: arm/cmd/traj
+      queue: 1
+    cmd_tool_orientation:
+      name: tool/cmd/orient
+      queue: 1
+    cmd_delta_pose:
+      name: arm/cmd/delta_pose
+      queue: 1
+    joint_states:
+      name: joint_states
+      queue: 1
+  pub:
+    display_trajectory:
+      name: arm/display_path
+      queue: 1
+    current_pose:
+      name: arm/state/current_pose
+      queue: 1
+    current_robot_state:
+      name: arm/state/ctl_state
+      queue: 1
+    gripper_state:
+      name: arm/state/gripper_state
+      queue: 1
+srv:
+  disable_collision:
+    name: /move_group/disable_collision
+  add_collision:
+    name: /move_group/add_collision
+  change_robot_state:
+    name: arm/change_state
+  set_vel_acc:
+    name: arm/set_vel_acc
+  set_planner:
+    name: arm/set_planner
+  set_eelink:
+    name: arm/set_eelink
+  set_planonly:
+    name: arm/set_planonly
+  open_gripper:
+    name: arm/open_gripper
+  close_gripper:
+    name: arm/close_gripper
+action:
+  move_to_pose:
+    name: arm/move_to_pose
+  move_to_joint:
+    name: arm/move_to_joint
+  move_to_pose_path:
+    name: arm/move_to_pose_path
+  gripper_control:
+    name: arm/gripper_control

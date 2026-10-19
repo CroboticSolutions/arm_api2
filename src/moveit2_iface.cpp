@@ -105,6 +105,9 @@ m2Iface::m2Iface(const rclcpp::NodeOptions & options)
   if (config["robot"]["num_cart_pts"]) {
     num_cart_pts_ = config["robot"]["num_cart_pts"].as<int>();
   }
+  if (config["robot"]["max_joint_step_rad"]) {
+    max_joint_step_rad_ = std::max(0.0, config["robot"]["max_joint_step_rad"].as<double>());
+  }
 
     /* Optional override for OMPL planning time. Default 1.5 s — see hpp comment. */
   if (config["robot"]["pose_plan_time_sec"]) {
@@ -1490,6 +1493,11 @@ void m2Iface::planAndExecPosePath()
   double eefStep = 0.02;
   bool success = (m_moveGroupPtr->computeCartesianPath(goalPoses, eefStep, trajectory,
     true) == 1.0);
+  std::string jumpReason;
+  if (success && !jointPathContinuous(trajectory, jumpReason)) {
+    RCLCPP_ERROR_STREAM(this->get_logger(), "Cartesian path rejected: " << jumpReason);
+    success = false;
+  }
 
   if (success && planOnly) {
     RCLCPP_INFO_STREAM(this->get_logger(), "#####################################################");
@@ -1572,6 +1580,14 @@ void m2Iface::planAndExecTopicPosePath()
     publishPlanStatus(false, "PLAN_NOT_FOUND",
                           "Cartesian path could not be computed (fraction=" +
       std::to_string(fraction) + ")",
+                          target_pose, plan_dt, "CART_TRAJ_CTL");
+    return;
+  }
+
+  std::string jumpReason;
+  if (!jointPathContinuous(trajectory, jumpReason)) {
+    RCLCPP_ERROR_STREAM(this->get_logger(), "Topic Cartesian path rejected: " << jumpReason);
+    publishPlanStatus(false, "PLAN_NOT_FOUND", "Cartesian path rejected: " + jumpReason,
                           target_pose, plan_dt, "CART_TRAJ_CTL");
     return;
   }
@@ -2516,4 +2532,31 @@ bool m2Iface::gripperMeasuredReachedGoal()
     return piper_joint_gripper_->reached_goal();
   }
   return gripper_.reached_goal();
+}
+
+bool m2Iface::jointPathContinuous(const moveit_msgs::msg::RobotTrajectory & trajectory,
+  std::string & reason) const
+{
+  if (max_joint_step_rad_ <= 0.0) {
+    return true;
+  }
+  const auto & jt = trajectory.joint_trajectory;
+  for (size_t i = 1; i < jt.points.size(); ++i) {
+    const auto & before = jt.points[i - 1].positions;
+    const auto & after = jt.points[i].positions;
+    for (size_t j = 0; j < std::min({before.size(), after.size(), jt.joint_names.size()}); ++j) {
+      const double step = std::abs(after[j] - before[j]);
+      if (step > max_joint_step_rad_) {
+        const bool wrap = std::abs(std::remainder(step, 2.0 * M_PI)) <= max_joint_step_rad_;
+        reason = "joint " + jt.joint_names[j] + " jumps " +
+          std::to_string(static_cast<int>(std::lround(step * 180.0 / M_PI))) +
+          " deg between path points " + std::to_string(i - 1) + " and " + std::to_string(i) +
+          (wrap ? " (full-turn 2*pi wrap)" : " (IK branch flip)") + "; limit " +
+          std::to_string(static_cast<int>(std::lround(max_joint_step_rad_ * 180.0 / M_PI))) +
+          " deg per point";
+        return false;
+      }
+    }
+  }
+  return true;
 }
