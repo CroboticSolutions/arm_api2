@@ -84,6 +84,7 @@ JOINT_LIMITS_SOURCES = {
     "ur": ("ur_moveit_config", "config/joint_limits.yaml"),
     "piper": ("piper_with_gripper_moveit", "config/joint_limits.yaml"),
     "crx10ia_l": ("crx10ia_l_moveit_config", "config/joint_limits.yaml"),
+    "ur10": ("ur_weld_bringup", "config/joint_limits.yaml"),
 }
 
 
