@@ -70,6 +70,9 @@
 
 #include "arm_api2/utils.hpp"
 
+#include <algorithm>
+#include <cmath>
+
 // TODO: move to utils
 std::vector<geometry_msgs::msg::Pose> utils::createCartesianWaypoints(
   geometry_msgs::msg::Pose p1,
@@ -105,7 +108,8 @@ bool utils::comparePosition(geometry_msgs::msg::PoseStamped p1, geometry_msgs::m
 {
     // Returns false if different positions
   bool x_cond = false;  bool y_cond = false;  bool z_cond = false;
-  double d = 0.01;
+  // 1 mm: only a real repeat of the same command (was 1 cm, which swallowed small nudges).
+  double d = 0.001;
 
   if (std::abs(p1.pose.position.x - p2.pose.position.x) < d) {x_cond = true;}
   if (std::abs(p1.pose.position.y - p2.pose.position.y) < d) {y_cond = true;}
@@ -120,31 +124,19 @@ bool utils::compareOrientation(
   geometry_msgs::msg::PoseStamped p1,
   geometry_msgs::msg::PoseStamped p2)
 {
-    // Returns false if different positions
-  bool p_cond = false;  bool r_cond = false;  bool y_cond = false;
-  double d = 0.01;
-
-  geometry_msgs::msg::Quaternion q1c, q2c;
-  q1c.x = p1.pose.orientation.x; q2c.x = p2.pose.orientation.x;
-  q1c.y = p1.pose.orientation.y; q2c.y = p2.pose.orientation.y;
-  q1c.z = p1.pose.orientation.z; q2c.z = p2.pose.orientation.z;
-  q1c.w = p1.pose.orientation.w; q2c.w = p2.pose.orientation.w;
-
-  tf2::Quaternion q1(q1c.x, q1c.y, q1c.z, q1c.w);
-  tf2::Quaternion q2(q2c.x, q2c.y, q2c.z, q2c.w);
-
-  double r1, r2, pi1, pi2, y1, y2;
-  tf2::Matrix3x3(q1).getEulerYPR(y1, pi1, r1);
-  tf2::Matrix3x3(q2).getEulerYPR(y2, pi2, r2);
-
-  d = 0.01;
-  if (std::abs(pi1 - pi2) < d) {p_cond = true;}
-  if (std::abs(r1 - r2) < d) {r_cond = true;}
-  if (std::abs(y1 - y2) < d) {y_cond = true;}
-
-    //TODO: Convert quat1 to roll & pitch & yaw
-  bool cond = p_cond && r_cond && y_cond;
-  return cond;
+  // True when the orientations differ by less than 0.1 deg (shortest-arc angle; the old
+  // per-Euler-angle check used 0.57 deg and split at the +-pi wrap).
+  tf2::Quaternion q1(p1.pose.orientation.x, p1.pose.orientation.y, p1.pose.orientation.z,
+    p1.pose.orientation.w);
+  tf2::Quaternion q2(p2.pose.orientation.x, p2.pose.orientation.y, p2.pose.orientation.z,
+    p2.pose.orientation.w);
+  if (q1.length2() < 1e-12 || q2.length2() < 1e-12) {
+    return q1.length2() < 1e-12 && q2.length2() < 1e-12;
+  }
+  q1.normalize();
+  q2.normalize();
+  const double dot = std::min(1.0, std::abs(q1.dot(q2)));
+  return 2.0 * std::acos(dot) < 0.1 * M_PI / 180.0;
 }
 
 // TODO: move to utils

@@ -75,6 +75,7 @@
 #include <cmath>
 #include <memory>
 #include <thread>
+#include <functional>
 #include <string>
 
 //* yaml params
@@ -417,10 +418,21 @@ private:
   void planAndExecTopicPosePath();
         /** Execute an already-planned trajectory (joint-space Plan). Single-flight
          *  guarded; async runs the blocking execute on a worker thread. */
+  /** Called once an async execute finishes: (succeeded, MoveIt error code string). */
+  using ExecDone = std::function<void (bool, const std::string &)>;
   bool execPlan_with_plan(
     const moveit::planning_interface::MoveGroupInterface::Plan & plan,
-    bool async_flag);
-  bool execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async_flag);
+    bool async_flag, ExecDone on_done = nullptr);
+  bool execTrajectory(
+    moveit_msgs::msg::RobotTrajectory trajectory, bool async_flag,
+    ExecDone on_done = nullptr);
+        /** Final plan_status of an async topic execution; a failed one also forgets the
+         *  last commanded pose so the same pose can be sent again. */
+  ExecDone topicExecDone(
+    const geometry_msgs::msg::PoseStamped & pose, double plan_time_sec,
+    const std::string & mode, bool forget_pose);
+        /** Abort accepted action goals and drop queued topic commands (state change). */
+  void dropPendingCommands(const std::string & why);
         /** Stop active trajectory before planning a new one. Overlap is also prevented by trajectory_executing_. */
   void stopBeforeAsyncExecute();
   void printTimestamps(const moveit_msgs::msg::RobotTrajectory & trajectory);
@@ -472,6 +484,9 @@ private:
         /* topic-commanded executions run async (worker thread) by default */
   bool async = true;
   bool planOnly = false;
+        /* topic Cartesian path (arm/cmd/traj): below this fraction nothing is executed
+         * (YAML robot.cartesian_path_min_fraction; same 0.98 as the grasp descent gate) */
+  double cartesian_path_min_fraction_ = 0.98;
 
         /* goal handles */
   std::shared_ptr<rclcpp_action::ServerGoalHandle<arm_api2_msgs::action::MoveJoint>>

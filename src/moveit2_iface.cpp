@@ -115,6 +115,11 @@ m2Iface::m2Iface(const rclcpp::NodeOptions & options)
     if (v > 0.0) {pose_plan_time_sec_ = v;}
   }
 
+  if (config["robot"]["cartesian_path_min_fraction"]) {
+    const double v = config["robot"]["cartesian_path_min_fraction"].as<double>();
+    if (v > 0.0 && v <= 1.0) {cartesian_path_min_fraction_ = v;}
+  }
+
   SERVO_TRAJECTORY_TOPIC = "/joint_trajectory_controller/joint_trajectory";
   if (config["robot"]["servo_trajectory_topic"]) {
     SERVO_TRAJECTORY_TOPIC = config["robot"]["servo_trajectory_topic"].as<std::string>();
@@ -617,6 +622,10 @@ void m2Iface::pose_cmd_cb(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
      * already going there; a *failed* pose is not stored, so a re-click retries. */
   if (!utils::comparePose(m_topicPoseCmd, m_oldTopicPoseCmd)) {
     received_topic_pose_cmd_ = true;
+  } else {
+    publishPlanStatus(true, "ALREADY_COMMANDED",
+      "Same pose as the last started command (within 1 mm / 0.1 deg); not replanned",
+      m_topicPoseCmd, 0.0, robotState == JOINT_TRAJ_CTL ? "JOINT_TRAJ_CTL" : "CART_TRAJ_CTL");
   }
 }
 
@@ -1099,6 +1108,10 @@ void m2Iface::change_state_cb(
 
   if (itr != std::end(stateNames)) {
     int wantedIndex_ = std::distance(stateNames, itr);
+    if ((state)wantedIndex_ != robotState) {
+      // A command queued for the old state must not run when that state comes back.
+      dropPendingCommands("arm state changed to " + req->state);
+    }
     robotState = (state)wantedIndex_;
     published_state_.store(static_cast<int>(robotState));
     RCLCPP_INFO_STREAM(this->get_logger(), "Switching state!");
@@ -1107,6 +1120,53 @@ void m2Iface::change_state_cb(
     RCLCPP_INFO_STREAM(this->get_logger(), "Failed switching to state " << req->state);
     res->success = false;
   }
+}
+
+void m2Iface::dropPendingCommands(const std::string & why)
+{
+  auto abort_pending = [&](auto & handle, auto result) {
+      if (handle && handle->is_active()) {
+        result->success = false;
+        handle->abort(result);
+        RCLCPP_WARN_STREAM(this->get_logger(), "Aborted a queued action goal: " << why);
+      }
+      handle.reset();
+    };
+  if (received_cmd_) {
+    abort_pending(m_moveToJointGoalHandle_,
+      std::make_shared<arm_api2_msgs::action::MoveJoint::Result>());
+    abort_pending(m_moveToPoseGoalHandle_,
+      std::make_shared<arm_api2_msgs::action::MoveCartesian::Result>());
+  }
+  if (received_traj_) {
+    abort_pending(m_moveToPosePathGoalHandle_,
+      std::make_shared<arm_api2_msgs::action::MoveCartesianPath::Result>());
+  }
+  if (received_topic_pose_cmd_ || received_topic_traj_cmd_) {
+    RCLCPP_WARN_STREAM(this->get_logger(), "Dropped a queued topic command: " << why);
+  }
+  received_cmd_ = false;
+  received_traj_ = false;
+  received_topic_pose_cmd_ = false;
+  received_topic_traj_cmd_ = false;
+}
+
+m2Iface::ExecDone m2Iface::topicExecDone(
+  const geometry_msgs::msg::PoseStamped & pose, double plan_time_sec,
+  const std::string & mode, bool forget_pose)
+{
+  return [this, pose, plan_time_sec, mode, forget_pose](bool ok, const std::string & code) {
+           if (ok) {
+             publishPlanStatus(true, "SUCCESS", "Execution finished", pose, plan_time_sec, mode);
+             return;
+           }
+           if (forget_pose) {
+             std::lock_guard<std::mutex> lock(pose_topic_mutex_);
+             m_oldTopicPoseCmd = geometry_msgs::msg::PoseStamped();
+           }
+           publishPlanStatus(false, "EXECUTION_FAILED",
+             "Execution did not complete (" + code + ")", pose, plan_time_sec, mode);
+         };
 }
 
 bool m2Iface::setMoveGroup(
@@ -1343,13 +1403,21 @@ void m2Iface::planAndExecTopicPose()
     return;
   }
 
-  const bool ok = execPlan_with_plan(plan, async);
-  if (ok) {
+  {
+    // Before execute: a fast failure must be able to clear it again (retry).
     std::lock_guard<std::mutex> lock(pose_topic_mutex_);
     m_oldTopicPoseCmd = goalPose;
+  }
+  const bool ok = execPlan_with_plan(plan, async,
+    topicExecDone(goalPose, plan_dt, "CART_TRAJ_CTL", true));
+  if (ok) {
     publishPlanStatus(true, "SUCCESS", "Plan accepted; executing", goalPose, plan_dt,
       "CART_TRAJ_CTL");
   } else {
+    {
+      std::lock_guard<std::mutex> lock(pose_topic_mutex_);
+      m_oldTopicPoseCmd = geometry_msgs::msg::PoseStamped();
+    }
     publishPlanStatus(false, "EXECUTE_FAILED",
                           "Plan succeeded but execute() did not start",
                           goalPose, plan_dt, "CART_TRAJ_CTL");
@@ -1409,14 +1477,21 @@ void m2Iface::planAndExecTopicPoseJoint()
     return;
   }
 
-  const bool ok = execPlan_with_plan(plan, async);
-  if (ok) {
+  {
     std::lock_guard<std::mutex> lock(pose_topic_mutex_);
     m_oldTopicPoseCmd = cmdPose_;
+  }
+  const bool ok = execPlan_with_plan(plan, async,
+    topicExecDone(cmdPose_, plan_dt, "JOINT_TRAJ_CTL", true));
+  if (ok) {
     RCLCPP_INFO_STREAM(this->get_logger(), "Plan succeeded; executing commanded path.");
     publishPlanStatus(true, "SUCCESS", "Plan accepted; executing", cmdPose_, plan_dt,
       "JOINT_TRAJ_CTL");
   } else {
+    {
+      std::lock_guard<std::mutex> lock(pose_topic_mutex_);
+      m_oldTopicPoseCmd = geometry_msgs::msg::PoseStamped();
+    }
     publishPlanStatus(false, "EXECUTE_FAILED",
                           "Plan succeeded but execute() did not start",
                           cmdPose_, plan_dt, "JOINT_TRAJ_CTL");
@@ -1600,6 +1675,19 @@ void m2Iface::planAndExecTopicPosePath()
     return;
   }
 
+  if (fraction < cartesian_path_min_fraction_) {
+    // A partial path stops short of the target: never execute it as if it succeeded.
+    RCLCPP_ERROR(
+            this->get_logger(),
+            "Topic Cartesian path only partial (fraction=%f < %f); not executing",
+            fraction, cartesian_path_min_fraction_);
+    publishPlanStatus(false, "PARTIAL_PATH",
+                          "Cartesian path only partial (fraction=" + std::to_string(fraction) +
+      ", minimum " + std::to_string(cartesian_path_min_fraction_) + "); not executed",
+                          target_pose, plan_dt, "CART_TRAJ_CTL");
+    return;
+  }
+
   std::string jumpReason;
   if (!jointPathContinuous(trajectory, jumpReason)) {
     RCLCPP_ERROR_STREAM(this->get_logger(), "Topic Cartesian path rejected: " << jumpReason);
@@ -1624,7 +1712,8 @@ void m2Iface::planAndExecTopicPosePath()
                           target_pose, plan_dt, "CART_TRAJ_CTL");
     return;
   }
-  const bool ok = execTrajectory(std::move(trajectory), async);
+  const bool ok = execTrajectory(std::move(trajectory), async,
+    topicExecDone(target_pose, plan_dt, "CART_TRAJ_CTL", false));
   if (ok) {
     const std::string reason = (fraction >= 0.999) ?
       "Cartesian plan executing (full path)" :
@@ -1805,7 +1894,7 @@ void m2Iface::stopBeforeAsyncExecute()
 
 bool m2Iface::execPlan_with_plan(
   const moveit::planning_interface::MoveGroupInterface::Plan & plan,
-  bool async_flag)
+  bool async_flag, ExecDone on_done)
 {
   if (trajectory_executing_.load(std::memory_order_acquire)) {
     RCLCPP_WARN_THROTTLE(
@@ -1832,12 +1921,16 @@ bool m2Iface::execPlan_with_plan(
     if (execution_thread_.joinable()) {
       execution_thread_.join();
     }
-    execution_thread_ = std::thread([this, plan]() {
+    execution_thread_ = std::thread([this, plan, on_done]() {
+          bool ok = false;
+          std::string code = "EXCEPTION";
           try {
             const auto exec_err = m_moveGroupPtr->execute(plan);
-            if (exec_err != moveit::core::MoveItErrorCode::SUCCESS) {
+            ok = exec_err == moveit::core::MoveItErrorCode::SUCCESS;
+            code = utils::moveItErrorCodeToString(exec_err);
+            if (!ok) {
               RCLCPP_WARN(this->get_logger(),
-            "execute(plan) in async worker did not report SUCCESS");
+            "execute(plan) in async worker did not report SUCCESS (%s)", code.c_str());
             }
           } catch (const std::exception & ex) {
             RCLCPP_ERROR(this->get_logger(), "execute(plan) async worker exception: %s", ex.what());
@@ -1845,6 +1938,7 @@ bool m2Iface::execPlan_with_plan(
             RCLCPP_ERROR(this->get_logger(), "execute(plan) async worker unknown exception");
           }
           trajectory_executing_.store(false, std::memory_order_release);
+          if (on_done) {on_done(ok, code);}
         });
   } catch (const std::system_error & e) {
     trajectory_executing_.store(false, std::memory_order_release);
@@ -1855,7 +1949,9 @@ bool m2Iface::execPlan_with_plan(
   return true;
 }
 
-bool m2Iface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool async_flag)
+bool m2Iface::execTrajectory(
+  moveit_msgs::msg::RobotTrajectory trajectory, bool async_flag,
+  ExecDone on_done)
 {
   if (trajectory.joint_trajectory.points.empty()) {
     RCLCPP_WARN(this->get_logger(), "execTrajectory: empty trajectory, skipping execute");
@@ -1885,12 +1981,16 @@ bool m2Iface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool 
     if (execution_thread_.joinable()) {
       execution_thread_.join();
     }
-    execution_thread_ = std::thread([this, trajectory]() {
+    execution_thread_ = std::thread([this, trajectory, on_done]() {
+          bool ok = false;
+          std::string code = "EXCEPTION";
           try {
             const auto exec_err = m_moveGroupPtr->execute(trajectory);
-            if (exec_err != moveit::core::MoveItErrorCode::SUCCESS) {
+            ok = exec_err == moveit::core::MoveItErrorCode::SUCCESS;
+            code = utils::moveItErrorCodeToString(exec_err);
+            if (!ok) {
               RCLCPP_WARN(this->get_logger(),
-            "execute(trajectory) in async worker did not report SUCCESS");
+            "execute(trajectory) in async worker did not report SUCCESS (%s)", code.c_str());
             }
           } catch (const std::exception & ex) {
             RCLCPP_ERROR(this->get_logger(), "execute(trajectory) async worker exception: %s",
@@ -1899,6 +1999,7 @@ bool m2Iface::execTrajectory(moveit_msgs::msg::RobotTrajectory trajectory, bool 
             RCLCPP_ERROR(this->get_logger(), "execute(trajectory) async worker unknown exception");
           }
           trajectory_executing_.store(false, std::memory_order_release);
+          if (on_done) {on_done(ok, code);}
         });
   } catch (const std::system_error & e) {
     trajectory_executing_.store(false, std::memory_order_release);
