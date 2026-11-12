@@ -221,6 +221,17 @@ m2Iface::m2Iface(const rclcpp::NodeOptions & options)
     MOVE_GROUP_NS = (ns_ == "/") ? "" : ns_;
   }
   init_publishers();
+  {
+      // Heartbeat for /arm/state/ctl_state while run() blocks in a synchronous execute.
+      // Publishing from another thread is thread-safe in rclcpp.
+    state_heartbeat_gap_ns_ = static_cast<int64_t>(std::max(2.0 * dt, 0.2) * 1e9);
+    state_heartbeat_thread_ = std::thread([this]() {
+          while (!state_heartbeat_stop_.load() && rclcpp::ok()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            publishStateHeartbeat();
+          }
+        });
+  }
   init_subscribers();
   init_services();
   init_moveit();
@@ -240,6 +251,10 @@ m2Iface::m2Iface(const rclcpp::NodeOptions & options)
 
 m2Iface::~m2Iface()
 {
+  state_heartbeat_stop_.store(true);
+  if (state_heartbeat_thread_.joinable()) {
+    state_heartbeat_thread_.join();
+  }
   if (m_moveGroupPtr) {
     try {
       m_moveGroupPtr->stop();
@@ -1085,6 +1100,7 @@ void m2Iface::change_state_cb(
   if (itr != std::end(stateNames)) {
     int wantedIndex_ = std::distance(stateNames, itr);
     robotState = (state)wantedIndex_;
+    published_state_.store(static_cast<int>(robotState));
     RCLCPP_INFO_STREAM(this->get_logger(), "Switching state!");
     res->success = true;
   } else {
@@ -2340,6 +2356,22 @@ bool m2Iface::leaveServoControllerMode()
   return ok;
 }
 
+void m2Iface::publishStateHeartbeat()
+{
+    // Only while run() is busy (it has published before and not for a while): the
+    // normal per-tick publication is unchanged, the topic just never goes silent.
+  const int64_t last = last_state_pub_ns_.load();
+  if (last == 0 || !robot_state_pub_) {return;}
+  const int64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  if (now - last < state_heartbeat_gap_ns_) {return;}
+  const int idx = published_state_.load();
+  if (idx < 0 || idx > 3) {return;}
+  std_msgs::msg::String msg;
+  msg.data = stateNames[idx];
+  robot_state_pub_->publish(msg);
+}
+
 bool m2Iface::run()
 {
   if(!nodeInit) {RCLCPP_ERROR(this->get_logger(), "Node not fully initialized!"); return false;}
@@ -2352,6 +2384,9 @@ bool m2Iface::run()
   std_msgs::msg::String stateMsg;
   stateMsg.data = stateNames[robotState];
   robot_state_pub_->publish(stateMsg);
+  published_state_.store(static_cast<int>(robotState));
+  last_state_pub_ns_.store(std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count());
 
   rclcpp::Clock steady_clock;
   int LOG_STATE_TIMEOUT = 10000;

@@ -195,6 +195,17 @@ private:
 
         /* timers */
   rclcpp::TimerBase::SharedPtr                                        timer_;
+        /* ctl_state heartbeat: run() executes plans synchronously, so the state topic
+         * would go silent for the whole motion (launch_server health probes it and
+         * tears the stack down after a few seconds). A plain thread (not an executor
+         * callback, so the node keeps its single-threaded spin and callback order)
+         * republishes the last state while run() is busy. */
+  std::thread                                                         state_heartbeat_thread_;
+  std::atomic<bool>                                                   state_heartbeat_stop_{false};
+  std::atomic<int>                                                    published_state_{0};
+  std::atomic<int64_t>                                                last_state_pub_ns_{0};
+  int64_t                                                             state_heartbeat_gap_ns_{0};
+  void publishStateHeartbeat();
 
         /* parameters */
   std::string                                                         config_path;
