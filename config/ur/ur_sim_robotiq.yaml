@@ -5,9 +5,7 @@ robot:
   ee_link_name: tool0
   robot_desc: robot_description
   move_group_ns: ""
-  planning_scene: planning_scene
   planning_frame: world
-  num_cart_pts: 20
   joint_states: joint_states
   max_vel_scaling_factor: 0.1
   max_acc_scaling_factor: 0.1
@@ -15,7 +13,6 @@ robot:
   # snappier rejection of impossible goals, higher only when the planner
   # genuinely needs more time on hard collision-rich tasks.
   pose_plan_time_sec: 1.5
-  with_planner: true
   gripper_backend_action: robotiq_gripper_controller/gripper_cmd
   gripper_action_type: parallel_gripper_command
   gripper_parallel_joint_name: robotiq_85_left_knuckle_joint
@@ -27,12 +24,6 @@ topic:
     cmd_traj:
       name: arm/cmd/traj
       queue: 1
-    cmd_tool_orientation:
-      name: tool/cmd/orient
-      queue: 1
-    cmd_delta_pose:
-      name: arm/cmd/delta_pose
-      queue: 1
     cmd_pose:
       name: arm/cmd/pose
       queue: 1
@@ -43,9 +34,6 @@ topic:
       name: joint_states
       queue: 1
   pub:
-    display_trajectory:
-      name: arm/display_path
-      queue: 1
     current_pose:
       name: arm/state/current_pose
       queue: 1
@@ -59,10 +47,6 @@ topic:
       name: arm/state/plan_status
       queue: 1
 srv:
-  disable_collision:
-    name: /move_group/disable_collision
-  add_collision:
-    name: /move_group/add_collision
   change_robot_state:
     name: arm/change_state
   set_vel_acc:

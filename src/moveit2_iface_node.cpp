@@ -46,8 +46,16 @@ int main(int argc, char * argv[])
   node_options.automatically_declare_parameters_from_overrides(true);
   node_options.use_intra_process_comms(false);
 
-    // Create node
-  auto move_group_node = std::make_shared<m2Iface>(node_options);
+    // Create node. Configuration errors are logged in detail by the node; exit cleanly
+    // with a non-zero code instead of an uncaught exception (abort + core dump).
+  std::shared_ptr<m2Iface> move_group_node;
+  try {
+    move_group_node = std::make_shared<m2Iface>(node_options);
+  } catch (const std::exception & e) {
+    RCLCPP_FATAL(rclcpp::get_logger("moveit2_iface"), "Startup failed: %s", e.what());
+    rclcpp::shutdown();
+    return 1;
+  }
   rclcpp::spin(move_group_node);
 
     // Test like this :) [Without executors]

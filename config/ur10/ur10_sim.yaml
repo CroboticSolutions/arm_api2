@@ -12,15 +12,12 @@ robot:
   ee_link_name: welding_tcp
   robot_desc: robot_description
   move_group_ns: ""
-  planning_scene: planning_scene
   planning_frame: world
-  num_cart_pts: 20
   # reject Cartesian paths with a joint change > this between points (IK flip / 2pi wrap)
   max_joint_step_rad: 0.5
   joint_states: joint_states
   max_vel_scaling_factor: 0.1
   max_acc_scaling_factor: 0.1
-  with_planner: true
 topic:
   sub:
     cmd_pose:
@@ -29,19 +26,10 @@ topic:
     cmd_traj:
       name: arm/cmd/traj
       queue: 1
-    cmd_tool_orientation:
-      name: tool/cmd/orient
-      queue: 1
-    cmd_delta_pose:
-      name: arm/cmd/delta_pose
-      queue: 1
     joint_states:
       name: joint_states
       queue: 1
   pub:
-    display_trajectory:
-      name: arm/display_path
-      queue: 1
     current_pose:
       name: arm/state/current_pose
       queue: 1
@@ -52,10 +40,6 @@ topic:
       name: arm/state/gripper_state
       queue: 1
 srv:
-  disable_collision:
-    name: /move_group/disable_collision
-  add_collision:
-    name: /move_group/add_collision
   change_robot_state:
     name: arm/change_state
   set_vel_acc:

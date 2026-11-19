@@ -31,21 +31,21 @@
 *
  * Copyright (c) 2024, Crobotic Solutions d.o.o.
  * All rights reserved.
- *
+*
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- *
+*
  * * Redistributions of source code must retain the above copyright notice, this
  *   list of conditions and the following disclaimer.
- *
+*
  * * Redistributions in binary form must reproduce the above copyright notice,
  *   this list of conditions and the following disclaimer in the documentation
  *   and/or other materials provided with the distribution.
- *
+*
  * * Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from
  *   this software without specific prior written permission.
- *
+*
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -103,15 +103,20 @@ private:
   bool            enableJoy_;
   mutable int scale_factor;
   rclcpp::Clock clock_;
+// parameters (defaults keep the original Logitech/Xbox mapping)
+  std::string frame_id_;     // empty: arm_api2 uses its end-effector link
+  int axis_x_, axis_y_, axis_z_, axis_yaw_, axis_scale_;
+  int deadman_button_;
+  double step_;              // twist per scale factor unit
+  bool was_enabled_{false};
 
-                // publishers
+// publishers
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr cmdVelPub_;
 
-                // subscribers
+// subscribers
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joySub_;
 
                 // clients
-  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr  jingleBellsClient_;               // Could be used for initing all UAVs
 
   void init();
   void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg);

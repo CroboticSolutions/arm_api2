@@ -146,10 +146,9 @@ Not automated (need physical input, reported as SKIP with instructions):
 
 - `joy_ctl` / `keyboard_ctl` - launch them and manually confirm the arm follows
   your joystick/keyboard input in `SERVO_CTL` mode.
-- `servo_watchdog.py` - stop sending twist/jog commands while it is running and
-  confirm (via `ros2 topic echo <ns>/moveit2_iface_node/delta_twist_cmds` or the
-  node's log) that it publishes a zero-velocity command after a few seconds of
-  inactivity.
+  Both publish to `<ns>/moveit2_iface/servo_twist_cmd`; check with
+  `ros2 topic echo <ns>/moveit2_iface/servo_twist_cmd`. Releasing the keys/deadman
+  must stop the arm (each twist is one servo step; there is no watchdog node).
 
 ## How to run
 

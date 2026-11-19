@@ -152,6 +152,7 @@ bool utils::comparePose(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::
 geometry_msgs::msg::PoseStamped utils::normalizeOrientation(geometry_msgs::msg::PoseStamped p)
 {
   geometry_msgs::msg::PoseStamped p_;
+  p_.header = p.header;  // keep frame_id/stamp (plan_status reported an empty frame)
   tf2::Quaternion q(p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z,
     p.pose.orientation.w);
   q.normalize();

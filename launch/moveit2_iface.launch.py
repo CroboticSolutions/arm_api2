@@ -109,9 +109,6 @@ def launch_setup(context, *args, **kwargs):
         LaunchConfiguration("robot_namespaces", default="")
     )
     arg_launch_joy = context.perform_substitution(LaunchConfiguration("launch_joy", default=True))
-    arg_launch_servo_watchdog = context.perform_substitution(
-        LaunchConfiguration("launch_servo_watchdog", default=True)
-    )
     arg_use_sim_time = context.perform_substitution(
         LaunchConfiguration("use_sim_time", default="false")
     )
@@ -135,17 +132,54 @@ def launch_setup(context, *args, **kwargs):
     kinematics_yaml = "config/{0}/{1}_kinematics.yaml".format(arg_robot_name, arg_robot_name)
 
     # Arm params (ctl, servo) --> sent just as path
-    config_path = os.path.join(get_package_share_directory("arm_api2"), "config", robot_yaml)
-    if not os.path.isfile(config_path):
-        fallback_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
-        config_path = os.path.join(
-            get_package_share_directory("arm_api2"), "config", fallback_yaml
+    config_dir = os.path.join(get_package_share_directory("arm_api2"), "config")
+    arg_config_path = context.perform_substitution(LaunchConfiguration("config_path", default=""))
+    arg_gripper = context.perform_substitution(LaunchConfiguration("gripper", default=""))
+    arg_motion_log_dir = context.perform_substitution(
+        LaunchConfiguration("motion_log_dir", default="")
+    )
+    robot_dir = os.path.join(config_dir, arg_robot_name)
+    if not os.path.isdir(robot_dir):
+        robots = sorted(d for d in os.listdir(config_dir)
+                        if os.path.isdir(os.path.join(config_dir, d)))
+        raise RuntimeError(
+            f"arm_api2: no config for robot_name:={arg_robot_name} ({robot_dir} missing). "
+            f"Available robots: {', '.join(robots)}"
         )
-        robot_yaml = fallback_yaml
+    profiles = sorted(
+        f[len(arg_robot_name) + 1:-5] for f in os.listdir(robot_dir)
+        if f.startswith(arg_robot_name + "_") and f.endswith(".yaml")
+        and "_servo_" not in f and not f.endswith("_kinematics.yaml")
+    )
+    if arg_config_path:
+        config_path = arg_config_path
+        if not os.path.isfile(config_path):
+            raise RuntimeError(f"arm_api2: config_path:={config_path} does not exist")
+    else:
+        config_path = os.path.join(config_dir, robot_yaml)
+        if not os.path.isfile(config_path):
+            fallback_yaml = "{0}/{1}_sim.yaml".format(arg_robot_name, arg_robot_name)
+            fallback_path = os.path.join(config_dir, fallback_yaml)
+            if not os.path.isfile(fallback_path):
+                raise RuntimeError(
+                    f"arm_api2: no profile '{arg_config_profile}' for {arg_robot_name} and no "
+                    f"_sim fallback. Available profiles: {', '.join(profiles) or 'none'}"
+                )
+            print(
+                f"[arm_api2] WARNING: profile '{arg_config_profile}' for {arg_robot_name} not "
+                f"found ({robot_yaml}); falling back to {fallback_yaml}. "
+                f"Available profiles: {', '.join(profiles)}"
+            )
+            config_path = fallback_path
+            robot_yaml = fallback_yaml
+    gripper_note = f", gripper override: {arg_gripper}" if arg_gripper else ""
+    print(f"[arm_api2] config: {config_path}{gripper_note}")
 
     servo_path = os.path.join(get_package_share_directory("arm_api2"), "config", servo_yaml)
     if not os.path.isfile(servo_path):
-        servo_yaml = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
+        fallback_servo = "{0}/{1}_servo_sim.yaml".format(arg_robot_name, arg_robot_name)
+        print(f"[arm_api2] servo profile {servo_yaml} not found; using {fallback_servo}")
+        servo_yaml = fallback_servo
 
     # Servo params created with the help of ParameterBuilder
     servo_params = {}
@@ -173,6 +207,10 @@ def launch_setup(context, *args, **kwargs):
         {"dt": arg_dt},
         {"config_path": config_path},
     ]
+    if arg_gripper:
+        node_params.append({"gripper_override": arg_gripper})
+    if arg_motion_log_dir:
+        node_params.append({"motion_log_dir": arg_motion_log_dir})
     if arg_enable_topics:
         node_params.append({"enable_topics": arg_enable_topics.lower() == "true"})
     if arg_enable_actions:
@@ -242,15 +280,6 @@ def launch_setup(context, *args, **kwargs):
         )
         launch_nodes_.append(launch_move_group)
 
-        if str(arg_launch_servo_watchdog).lower() == "true":
-            launch_servo_watchdog = Node(
-                package="arm_api2",
-                executable="servo_watchdog.py",
-                output="screen",
-                namespace=robot_ns,
-            )
-            launch_nodes_.append(launch_servo_watchdog)
-
         # One shared joy_node; in multi-robot mode joy_ctl drives the first robot.
         if str(arg_launch_joy).lower() == "true" and idx == 0:
             joy_node = Node(
@@ -260,15 +289,15 @@ def launch_setup(context, *args, **kwargs):
                 arguments={"device_name": "js0"}.items(),
             )
             launch_nodes_.append(joy_node)
-            if multi_robot:
-                joy_ctl_node = Node(
-                    package="arm_api2",
-                    executable="joy_ctl",
-                    namespace=robot_ns,
-                    output="screen",
-                    parameters=[{"use_sim_time": arg_use_sim_time.lower() == "true"}],
-                )
-                launch_nodes_.append(joy_ctl_node)
+            # joy_ctl publishes to the relative <ns>/moveit2_iface/servo_twist_cmd
+            joy_ctl_node = Node(
+                package="arm_api2",
+                executable="joy_ctl",
+                namespace=robot_ns,
+                output="screen",
+                parameters=[{"use_sim_time": arg_use_sim_time.lower() == "true"}],
+            )
+            launch_nodes_.append(joy_ctl_node)
 
     return launch_nodes_
 
@@ -304,15 +333,27 @@ def generate_launch_description():
     )
 
     declared_arguments.append(
+        DeclareLaunchArgument(name="dt", default_value="0.01", description="time step")
+    )
+    declared_arguments.append(
         DeclareLaunchArgument(
-            name="launch_servo_watchdog",
-            default_value="false",
-            description="launch servo_watchdog node",
+            name="config_path", default_value="",
+            description="explicit robot YAML (overrides robot_name/config_profile lookup)",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            name="gripper", default_value="",
+            description="'none' disables the YAML gripper (e.g. welding gun on a gripper profile)",
         )
     )
 
     declared_arguments.append(
-        DeclareLaunchArgument(name="dt", default_value="0.01", description="time step")
+        DeclareLaunchArgument(
+            name="motion_log_dir", default_value="",
+            description="Permanent per-motion JSONL log directory; empty: "
+            "$ARM_API2_MOTION_LOG_DIR or ~/.ros/arm_api2/motion_log, 'none' disables",
+        )
     )
 
     declared_arguments.append(

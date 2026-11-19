@@ -39,8 +39,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include "rclcpp_action/rclcpp_action.hpp"
 #include <geometry_msgs/msg/twist_stamped.hpp>
-#include <control_msgs/msg/joint_jog.hpp>
-#include <sensor_msgs/msg/joint_state.hpp>
 #include <control_msgs/action/gripper_command.hpp>
 #include <control_msgs/msg/gripper_command.hpp>
 
@@ -80,13 +78,14 @@
 #define KEYCODE_D 0x64
 
 // Some constants used in the Servo Teleop demo
-const std::string TWIST_TOPIC = "/moveit2_iface_node/delta_twist_cmds";
-const std::string JOINT_TOPIC = "/moveit2_iface_node/delta_joint_cmds";
-const std::string JOINT_STATE_TOPIC = "/joint_states";
-const std::string GRIPPER_SERVICE = "robotiq_2f_urcap_adapter/gripper_command";
+// Defaults (all overridable as ROS parameters). Relative names, so a robot namespace
+// (__ns:=/ur1) applies: arm_api2 listens on ~/servo_twist_cmd of its node "moveit2_iface".
+const char * DEFAULT_TWIST_TOPIC = "moveit2_iface/servo_twist_cmd";
+const char * DEFAULT_GRIPPER_ACTION = "arm/gripper_control";
+// Empty frame: arm_api2 uses its configured end-effector link.
+const char * DEFAULT_EEF_FRAME = "";
+const char * DEFAULT_BASE_FRAME = "base_link";
 const size_t ROS_QUEUE_SIZE = 10;
-const std::string EEF_FRAME_ID = "tcp";
-const std::string BASE_FRAME_ID = "base_link";
 
 // A class for reading the key inputs from the terminal
 class KeyboardReader
@@ -136,37 +135,31 @@ private:
   rclcpp::Node::SharedPtr nh_;
 
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_pub_;
-  rclcpp::Publisher<control_msgs::msg::JointJog>::SharedPtr joint_pub_;
-  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
 
   rclcpp_action::Client<control_msgs::action::GripperCommand>::SharedPtr gripper_client_;
 
   std::string frame_to_publish_;
-  double joint_vel_cmd_;
+  std::string eef_frame_;
+  std::string base_frame_;
+  std::string gripper_action_;
   double vel_scale_;
-  bool joint_states_received_;
-  // list of joint names
-  std::vector<std::string> joint_names_;
 };
 
 KeyboardServo::KeyboardServo()
-: frame_to_publish_(BASE_FRAME_ID), joint_vel_cmd_(1.0), vel_scale_(0.5),
-  joint_states_received_(false)
+: vel_scale_(0.5)
 {
   nh_ = rclcpp::Node::make_shared("servo_keyboard_input");
-
-  twist_pub_ = nh_->create_publisher<geometry_msgs::msg::TwistStamped>(TWIST_TOPIC, ROS_QUEUE_SIZE);
-  joint_pub_ = nh_->create_publisher<control_msgs::msg::JointJog>(JOINT_TOPIC, ROS_QUEUE_SIZE);
-  joint_state_sub_ = nh_->create_subscription<sensor_msgs::msg::JointState>(
-      JOINT_STATE_TOPIC, ROS_QUEUE_SIZE,
-    [this](const sensor_msgs::msg::JointState::SharedPtr msg) {
-      (void)msg;
-      joint_states_received_ = true;
-        // save joint names
-      joint_names_ = msg->name;
-      });
+  const auto twist_topic = nh_->declare_parameter<std::string>("twist_topic", DEFAULT_TWIST_TOPIC);
+  gripper_action_ = nh_->declare_parameter<std::string>("gripper_action", DEFAULT_GRIPPER_ACTION);
+  eef_frame_ = nh_->declare_parameter<std::string>("eef_frame", DEFAULT_EEF_FRAME);
+  base_frame_ = nh_->declare_parameter<std::string>("base_frame", DEFAULT_BASE_FRAME);
+  vel_scale_ = nh_->declare_parameter<double>("vel_scale", vel_scale_);
+  frame_to_publish_ = base_frame_;
+  twist_pub_ = nh_->create_publisher<geometry_msgs::msg::TwistStamped>(twist_topic, ROS_QUEUE_SIZE);
   gripper_client_ = rclcpp_action::create_client<control_msgs::action::GripperCommand>(nh_,
-    GRIPPER_SERVICE);
+    gripper_action_);
+  RCLCPP_INFO(nh_->get_logger(), "Twist -> %s, gripper -> %s",
+    twist_pub_->get_topic_name(), gripper_action_.c_str());
 }
 
 KeyboardReader input;
@@ -204,19 +197,7 @@ int KeyboardServo::keyLoop()
 {
   char c;
   bool publish_twist = false;
-  bool publish_joint = false;
-
   std::thread{std::bind(&KeyboardServo::spin, this)}.detach();
-
-  while(!joint_states_received_) {
-    RCLCPP_INFO(nh_->get_logger(), "Waiting for joint states...");
-    rclcpp::sleep_for(std::chrono::seconds(1));
-  }
-
-  // print joint names with index (starting from 1)
-  for (size_t i = 0; i < joint_names_.size(); ++i) {
-    RCLCPP_INFO(nh_->get_logger(), "Joint %d: %s", int(i + 1), joint_names_[i].c_str());
-  }
 
   puts("Reading from keyboard");
   puts("---------------------------");
@@ -224,10 +205,10 @@ int KeyboardServo::keyLoop()
   puts(
     "Use 'I' and 'K' to pitch(y rotate), 'J' and 'L' to yaw(z rotate), and 'M' and ',' to roll(x rotate)");
   puts("Use 'W' to Cartesian jog in the world frame, and 'E' for the End-Effector frame");
-  puts("Use 1|2|3|4|5|6|7 keys to joint jog. 'R' to reverse the direction of jogging.");
   puts("Use '+' and '-' to increase/decrease the speed.");
   puts("Use 'A' to close the gripper, 'D' to open the gripper.");
-  puts("Press Space to stop all motions.");
+  puts("Press Space to stop all motions (motion also stops as soon as keys are released).");
+  puts("arm_api2 must be in SERVO_CTL (arm/change_state) for the arm to move.");
   puts("'Q' to quit.");
   puts("  ");
 
@@ -244,7 +225,6 @@ int KeyboardServo::keyLoop()
 
     // // Create the messages we might publish
     auto twist_msg = std::make_unique<geometry_msgs::msg::TwistStamped>();
-    auto joint_msg = std::make_unique<control_msgs::msg::JointJog>();
 
 
     // Use read key-press
@@ -316,70 +296,11 @@ int KeyboardServo::keyLoop()
       // Frame selection
       case KEYCODE_E:
         RCLCPP_DEBUG(nh_->get_logger(), "E");
-        frame_to_publish_ = EEF_FRAME_ID;
+        frame_to_publish_ = eef_frame_;
         break;
       case KEYCODE_W:
         RCLCPP_DEBUG(nh_->get_logger(), "W");
-        frame_to_publish_ = BASE_FRAME_ID;
-        break;
-
-      // Joint motions
-      case KEYCODE_1:
-        RCLCPP_INFO(nh_->get_logger(), "1");
-        joint_msg->joint_names.push_back(joint_names_[0]);
-        joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
-        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
-        publish_joint = true;
-        break;
-      case KEYCODE_2:
-        RCLCPP_INFO(nh_->get_logger(), "2");
-        joint_msg->joint_names.push_back(joint_names_[1]);
-        joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
-        publish_joint = true;
-        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
-        break;
-      case KEYCODE_3:
-        RCLCPP_INFO(nh_->get_logger(), "3");
-        joint_msg->joint_names.push_back(joint_names_[2]);
-        joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
-        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
-        publish_joint = true;
-        break;
-      case KEYCODE_4:
-        RCLCPP_INFO(nh_->get_logger(), "4");
-        joint_msg->joint_names.push_back(joint_names_[3]);
-        joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
-        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
-        publish_joint = true;
-        break;
-      case KEYCODE_5:
-        RCLCPP_INFO(nh_->get_logger(), "5");
-        joint_msg->joint_names.push_back(joint_names_[4]);
-        joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
-        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
-        publish_joint = true;
-        break;
-      case KEYCODE_6:
-        RCLCPP_INFO(nh_->get_logger(), "6");
-        joint_msg->joint_names.push_back(joint_names_[5]);
-        joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
-        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
-        publish_joint = true;
-        break;
-      case KEYCODE_7:
-        if (joint_names_.size() < 7) {
-          RCLCPP_WARN(nh_->get_logger(), "Not enough joints for key 7");
-          break;
-        }
-        RCLCPP_INFO(nh_->get_logger(), "7");
-        joint_msg->joint_names.push_back(joint_names_[6]);
-        joint_msg->velocities.push_back(joint_vel_cmd_ * vel_scale_);
-        RCLCPP_INFO(nh_->get_logger(), "Now is controlling: %s", joint_msg->joint_names[0].c_str());
-        publish_joint = true;
-        break;
-      case KEYCODE_R:
-        RCLCPP_INFO(nh_->get_logger(), "R");
-        joint_vel_cmd_ *= -1;
+        frame_to_publish_ = base_frame_;
         break;
 
       // Stop actions
@@ -394,12 +315,8 @@ int KeyboardServo::keyLoop()
         twist_msg->twist.angular.x = 0.0;
         twist_msg->twist.angular.y = 0.0;
         twist_msg->twist.angular.z = 0.0;
-        joint_msg->joint_names.clear();
-        joint_msg->velocities.push_back(0.0);
         twist_pub_->publish(std::move(twist_msg));
-        joint_pub_->publish(std::move(joint_msg));
         publish_twist = false;
-        publish_joint = false;
         break;
 
       // Velocity control
@@ -434,11 +351,6 @@ int KeyboardServo::keyLoop()
       twist_msg->header.frame_id = frame_to_publish_;
       twist_pub_->publish(std::move(twist_msg));
       publish_twist = false;
-    } else if (publish_joint) {
-      joint_msg->header.stamp = nh_->now();
-      joint_msg->header.frame_id = BASE_FRAME_ID;
-      joint_pub_->publish(std::move(joint_msg));
-      publish_joint = false;
     }
   }
   return 0;
@@ -447,6 +359,7 @@ int KeyboardServo::keyLoop()
 void KeyboardServo::send_gripper_command(double position)
 {
   if (!gripper_client_->wait_for_action_server(std::chrono::seconds(5))) {
+    RCLCPP_WARN(nh_->get_logger(), "Gripper action %s not available", gripper_action_.c_str());
     return;
   }
   auto goal = control_msgs::action::GripperCommand::Goal();

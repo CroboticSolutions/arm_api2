@@ -36,13 +36,11 @@
  */
 
 #include "arm_api2/arm_joy.hpp"
-#define X_I 4
-#define Y_I 3
-#define YAW_I 6
-#define Z_I 7
 
-// TODO: Add config file to modify this values based on the joystick/robot used
-// TODO: Enable joint space and task space control
+#include <algorithm>
+// Axis/button mapping and topic are ROS parameters (defaults: original mapping).
+// arm_api2 consumes twists on <ns>/moveit2_iface/servo_twist_cmd in SERVO_CTL; each message
+// is one servo step, so the arm stops as soon as messages stop (no watchdog needed).
 
 JoyCtl::JoyCtl()
 : Node("joy_ctl")
@@ -57,97 +55,70 @@ JoyCtl::JoyCtl()
 
 void JoyCtl::init()
 {
+  const auto topic = this->declare_parameter<std::string>("twist_topic",
+                                                                "moveit2_iface/servo_twist_cmd");
+  frame_id_ = this->declare_parameter<std::string>("frame_id", "");
+  axis_x_ = this->declare_parameter<int>("axis_x", 4);
+  axis_y_ = this->declare_parameter<int>("axis_y", 3);
+  axis_z_ = this->declare_parameter<int>("axis_z", 7);
+  axis_yaw_ = this->declare_parameter<int>("axis_yaw", 6);
+  axis_scale_ = this->declare_parameter<int>("axis_scale", 1);
+  deadman_button_ = this->declare_parameter<int>("deadman_button", 5);
+  step_ = this->declare_parameter<double>("step", 0.01);
 
-    // publishers
-  cmdVelPub_ =
-    this->create_publisher<geometry_msgs::msg::TwistStamped>("/moveit2_iface_node/delta_twist_cmds",
-    1);
-
-    // subscribers
+  cmdVelPub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>(topic, 1);
   joySub_ = this->create_subscription<sensor_msgs::msg::Joy>("/joy", 10,
-    std::bind(&JoyCtl::joy_callback, this, _1));
+                                                                   std::bind(&JoyCtl::joy_callback,
+    this, _1));
 
-  RCLCPP_INFO(this->get_logger(), "Initialized joy_ctl");
+  RCLCPP_INFO(this->get_logger(), "Initialized joy_ctl -> %s (hold button %d to move)",
+                    cmdVelPub_->get_topic_name(), deadman_button_);
 }
 
 void JoyCtl::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
 {
-  float x_dir, y_dir, z_dir, yaw;
-  std::vector<float> axes_ = msg->axes;
-
-  x_dir = axes_.at(X_I);
-  y_dir = axes_.at(Y_I);
-  z_dir = axes_.at(Z_I);
-  yaw = axes_.at(YAW_I);
-
-    // Enabling joystick functionality
-    // R2 pressed --> joy on
-  int LOG_JOY_STATE_T = 5000;
-  if (msg->buttons.at(5) == 1) {
-    RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), clock_, LOG_JOY_STATE_T, "ON");
-    setEnableJoy(true);
+  const int max_axis = std::max({axis_x_, axis_y_, axis_z_, axis_yaw_, axis_scale_});
+  if (static_cast<int>(msg->axes.size()) <= max_axis ||
+    static_cast<int>(msg->buttons.size()) <= deadman_button_)
+  {
+    RCLCPP_WARN_THROTTLE(this->get_logger(), clock_, 5000,
+                                     "Joy message has %zu axes / %zu buttons; mapping needs axis %d and button %d",
+                                     msg->axes.size(), msg->buttons.size(), max_axis,
+      deadman_button_);
+    return;
   }
-
-    // R2 released --> joy off
-  if (msg->buttons.at(5) == 0) {
-
-    RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), clock_, LOG_JOY_STATE_T, "OFF");
-    setEnableJoy(false);
+  const bool enabled = msg->buttons.at(deadman_button_) == 1;
+  if (enabled != was_enabled_) {
+    RCLCPP_INFO(this->get_logger(), enabled ? "ON" : "OFF");
   }
+  setEnableJoy(enabled);
 
-  enableJoy_ = getEnableJoy();
-
-  float sF = getScaleFactor();
-    // https://www.quantstart.com/articles/Passing-By-Reference-To-Const-in-C/
-  if (msg->axes.at(1) == 1) {
-
-    if (sF > 0 && sF < 100) {
-      sF += 1;
-      RCLCPP_INFO_STREAM(this->get_logger(), "Increasing scale factor: " << sF);
-    } else {sF = 1;}
+  int sF = getScaleFactor();
+  if (msg->axes.at(axis_scale_) == 1 || msg->axes.at(axis_scale_) == -1) {
+    sF += msg->axes.at(axis_scale_) > 0 ? 1 : -1;
+    sF = std::clamp(sF, 1, 99);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Scale factor: " << sF);
   }
-
-  if (msg->axes.at(1) == -1) {
-    if (sF > 0 && sF < 100) {
-      sF -= 1;
-      RCLCPP_INFO_STREAM(this->get_logger(), "Decreasing scale factor: " << sF);
-    } else {sF = 1;}
-  }
-
-    /*if (msg->buttons.at(4) == 1) {
-       RCLCPP_INFO_STREAM(this->get_logger(), "Calling jingle bells!");
-       auto req_ = std::make_shared<std_srvs::srv::Trigger::Request>();
-       jingleBellsClient_->async_send_request(req_);
-    }*/
-    // Test scale fact (ADD C const to prevent large cmd)
   setScaleFactor(sF);
 
+        // arm_api2 ignores all-zero twists, so only motion is sent; one zero on release is
+        // harmless and documents the stop in a bag.
+  if (!enabled && !was_enabled_) {return;}
+  was_enabled_ = enabled;
 
-    // Create teleop msg
   auto teleop_msg = geometry_msgs::msg::TwistStamped();
   teleop_msg.header.stamp = this->get_clock()->now();
-  teleop_msg.header.frame_id = "link6";
-
-  float C = 0.01;
-  if (enableJoy_) {
-        // Currently modified for the PIPER
-    teleop_msg.twist.linear.z = x_dir * sF * C;
-    teleop_msg.twist.linear.y = y_dir * sF * C;
-    teleop_msg.twist.linear.x = -z_dir * sF * C;
-    teleop_msg.twist.angular.z = yaw * sF * C;
-    cmdVelPub_->publish(teleop_msg);
-  } else {
-    teleop_msg.twist.linear.x = 0;
-    teleop_msg.twist.linear.y = 0;
-    teleop_msg.twist.linear.z = 0;
-    teleop_msg.twist.angular.z = 0;
-    cmdVelPub_->publish(teleop_msg);
+  teleop_msg.header.frame_id = frame_id_;
+  if (enabled) {
+    const double k = sF * step_;
+    teleop_msg.twist.linear.z = msg->axes.at(axis_x_) * k;
+    teleop_msg.twist.linear.y = msg->axes.at(axis_y_) * k;
+    teleop_msg.twist.linear.x = -msg->axes.at(axis_z_) * k;
+    teleop_msg.twist.angular.z = msg->axes.at(axis_yaw_) * k;
   }
-
-
+  cmdVelPub_->publish(teleop_msg);
 }
 
-// Methods that set scale factor
 void JoyCtl::setScaleFactor(int value)
 {
   scale_factor = value;

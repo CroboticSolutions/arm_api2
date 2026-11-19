@@ -155,17 +155,25 @@ ros2 launch arm_api2 moveit2_iface.launch.py robot_name:=ur robot_namespaces:=ur
 | `config_profile` | `sim` | Config profile suffix to load, e.g. `sim` or `real` (looks for `config/<robot>/<robot>_<profile>.yaml`) |
 | `use_sim_time` | `false` | Use simulation time |
 | `dt` | `0.01` | Servo control loop time step |
-| `launch_joy` | `false` | Also launch the `joy_ctl` joystick control node |
-| `launch_servo_watchdog` | `false` | Also launch the `servo_watchdog.py` node |
+| `config_path` | `""` | Explicit robot YAML; overrides `robot_name`/`config_profile` |
+| `gripper` | `""` | `none` disables the YAML gripper (e.g. a welding gun on a gripper profile) |
+| `motion_log_dir` | `""` | Directory of the permanent motion log (see Observability); empty: `$ARM_API2_MOTION_LOG_DIR` or `~/.ros/arm_api2/motion_log`; `none` disables |
+| `launch_joy` | `false` | Also launch `joy_node` + `joy_ctl` (drives the first robot) |
 | `use_gdb` | `false` | Run `moveit2_iface` under `gdb` in an xterm window, for debugging |
 
 ### Additional nodes
 
 Besides `moveit2_iface`, the package builds/installs these executables:
 
-- **`joy_ctl`** (`src/arm_joy_node.cpp`, `src/arm_joy.cpp`) — joystick teleoperation node, converts `sensor_msgs/msg/Joy` input into servo twist/joint commands. Launch it standalone or together with `moveit2_iface` via `launch_joy:=true`.
-- **`keyboard_ctl`** (`src/servo_keyboard_input.cpp`) — keyboard teleoperation node for servo mode.
-- **`servo_watchdog.py`** (`examples/scripts/servo_watchdog.py`) — monitors twist/jog commands and publishes zero velocity if no command is received for a few seconds; enable with `launch_servo_watchdog:=true`.
+- **`joy_ctl`** (`src/arm_joy_node.cpp`, `src/arm_joy.cpp`) — joystick teleoperation for SERVO_CTL. Publishes `TwistStamped` to `<ns>/moveit2_iface/servo_twist_cmd` (arm_api2's servo input) while the deadman button is held. Parameters: `twist_topic`, `frame_id` (empty: arm_api2's end-effector link), `axis_x`, `axis_y`, `axis_z`, `axis_yaw`, `axis_scale`, `deadman_button` (default 5), `step`. Launch standalone or with `launch_joy:=true`.
+- **`keyboard_ctl`** (`src/servo_keyboard_input.cpp`) — keyboard teleoperation for SERVO_CTL (Cartesian jog, `W`/`E` base/end-effector frame, `A`/`D` gripper via `arm/gripper_control`). Parameters: `twist_topic`, `gripper_action`, `base_frame`, `eef_frame`, `vel_scale`. Joint jog is not available: arm_api2 has no JointJog input.
+
+No servo watchdog is needed: arm_api2 turns every twist message into a single servo step and ignores all-zero twists, so the arm stops as soon as messages stop. (The old `servo_watchdog.py` was removed; it listened to topics arm_api2 never used.)
+
+### Observability
+
+- **`/diagnostics`** (`diagnostic_updater`, 1 Hz, hardware id = arm name, prefixed with the namespace): `move_group` (interface + `execute_trajectory` action), `planning_scene_monitor` (complete robot state, missing joints), `joint_states` (age; WARN > 0.5 s, ERROR > 2 s), `execution` (current execution or last result, success/failure counters; WARN after a failed execution until the next success), `gripper`, `controllers` (`controller_manager/list_controllers`; WARN when no JointTrajectoryController is active outside SERVO_CTL), `arm_state` (state, run loop busy time). View with `ros2 run rqt_robot_monitor rqt_robot_monitor` or `ros2 topic echo /diagnostics`.
+- **Motion log**: one JSON line per motion command in `<motion_log_dir>/motions_<namespace|arm>_<UTC date>.jsonl` (append only, never pruned): command and source (action/topic), mode, result `code`/`reason` (same as `plan_status`), planner (`pipeline/planner` or `cartesian`), planning time, Cartesian fraction, planned points, planned vs measured duration, final joint error, max path deviation, velocity/acceleration scaling, target pose, start and goal joints. Unknown values are `null`. Example: `jq -c 'select(.success|not) | {time, command, code}' motions_arm_*.jsonl`.
 
 ### Example scripts
 
@@ -176,8 +184,7 @@ Besides `moveit2_iface`, the package builds/installs these executables:
 | `pose_sender_action_client.py` / `_async.py` | Send a Cartesian pose goal via the `arm/move_to_pose` action (blocking / async) |
 | `joint_sender_action_client.py` / `_async.py` | Send a joint-position goal via the `arm/move_to_joint` action (blocking / async) |
 | `trajectory_sender_action_client.py` / `_async.py` | Send a Cartesian path goal via the `arm/move_to_pose_path` action (blocking / async) |
-| `servo_twist_sender.py` | Publish example Cartesian twist commands for servo mode |
-| `servo_watchdog.py` | Same node as installed under `launch_servo_watchdog`; can also be run standalone |
+| `servo_twist_sender.py` | Publish example Cartesian twist commands for servo mode (to `moveit2_iface/servo_twist_cmd`) |
 
 ### Topic interface
 
@@ -333,6 +340,26 @@ Full verbose build command:
 
 ```
 colcon build --symlink-install --packages-select arm_api2 --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_VERBOSE_MAKEFILE=ON
+```
+
+Code layout (`moveit2_iface` is one class split by concern):
+
+| File | Content |
+| --- | --- |
+| `src/moveit2_iface.cpp` | construction, wiring, MoveIt setup, state machine (`run`, `change_state`), gripper glue |
+| `src/moveit2_iface_config.cpp` | YAML loading/validation, planning configuration |
+| `src/moveit2_iface_motion.cpp` | planning + execution of joint/pose/path commands (actions and topics), `plan_status` |
+| `src/moveit2_iface_execution.cpp` | `ExecuteTrajectory` client: start/cancel/stop, progress, goal check, path deviation |
+| `src/moveit2_iface_services.cpp` | parameter, collision, gripper, reachability and Cartesian-check services |
+| `src/moveit2_iface_servo.cpp` | MoveIt Servo and controller switching |
+| `src/moveit2_iface_observability.cpp` | `/diagnostics` and the motion log |
+| `src/motion_logic.cpp`, `src/motion_log.cpp` | pure logic without a node (library `arm_api2_logic`): joint error, path deviation, joint continuity, result codes, state transitions, execution watchdog, JSONL writer |
+
+Unit tests (gtest: `test_motion_logic`, `test_motion_log`, `test_utils`) plus linters:
+
+```bash
+colcon build --packages-select arm_api2 --cmake-args -DBUILD_TESTING=ON
+colcon test --packages-select arm_api2 && colcon test-result --verbose
 ```
 
 </details>

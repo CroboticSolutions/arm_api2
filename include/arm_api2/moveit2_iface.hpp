@@ -31,21 +31,21 @@
 *
  * Copyright (c) 2024, Crobotic Solutions d.o.o. (www.crobotics.tech)
  * All rights reserved.
- *
+*
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- *
+*
  * * Redistributions of source code must retain the above copyright notice, this
  *   list of conditions and the following disclaimer.
- *
+*
  * * Redistributions in binary form must reproduce the above copyright notice,
  *   this list of conditions and the following disclaimer in the documentation
  *   and/or other materials provided with the distribution.
- *
+*
  * * Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from
  *   this software without specific prior written permission.
- *
+*
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -90,6 +90,9 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <mutex>
+#include <future>
+#include <unordered_map>
+#include <vector>
 
 //* moveit
 #include <moveit_servo/servo.hpp>
@@ -135,11 +138,19 @@
 #include "arm_api2_msgs/action/move_cartesian.hpp"
 #include "arm_api2_msgs/action/move_joint.hpp"
 #include "arm_api2_msgs/action/move_cartesian_path.hpp"
+#include "moveit_msgs/action/execute_trajectory.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include "std_srvs/srv/set_bool.hpp"
 
 // utils
 #include "arm_api2/utils.hpp"
+#include "arm_api2/motion_logic.hpp"
+#include "arm_api2/motion_log.hpp"
+#include <diagnostic_updater/diagnostic_updater.hpp>
+#include "controller_manager_msgs/srv/list_controllers.hpp"
+
+using arm_api2::MotionLog;
+using arm_api2::MotionRecord;
 
 // For starters just include robotiq_gripper
 // TODO: Think of a way to include different gripper based on the gripper type
@@ -170,10 +181,8 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Executor::SharedPtr executor_;
   std::thread executor_thread_;
-  std::mutex execution_thread_mutex_;
-  std::thread execution_thread_;
 
-        /** Set while a trajectory is being executed (async: worker thread; sync: same thread). */
+/** Set while a trajectory is being executed (from send to result). */
   std::atomic_bool trajectory_executing_{false};
 
         /* gripper: Robotiq (action) OR Piper JointState shim */
@@ -184,12 +193,10 @@ private:
   std::string PLANNING_GROUP;
   std::string EE_LINK_NAME;
   std::string ROBOT_DESC;
-  std::string PLANNING_SCENE;
   std::string PLANNING_FRAME;
   std::string MOVE_GROUP_NS;
   std::string JOINT_STATES;
   std::string SERVO_TRAJECTORY_TOPIC;
-  bool WITH_PLANNER;
   bool ENABLE_SERVO;
   float INIT_VEL_SCALING;
   float INIT_ACC_SCALING;
@@ -202,9 +209,9 @@ private:
          * callback, so the node keeps its single-threaded spin and callback order)
          * republishes the last state while run() is busy. */
   std::thread                                                         state_heartbeat_thread_;
-  std::atomic<bool>                                                   state_heartbeat_stop_{false};
-  std::atomic<int>                                                    published_state_{0};
-  std::atomic<int64_t>                                                last_state_pub_ns_{0};
+  std::atomic<bool> state_heartbeat_stop_{false};
+  std::atomic<int> published_state_{0};
+  std::atomic<int64_t> last_state_pub_ns_{0};
   int64_t                                                             state_heartbeat_gap_ns_{0};
   void publishStateHeartbeat();
 
@@ -219,7 +226,6 @@ private:
   float                                                               dt;
   float                                                               max_vel_scaling_factor;
   float                                                               max_acc_scaling_factor;
-  int                                                                 num_cart_pts_{20};
   /* Absolute per-point joint change allowed in Cartesian paths (rad, 0 = off).
      Consecutive points are <= eefStep apart, so more is an IK branch flip or a
      +-2pi wrap (full J4/J6 turn on CRX); computeCartesianPath has no jump check. */
@@ -407,7 +413,8 @@ private:
     const std::string & reason,
     const geometry_msgs::msg::PoseStamped & requested_pose,
     double plan_time_sec,
-    const std::string & mode);
+    const std::string & mode,
+    bool final_status = true);     // false: "plan accepted; executing" (motion not finished yet)
 
         /* funcs */
   void planAndExecJoint();
@@ -426,6 +433,187 @@ private:
   bool execTrajectory(
     moveit_msgs::msg::RobotTrajectory trajectory, bool async_flag,
     ExecDone on_done = nullptr);
+/** Progress of a running execution: (elapsed s, planned duration s). */
+  using ExecProgress = std::function<void (double, double)>;
+  using ExecTraj = moveit_msgs::action::ExecuteTrajectory;
+
+/* Trajectory execution goes to move_group's ExecuteTrajectory action through a
+ * client on the internal node_ (spun by the MultiThreadedExecutor), never through
+ * MoveGroupInterface::execute(). Result, progress feedback, cancel and arm/stop
+ * therefore work while the public node is busy in run(). One execution at a time. */
+  struct ActiveExec
+  {
+    uint64_t id{0};
+    const void * owner{nullptr};            // action goal handle (nullptr: topic command)
+    rclcpp_action::ClientGoalHandle<ExecTraj>::SharedPtr handle;
+    bool cancel_requested{false};
+    bool cancel_sent{false};
+    std::string cancel_reason;
+    std::chrono::steady_clock::time_point start;
+    double planned_duration{0.0};
+    ExecDone on_done;
+    ExecProgress on_progress;
+    trajectory_msgs::msg::JointTrajectory traj;     // planned, for deviation / goal checks
+    double max_deviation{0.0};
+    std::string max_deviation_joint;
+    bool verifying{false};                       // result SUCCEEDED, waiting for goal tolerance
+    std::chrono::steady_clock::time_point verify_deadline;
+    std::string result_code;
+    MotionRecord record;                         // motion log line, written by finishExecution
+    double final_error{NAN};
+    std::string final_error_joint;
+  };
+/* ---- observability: permanent motion log (JSONL) ---- */
+  MotionLog motion_log_;
+  std::mutex motion_mutex_;
+  MotionRecord motion_;               // motion being planned (owned by motion_owner_ thread)
+  std::thread::id motion_owner_;
+  std::string last_planner_;          // set by planWithPlanner / planTopicPoseFast
+  void init_motion_log();
+  void motionBegin(const std::string & command, const std::string & source);
+  void motionPlanned(
+    const std::string & planner, double plan_time_sec, double fraction,
+    const moveit_msgs::msg::RobotTrajectory & trajectory,
+    const geometry_msgs::msg::PoseStamped * target);
+/* A final plan_status on the planning thread closes a motion that never started executing. */
+  void motionStatus(
+    bool success, const std::string & code, const std::string & reason,
+    const geometry_msgs::msg::PoseStamped & pose, double plan_time_sec);
+/* startExecution: the planned motion record moves into the execution. */
+  MotionRecord takeMotionForExecution();
+  void writeMotion(MotionRecord & r);
+
+/* ---- observability: /diagnostics ---- */
+  void init_diagnostics();
+  void diagMoveGroup(diagnostic_updater::DiagnosticStatusWrapper & stat);
+  void diagSceneMonitor(diagnostic_updater::DiagnosticStatusWrapper & stat);
+  void diagJointStates(diagnostic_updater::DiagnosticStatusWrapper & stat);
+  void diagExecution(diagnostic_updater::DiagnosticStatusWrapper & stat);
+  void diagGripper(diagnostic_updater::DiagnosticStatusWrapper & stat);
+  void diagControllers(diagnostic_updater::DiagnosticStatusWrapper & stat);
+  void diagArmState(diagnostic_updater::DiagnosticStatusWrapper & stat);
+  std::shared_ptr<diagnostic_updater::Updater> diag_updater_;
+  rclcpp::CallbackGroup::SharedPtr diag_cb_group_;
+  rclcpp::Client<controller_manager_msgs::srv::ListControllers>::SharedPtr list_controllers_client_;
+  std::mutex diag_mutex_;
+  std::vector<controller_manager_msgs::msg::ControllerState> diag_controllers_;
+  bool diag_controllers_valid_{false};
+  bool diag_controllers_pending_{false};
+  std::chrono::steady_clock::time_point diag_controllers_time_;
+  struct ExecStats
+  {
+    uint64_t succeeded{0};
+    uint64_t failed{0};
+    bool has_last{false};
+    bool last_ok{false};
+    std::string last_code;
+    std::string last_reason;
+    std::chrono::steady_clock::time_point last_time;
+  } exec_stats_;                      // guarded by exec_mutex_
+
+  rclcpp_action::Client<ExecTraj>::SharedPtr exec_client_;
+  rclcpp::CallbackGroup::SharedPtr exec_cb_group_;
+  rclcpp::CallbackGroup::SharedPtr stop_cb_group_;
+  rclcpp::TimerBase::SharedPtr exec_progress_timer_;
+  std::mutex exec_mutex_;
+  ActiveExec active_exec_;
+  uint64_t exec_seq_{0};
+  void init_execution();
+/** Send a timed trajectory; false if it could not be sent (busy, empty, no server).
+ *  on_done is called exactly once when it was sent. */
+  bool startExecution(
+    const moveit_msgs::msg::RobotTrajectory & trajectory, ExecDone on_done,
+    ExecProgress on_progress = nullptr, const void * owner = nullptr);
+/** Same, waiting for the result (the result arrives on node_'s executor). */
+  bool runExecutionBlocking(
+    const moveit_msgs::msg::RobotTrajectory & trajectory, ExecProgress on_progress,
+    const void * owner, std::string & code);
+/** Cancel the running execution (only if it belongs to owner, when owner is set). */
+  bool cancelExecution(const std::string & why, const void * owner = nullptr);
+  void finishExecution(uint64_t id, bool ok, std::string code);
+/** move_group reported SUCCEEDED: check the final joint error (goal tolerance). */
+  void onExecutionSucceeded(uint64_t id, const std::string & moveit_code);
+
+/* Execution checks against the robot's own joint_states (subscription on node_).
+ * robot.goal_joint_tolerance_rad: after SUCCEEDED the joints must be within this of
+ *   the last trajectory point (within robot.goal_settle_sec), else GOAL_NOT_REACHED.
+ * robot.path_deviation_max_rad: during execution the joints must stay within this of
+ *   the planned path (geometric, time independent), else the motion is stopped
+ *   (PATH_DEVIATION). 0 = off; the measured values are always logged and reported. */
+  double goal_joint_tolerance_rad_{0.0};
+  double goal_settle_sec_{0.5};
+  double path_deviation_max_rad_{0.0};
+  rclcpp::CallbackGroup::SharedPtr exec_js_cb_group_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr exec_js_sub_;
+  std::mutex exec_js_mutex_;
+  std::unordered_map<std::string, double> exec_js_;
+  std::chrono::steady_clock::time_point exec_js_time_;
+/** Copy of the latest joint positions; false if none or older than max_age_s. */
+  bool latestJoints(std::unordered_map<std::string, double> & out, double max_age_s);
+
+/* Configuration: validated as a whole before anything is created; all problems are
+ * reported at once and the node exits with a clear message. */
+  void validateConfig();
+/* YAML planning: (defaults = the previously hard-coded behaviour) */
+  struct PlannerAttempt
+  {
+    std::string pipeline;
+    std::string planner;
+    double time{0.0};     // planning time per attempt, 0 = leave MoveGroup's value
+    int attempts{1};
+  };
+  std::vector<PlannerAttempt> pose_planners_;        // move_to_pose / move_to_joint
+  std::vector<PlannerAttempt> topic_pose_planners_;  // arm/cmd/pose in CART_TRAJ_CTL
+  double eef_step_{0.02};
+  void loadPlanningConfig();
+
+/* robot.gripper_action_type: none (or launch arg gripper:=none): no gripper backend;
+ * open/close fail at once with a clear message, gripper_state publishes "none". */
+  bool gripper_none_{false};
+  std::string gripper_override_;
+  std::chrono::steady_clock::time_point last_gripper_none_pub_;
+  void execProgressTick();
+/* Action goal helpers: feedback with progress, and the final succeed/canceled/abort. */
+  template<class ActionT>
+  ExecProgress actionProgress(
+    std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>> goal_handle);
+  template<class ActionT>
+  ExecDone actionDone(
+    std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>> goal_handle,
+    const std::string & label, const geometry_msgs::msg::PoseStamped & pose,
+    double plan_time_sec, const std::string & mode);
+  template<class ActionT>
+  void executeForGoal(
+    std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>> goal_handle,
+    const moveit_msgs::msg::RobotTrajectory & trajectory, const std::string & label,
+    const geometry_msgs::msg::PoseStamped & pose, double plan_time_sec);
+/** plan_status for an action goal (same codes as the topic paths, reason "<label>: ..."). */
+  void publishActionStatus(
+    const std::string & label, bool success, const std::string & code,
+    const std::string & reason, const geometry_msgs::msg::PoseStamped & pose,
+    double plan_time_sec, bool final_status = true);
+  template<class ActionT>
+  bool finishIfCanceling(
+    std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>> goal_handle);
+
+/* arm/stop: on node_ (own callback group), so it answers during planning and
+ * synchronous executions. Cancels arm_api2's execution and sends MoveIt "stop"
+ * (stops any trajectory move_group executes, also ones started by other clients). */
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr stop_srv_;
+  void stop_cb(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+    const std::shared_ptr<std_srvs::srv::Trigger::Response> res);
+/* set by stop_cb (node_ thread), consumed in run(): drop queued goals/commands, zero servo */
+  std::atomic<bool> stop_requested_{false};
+
+/* YAML robot.async_actions (default true): action goals execute without blocking
+ * run(), so action cancel works and state/pose keep publishing.
+ * false = previous blocking behaviour (arm/stop still works). */
+  bool async_actions_{true};
+/* YAML robot.on_state_change_while_moving: "stop" (default) cancels arm_api2's
+ * running execution on a state change, "reject" refuses the change. */
+  bool stop_on_state_change_{true};
+
         /** Final plan_status of an async topic execution; a failed one also forgets the
          *  last commanded pose so the same pose can be sent again. */
   ExecDone topicExecDone(
@@ -438,7 +626,8 @@ private:
   void printTimestamps(const moveit_msgs::msg::RobotTrajectory & trajectory);
   bool addTimestampsToTrajectory(moveit_msgs::msg::RobotTrajectory & trajectory);
   /* false (and reason) when two consecutive points differ by more than max_joint_step_rad_ */
-  bool jointPathContinuous(const moveit_msgs::msg::RobotTrajectory & trajectory,
+  bool jointPathContinuous(
+    const moveit_msgs::msg::RobotTrajectory & trajectory,
     std::string & reason) const;
   bool planWithPlanner(
     moveit::planning_interface::MoveGroupInterface::Plan & plan,

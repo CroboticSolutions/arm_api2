@@ -44,8 +44,9 @@ from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 class ServoTwistSender(Node):
     def __init__(self):
         super().__init__("servo_pose_sender")
+        # arm_api2 servo input (relative: follows the robot namespace)
         self.twist_pub = self.create_publisher(
-            TwistStamped, "/moveit2_iface_node/delta_twist_cmds", 10
+            TwistStamped, "moveit2_iface/servo_twist_cmd", 10
         )
         self.pose_sub = self.create_subscription(
             PoseStamped, "/arm/state/current_pose", self.pose_callback, 10
