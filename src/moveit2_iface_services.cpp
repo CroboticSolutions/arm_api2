@@ -230,10 +230,14 @@ void m2Iface::add_collision_object_cb(
   collision_object.primitive_poses.push_back(box_pose);
   collision_object.operation = collision_object.ADD;
 
-    // Add to planning scene
-  std::vector<moveit_msgs::msg::CollisionObject> collision_objects;
-  collision_objects.push_back(collision_object);
-  m_planningSceneInterface->addCollisionObjects(collision_objects);
+    // Add to planning scene; synchronous (apply_planning_scene), so a plan requested right
+    // after this call already sees the object, and a failure is reported.
+  if (!m_planningSceneInterface->applyCollisionObject(collision_object)) {
+    res->success = false;
+    res->message = "move_group did not apply the collision object";
+    RCLCPP_ERROR(this->get_logger(), "Collision object '%s' was not applied", req->id.c_str());
+    return;
+  }
 
   res->success = true;
   res->message = "Collision object added successfully";

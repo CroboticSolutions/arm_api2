@@ -231,7 +231,7 @@ void m2Iface::validateConfig()
 
     // unknown keys are most likely typos (silently ignored before)
     static const std::vector<std::string> known_top = {
-      "robot", "topic", "srv", "action", "tcp_state", "planning"};
+      "robot", "topic", "srv", "action", "tcp_state", "planning", "plans", "named_poses"};
     for (const auto & kv : config) {
       const auto k = kv.first.as<std::string>();
       if (std::find(known_top.begin(), known_top.end(), k) == known_top.end()) {
@@ -251,7 +251,7 @@ void m2Iface::validateConfig()
       "piper_gripper_trajectory_joint_name", "piper_gripper_trajectory_mirror_joint_name",
       "piper_gripper_trajectory_mirror_sign", "piper_gripper_mirror_trajectory_action",
       "piper_gripper_mirror_trajectory_joint_name", "piper_gripper_trajectory_time_sec",
-      "piper_gripper_invert_normalized"};
+      "piper_gripper_invert_normalized", "attach_touch_links", "named_poses_file"};
     static const std::vector<std::string> removed_robot = {
       "planning_scene", "with_planner", "num_cart_pts"};
     if (config["robot"] && config["robot"].IsMap()) {

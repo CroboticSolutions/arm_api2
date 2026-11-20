@@ -141,11 +141,31 @@
 #include "moveit_msgs/action/execute_trajectory.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include "std_srvs/srv/set_bool.hpp"
+#include "arm_api2_msgs/msg/task_step.hpp"
+#include "arm_api2_msgs/msg/task_segment.hpp"
+#include "arm_api2_msgs/srv/plan_task.hpp"
+#include "arm_api2_msgs/srv/save_named_pose.hpp"
+#include "arm_api2_msgs/srv/list_named_poses.hpp"
+#include "arm_api2_msgs/srv/name_request.hpp"
+#include "arm_api2_msgs/srv/attach_object.hpp"
+#include "arm_api2_msgs/srv/detach_object.hpp"
+#include "arm_api2_msgs/srv/add_collision_mesh.hpp"
+#include "arm_api2_msgs/srv/list_collision_objects.hpp"
+#include "arm_api2_msgs/srv/set_path_constraints.hpp"
+#include "arm_api2_msgs/srv/clear_path_constraints.hpp"
+#include "arm_api2_msgs/action/execute_task.hpp"
+#include "arm_api2_msgs/action/execute_plan.hpp"
+#include "arm_api2_msgs/action/move_relative.hpp"
+#include "arm_api2_msgs/action/move_to_named.hpp"
+#include "moveit_msgs/action/move_group.hpp"
+#include "moveit_msgs/srv/get_planning_scene.hpp"
+#include "moveit_msgs/msg/constraints.hpp"
 
 // utils
 #include "arm_api2/utils.hpp"
 #include "arm_api2/motion_logic.hpp"
 #include "arm_api2/motion_log.hpp"
+#include "arm_api2/task_logic.hpp"
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include "controller_manager_msgs/srv/list_controllers.hpp"
 
@@ -710,6 +730,159 @@ private:
   std::unique_ptr<moveit_servo::Servo> servoPtr;
   moveit::planning_interface::PlanningSceneInterfacePtr m_planningSceneInterface;
 
+/* ===================== tasks: plan -> preview -> execute =====================
+ * moveit2_iface_task.cpp. A task is a list of TaskStep; every motion step is planned
+ * from the end state of the previous one in a virtual copy of the planning scene
+ * (attach/detach steps change that copy), so nothing moves unless the whole task
+ * planned. Plans are stored by id (arm/plan) and executed later (arm/execute_plan),
+ * or planned and executed in one goal (arm/execute_task, arm/move_relative,
+ * arm/move_to_named). Execution runs on a worker thread, segment by segment, through
+ * the same startExecution path (arm/stop, cancel, goal checks, motion log). */
+  using TaskStep = arm_api2_msgs::msg::TaskStep;
+  struct PlannedSegment
+  {
+    TaskStep step;
+    int index{0};
+    moveit_msgs::msg::RobotTrajectory trajectory;  // timed; empty for non-motion steps
+    std::string planner;
+    double duration{0.0};
+  };
+  struct StoredPlan
+  {
+    std::vector<PlannedSegment> segments;
+    moveit_msgs::msg::RobotState start_state;
+    double duration{0.0};
+  };
+  struct TaskPlanResult
+  {
+    bool ok{false};
+    int failed_step{-1};
+    std::string code;
+    std::string message;
+    std::shared_ptr<StoredPlan> plan;
+    double plan_time_sec{0.0};
+  };
+  struct TaskProgress
+  {
+    std::string status;
+    int step{0};
+    int total{0};
+    std::string name;
+    double step_progress{0.0};
+    double progress{0.0};
+    double step_elapsed{0.0};
+    double step_planned{0.0};
+  };
+  using TaskFeedbackFn = std::function<void (const TaskProgress &)>;
+  using TaskDoneFn = std::function<void (bool ok, const std::string & code,
+      const std::string & message, int failed_step)>;
+
+  arm_api2::logic::PlanStore<StoredPlan> plan_store_{32, 600.0};
+  double plan_start_tolerance_rad_{0.02};   // YAML plans.start_tolerance_rad
+  std::vector<std::string> attach_touch_links_cfg_;   // YAML robot.attach_touch_links
+
+  TaskPlanResult planTask(
+    const std::vector<TaskStep> & steps,
+    const std::function<void(int, const std::string &)> & on_step = nullptr);
+  /* One motion step in the virtual scene; fills seg.trajectory/planner/duration. */
+  bool planPoseOrJoint(
+    planning_scene::PlanningScenePtr vscene, const moveit::core::RobotState & start,
+    const std::vector<double> * joint_target, const geometry_msgs::msg::PoseStamped * pose_target,
+    const std::string & planner_spec, double vel, double acc, PlannedSegment & seg,
+    std::string & code, std::string & error);
+  bool planCartesian(
+    planning_scene::PlanningScenePtr vscene, const moveit::core::RobotState & start,
+    const EigenSTL::vector_Isometry3d & waypoints, double vel, double acc,
+    PlannedSegment & seg, std::string & code, std::string & error);
+  bool resolvePoseInModel(
+    const geometry_msgs::msg::PoseStamped & in, const moveit::core::RobotState & state,
+    Eigen::Isometry3d & out, std::string & error);
+  std::string stepLabel(const TaskStep & step, int index) const;
+
+  std::atomic<bool> task_active_{false};
+  std::atomic<bool> task_cancel_{false};
+  std::atomic<const void *> task_owner_{nullptr};   // goal handle of the running task
+  std::mutex task_mutex_;
+  std::string task_cancel_reason_;
+  std::thread task_thread_;
+  bool motionBusy() const {return trajectory_executing_.load() || task_active_.load();}
+  bool startTask(
+    std::shared_ptr<StoredPlan> plan, const void * owner, TaskFeedbackFn fb, TaskDoneFn done,
+    std::string & why);
+  void taskWorker(
+    std::shared_ptr<StoredPlan> plan, const void * owner, TaskFeedbackFn fb, TaskDoneFn done);
+  void cancelTask(const std::string & why);
+
+  /* Action goals are planned in run() (like the other actions); queued here. */
+  struct TaskJob
+  {
+    std::function<void()> run;
+    std::function<void(const std::string &)> abort;
+  };
+  std::vector<TaskJob> task_jobs_;    // public node thread only
+  void processTaskJobs();
+  template<class ActionT>
+  void runPlannedGoal(
+    std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>> gh, const std::string & label,
+    const std::vector<TaskStep> & steps);
+  template<class ActionT>
+  void runStoredPlanGoal(
+    std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>> gh, const std::string & label,
+    const std::string & plan_id);
+
+  rclcpp_action::Client<moveit_msgs::action::MoveGroup>::SharedPtr move_group_plan_client_;
+  rclcpp::Client<moveit_msgs::srv::GetPlanningScene>::SharedPtr get_scene_client_;
+  rclcpp::CallbackGroup::SharedPtr plan_cb_group_;
+  rclcpp::Service<arm_api2_msgs::srv::PlanTask>::SharedPtr plan_task_srv_;
+  rclcpp_action::Server<arm_api2_msgs::action::ExecuteTask>::SharedPtr execute_task_as_;
+  rclcpp_action::Server<arm_api2_msgs::action::ExecutePlan>::SharedPtr execute_plan_as_;
+  rclcpp_action::Server<arm_api2_msgs::action::MoveRelative>::SharedPtr move_relative_as_;
+  rclcpp_action::Server<arm_api2_msgs::action::MoveToNamed>::SharedPtr move_to_named_as_;
+  void init_task_interfaces();
+  template<class ActionT>
+  typename rclcpp_action::Server<ActionT>::SharedPtr makeTaskActionServer(
+    const std::string & name,
+    std::function<void(std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>>)> on_accept);
+  std::string interfaceName(
+    const char * kind, const std::string & key, const std::string & fallback) const;
+  void plan_task_cb(
+    const std::shared_ptr<arm_api2_msgs::srv::PlanTask::Request> req,
+    const std::shared_ptr<arm_api2_msgs::srv::PlanTask::Response> res);
+
+/* ===================== scene, constraints, named poses =====================
+ * moveit2_iface_scene.cpp */
+  moveit_msgs::msg::Constraints path_constraints_;   // applied to every plan while set
+  bool hasPathConstraints() const;
+  std::vector<std::string> touchLinksFor(
+    const std::string & link, const std::vector<std::string> & requested) const;
+  bool applyAttach(
+    const std::string & object_id, const std::string & link,
+    const std::vector<std::string> & touch_links, std::string & message);
+  bool applyDetach(const std::string & object_id, bool remove, std::string & message);
+
+  std::string named_poses_file_;
+  arm_api2::logic::NamedPoseMap config_named_poses_;
+  arm_api2::logic::NamedPoseMap saved_named_poses_;
+  std::mutex named_poses_mutex_;
+  void loadNamedPoses();
+  /* saved > config > srdf. False with a reason when unknown. */
+  bool lookupNamedPose(
+    const std::string & name, arm_api2::logic::NamedPose & out,
+    std::string & error);
+
+  rclcpp::Service<arm_api2_msgs::srv::SaveNamedPose>::SharedPtr save_named_pose_srv_;
+  rclcpp::Service<arm_api2_msgs::srv::ListNamedPoses>::SharedPtr list_named_poses_srv_;
+  rclcpp::Service<arm_api2_msgs::srv::NameRequest>::SharedPtr delete_named_pose_srv_;
+  rclcpp::Service<arm_api2_msgs::srv::AttachObject>::SharedPtr attach_object_srv_;
+  rclcpp::Service<arm_api2_msgs::srv::DetachObject>::SharedPtr detach_object_srv_;
+  rclcpp::Service<arm_api2_msgs::srv::SetPathConstraints>::SharedPtr set_path_constraints_srv_;
+  rclcpp::Service<arm_api2_msgs::srv::ClearPathConstraints>::SharedPtr clear_path_constraints_srv_;
+  rclcpp::Service<arm_api2_msgs::srv::AddCollisionObject>::SharedPtr arm_add_collision_object_srv_;
+  rclcpp::Service<arm_api2_msgs::srv::AddCollisionMesh>::SharedPtr add_collision_mesh_srv_;
+  rclcpp::Service<arm_api2_msgs::srv::NameRequest>::SharedPtr remove_collision_object_srv_;
+  rclcpp::Service<arm_api2_msgs::srv::ListCollisionObjects>::SharedPtr list_collision_objects_srv_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr clear_collision_objects_srv_;
+  void init_scene_interfaces();
 };
 
 #endif

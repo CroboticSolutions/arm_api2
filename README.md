@@ -313,6 +313,72 @@ The gripper can be commanded via a standard ROS2 `GripperCommand` action.
 - action: `control_msgs/action/GripperCommand.action`
 
 
+### Tasks: plan → preview → execute (no MTC)
+
+A **task** is a list of `arm_api2_msgs/TaskStep`: `MOVE_JOINT`, `MOVE_POSE` (planner `""` = configured list, `pilz_PTP`, `pilz_LIN`, `ompl_<id>`), `MOVE_CARTESIAN_PATH`, `MOVE_RELATIVE`, `MOVE_NAMED`, `GRIPPER_OPEN/CLOSE/POSITION`, `ATTACH`, `DETACH`, `WAIT`, `SET_SPEED`.
+The whole task is planned first, in a private copy of move_group's planning scene: every motion step starts where the previous one ended, and `ATTACH`/`DETACH` change that copy (the carried object is collision checked while planning). The robot moves only if every step planned; otherwise the result names the step (`failed_step`) and the reason (`error_code`, `message`).
+
+| Interface | Type | What it does |
+|---|---|---|
+| `arm/plan` | srv `PlanTask` | plan only; returns `plan_id`, the planned segments (trajectories for preview) and the start state. Refused (`BUSY`) while the robot moves |
+| `arm/execute_plan` | action `ExecutePlan` | run a stored plan by id. Refused with `START_STATE_MISMATCH` if the robot is more than `plans.start_tolerance_rad` (default 0.02) from the plan start; plans expire after `plans.ttl_sec` (default 600 s, 32 kept) |
+| `arm/execute_task` | action `ExecuteTask` | plan + execute in one goal |
+| `arm/move_relative` | action `MoveRelative` | offset in the TCP (`frame: tcp`) or planning frame (`base`); `linear: true` = straight Cartesian line |
+| `arm/move_to_named` | action `MoveToNamed` | named pose (saved > YAML `named_poses:` > SRDF group states) |
+
+Task actions need `JOINT_TRAJ_CTL` or `CART_TRAJ_CTL`. Feedback: current step index/name, step progress and time-weighted overall progress. `arm/stop`, action cancel and a state change stop a running task (`CANCELED`); while a task runs (also during gripper/wait steps) other motion commands are refused as busy. Each executed segment is a line in the motion log. With `arm/set_planonly` the task actions only plan.
+
+### Scene, constraints and named poses
+
+| Interface | Type | |
+|---|---|---|
+| `arm/add_collision_object` | srv `AddCollisionObject` | box/sphere/cylinder in the planning frame (same as the old root `add_collision_object`, now synchronous) |
+| `arm/add_collision_mesh` | srv `AddCollisionMesh` | STL/DAE/OBJ from a path, `file://` or `package://`; `scale` 0.001 for mm |
+| `arm/remove_collision_object`, `arm/list_collision_objects`, `arm/clear_collision_objects` | `NameRequest`, `ListCollisionObjects`, `Trigger` | clear keeps attached objects |
+| `arm/attach_object`, `arm/detach_object` | `AttachObject`, `DetachObject` | attach a scene object (or add + attach `object`) to the TCP/link; touch links: request > `robot.attach_touch_links` > the tool links around the attach link |
+| `arm/set_path_constraints`, `arm/clear_path_constraints` | `SetPathConstraints`, `ClearPathConstraints` | joint / orientation / position constraints for every following plan (OMPL; Pilz is skipped while set, it does not enforce them) |
+| `arm/save_named_pose`, `arm/list_named_poses`, `arm/delete_named_pose` | `SaveNamedPose`, `ListNamedPoses`, `NameRequest` | saved poses: `robot.named_poses_file` (default `~/.ros/arm_api2/named_poses/<model>_<group>.yaml` or `$ARM_API2_NAMED_POSES_DIR`) |
+
+Robot YAML additions (all optional):
+```yaml
+robot:
+  attach_touch_links: [link7, link8]   # default: tool links around the attach link
+  named_poses_file: ~/my_poses.yaml
+named_poses:                           # list = planning-group joint order, or {joint: value}
+  park: [0.0, 0.2, -0.5, 0.0, 0.3, 0.0]
+plans:
+  ttl_sec: 600
+  start_tolerance_rad: 0.02
+```
+
+### Python client `arm_api2_py`
+
+```python
+from arm_api2_py import Arm, pose
+
+arm = Arm()                                   # own node + background executor; Arm("ur1") for a namespace
+arm.set_state("JOINT_TRAJ_CTL")
+arm.move_to_named("home")
+arm.move_relative(z=-0.10)                    # 10 cm back along the tool Z axis
+arm.add_box("box", (0.04, 0.04, 0.04), (0.25, 0.2, 0.08))
+
+task = (arm.task()
+        .move_pose(pose(0.25, 0.2, 0.17, rpy=(3.1416, 0, 0)), name="above")
+        .move_relative(z=0.05, name="approach")
+        .gripper_close().attach("box")
+        .move_relative(z=-0.10, name="lift")
+        .move_named("park").gripper_open().detach("box"))
+plan = task.plan()                            # nothing moves; plan.segments for preview
+if plan:
+    r = arm.execute_plan(plan.plan_id, feedback=lambda f: print(f.current_step, f.progress))
+    print(r.success, r.error_code, r.message)
+h = task.run(wait=False)                      # plan + execute, async handle
+h.cancel(); print(h.result(30))
+arm.keep_orientation(10.0)                    # hold the current tool orientation +-10 deg
+```
+Every call blocks by default (`wait=False` → `ActionHandle` with `result()`, `done()`, `cancel()`) and returns an `ArmResult` (truthy on success).
+
+
 <summary><h3>How to build package?</h3></summary>
 
 ### Build

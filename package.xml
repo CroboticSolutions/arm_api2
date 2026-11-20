@@ -8,6 +8,7 @@
   <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <depend>moveit_ros_planning_interface</depend>
   <depend>moveit_ros_planning</depend>
@@ -33,6 +34,9 @@
   <depend>controller_manager_msgs</depend>
   <depend>diagnostic_updater</depend>
   <depend>diagnostic_msgs</depend>
+  <depend>tf2_eigen</depend>
+  <depend>geometric_shapes</depend>
+  <depend>eigen</depend>
   <depend>joy</depend>
   <depend>python3</depend>
 

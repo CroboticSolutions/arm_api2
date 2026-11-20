@@ -449,7 +449,9 @@ void m2Iface::stop_cb(
   const std::shared_ptr<std_srvs::srv::Trigger::Response> res)
 {
   (void)req;
-  const bool ours = cancelExecution("arm/stop service");
+  const bool task = task_active_.load();
+  cancelTask("arm/stop service");
+  const bool ours = cancelExecution("arm/stop service") || task;
   // Also stops trajectories other clients sent to move_group (e.g. weld ExecuteTrajectory).
   if (m_moveGroupPtr) {m_moveGroupPtr->stop();}
   stop_requested_.store(true);

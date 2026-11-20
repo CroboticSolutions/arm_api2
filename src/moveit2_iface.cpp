@@ -250,6 +250,9 @@ m2Iface::m2Iface(const rclcpp::NodeOptions & options)
   init_moveit();  // starts executor_thread_
   try {
     init_diagnostics();
+    loadNamedPoses();
+    init_scene_interfaces();
+    init_task_interfaces();
     if (enable_actions) {
       init_actionservers();
     }
@@ -289,7 +292,11 @@ m2Iface::~m2Iface()
   if (state_heartbeat_thread_.joinable()) {
     state_heartbeat_thread_.join();
   }
+  cancelTask("shutdown");
   cancelExecution("shutdown");
+  if (task_thread_.joinable()) {
+    task_thread_.join();
+  }
   if (m_moveGroupPtr) {
     try {
       m_moveGroupPtr->stop();
@@ -644,7 +651,7 @@ void m2Iface::change_state_cb(
     return;
   }
   switch (logic::decideStateChange(static_cast<logic::ArmState>(robotState), *wanted,
-                                         trajectory_executing_.load(), stop_on_state_change_))
+                                         motionBusy(), stop_on_state_change_))
   {
     case logic::StateChange::REJECT_MOVING:
       RCLCPP_WARN_STREAM(this->get_logger(), "Refusing state change to " << req->state <<
@@ -652,6 +659,7 @@ void m2Iface::change_state_cb(
       res->success = false;
       return;
     case logic::StateChange::STOP_AND_SWITCH:
+      cancelTask("arm state changed to " + req->state);
       cancelExecution("arm state changed to " + req->state);
       [[fallthrough]];
     case logic::StateChange::SWITCH:
@@ -690,6 +698,10 @@ void m2Iface::dropPendingCommands(const std::string & why)
   if (received_topic_pose_cmd_ || received_topic_traj_cmd_) {
     RCLCPP_WARN_STREAM(this->get_logger(), "Dropped a queued topic command: " << why);
   }
+  for (auto & job : task_jobs_) {
+    job.abort(why);
+  }
+  task_jobs_.clear();
   received_cmd_ = false;
   received_traj_ = false;
   received_topic_pose_cmd_ = false;
@@ -978,6 +990,11 @@ bool m2Iface::run()
                         *this->get_clock(),
             3000,
             "SERVO_CTL requested but servo is not enabled.");
+  }
+
+  // queued task goals (execute_task, execute_plan, move_relative, move_to_named)
+  if ((robotState == JOINT_TRAJ_CTL || robotState == CART_TRAJ_CTL) && !task_jobs_.empty()) {
+    processTaskJobs();
   }
 
   if(received_gripper_cmd_) {

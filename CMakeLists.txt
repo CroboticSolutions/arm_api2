@@ -44,18 +44,28 @@ find_package(diagnostic_updater REQUIRED)
 # (true only when the system libyaml-cpp-dev is installed). The vendor sets yaml-cpp_DIR.
 find_package(yaml_cpp_vendor REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(tf2_eigen REQUIRED)
+find_package(geometric_shapes REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 
 # include headers
 include_directories(include)
 
 # Build moveit2_iface
 # Pure logic (no node): unit tested in test/
-add_library(arm_api2_logic STATIC src/motion_logic.cpp src/motion_log.cpp)
+add_library(arm_api2_logic STATIC src/motion_logic.cpp src/motion_log.cpp src/task_logic.cpp)
 target_include_directories(arm_api2_logic PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 target_compile_features(arm_api2_logic PUBLIC cxx_std_17)
 set_target_properties(arm_api2_logic PROPERTIES POSITION_INDEPENDENT_CODE ON)
 ament_target_dependencies(arm_api2_logic trajectory_msgs)
+target_include_directories(arm_api2_logic PUBLIC ${EIGEN3_INCLUDE_DIR})
+if(TARGET yaml-cpp::yaml-cpp)
+  target_link_libraries(arm_api2_logic yaml-cpp::yaml-cpp)
+else()
+  target_link_libraries(arm_api2_logic yaml-cpp)
+endif()
 
 add_executable(
   moveit2_iface
@@ -66,6 +76,8 @@ add_executable(
   src/moveit2_iface_observability.cpp
   src/moveit2_iface_servo.cpp
   src/moveit2_iface_services.cpp
+  src/moveit2_iface_task.cpp
+  src/moveit2_iface_scene.cpp
   src/moveit2_iface_node.cpp
   src/piper_joint_gripper.cpp
   src/robotiq_gripper.cpp
@@ -100,6 +112,8 @@ ament_target_dependencies(
   tf2_geometry_msgs
   controller_manager_msgs
   diagnostic_updater
+  tf2_eigen
+  geometric_shapes
 )
 if(TARGET yaml-cpp::yaml-cpp)
   target_link_libraries(moveit2_iface yaml-cpp::yaml-cpp)
@@ -111,6 +125,9 @@ endif()
 install(TARGETS
   moveit2_iface
   DESTINATION lib/${PROJECT_NAME})
+
+# Python client: from arm_api2_py import Arm
+ament_python_install_package(arm_api2_py)
 
 # Install launch directory
 install(DIRECTORY
@@ -231,6 +248,8 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_motion_logic test/test_motion_logic.cpp)
   target_link_libraries(test_motion_logic arm_api2_logic)
+  ament_add_gtest(test_task_logic test/test_task_logic.cpp)
+  target_link_libraries(test_task_logic arm_api2_logic)
   ament_add_gtest(test_motion_log test/test_motion_log.cpp)
   target_link_libraries(test_motion_log arm_api2_logic)
   ament_add_gtest(test_utils test/test_utils.cpp src/utils.cpp)
@@ -238,6 +257,7 @@ if(BUILD_TESTING)
   ament_target_dependencies(test_utils moveit_ros_planning_interface geometry_msgs std_msgs
     tf2 tf2_geometry_msgs)
 
+  ament_add_pytest_test(arm_api2_py_unit tests/test_arm_api2_py.py)
   ament_add_pytest_test(
     arm_api2_selftest_unit
     tests/test_arm_api2_selftest.py

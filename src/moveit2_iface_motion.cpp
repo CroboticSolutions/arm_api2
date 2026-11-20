@@ -226,7 +226,7 @@ rclcpp_action::GoalResponse m2Iface::move_to_joint_goal_cb(
       "Number of joint positions does not match the number of joints!");
     return rclcpp_action::GoalResponse::REJECT;
   }
-  if (trajectory_executing_.load()) {
+  if (motionBusy()) {
     RCLCPP_ERROR_STREAM(this->get_logger(), "A trajectory is still executing; goal rejected.");
     return rclcpp_action::GoalResponse::REJECT;
   }
@@ -267,7 +267,7 @@ rclcpp_action::GoalResponse m2Iface::move_to_pose_goal_cb(
       PLANNING_FRAME);
     return rclcpp_action::GoalResponse::REJECT;
   }
-  if (trajectory_executing_.load()) {
+  if (motionBusy()) {
     RCLCPP_ERROR_STREAM(this->get_logger(), "A trajectory is still executing; goal rejected.");
     return rclcpp_action::GoalResponse::REJECT;
   }
@@ -312,7 +312,7 @@ rclcpp_action::GoalResponse m2Iface::move_to_pose_path_goal_cb(
       PLANNING_FRAME);
     return rclcpp_action::GoalResponse::REJECT;
   }
-  if (trajectory_executing_.load()) {
+  if (motionBusy()) {
     RCLCPP_ERROR_STREAM(this->get_logger(), "A trajectory is still executing; goal rejected.");
     return rclcpp_action::GoalResponse::REJECT;
   }
@@ -369,7 +369,7 @@ void m2Iface::planAndExecJoint()
   no_pose.header.frame_id = PLANNING_FRAME;
   if (finishIfCanceling(gh)) {return;}
   motionBegin(label, "action");
-  if (trajectory_executing_.load(std::memory_order_acquire)) {
+  if (motionBusy()) {
     RCLCPP_WARN(this->get_logger(), "Trajectory still executing; aborting joint goal.");
     publishActionStatus(label, false, "BUSY_TRAJECTORY_EXECUTING",
       "Trajectory still executing; goal aborted", no_pose, 0.0);
@@ -418,7 +418,7 @@ void m2Iface::planAndExecPose()
   if (finishIfCanceling(gh)) {return;}
   motionBegin(label, "action");
   auto goalPose = gh->get_goal()->goal;
-  if (trajectory_executing_.load(std::memory_order_acquire)) {
+  if (motionBusy()) {
     RCLCPP_WARN(this->get_logger(), "Trajectory still executing; aborting pose goal.");
     publishActionStatus(label, false, "BUSY_TRAJECTORY_EXECUTING",
       "Trajectory still executing; goal aborted", goalPose, 0.0);
@@ -476,7 +476,7 @@ void m2Iface::planAndExecTopicPose()
     goalPose = m_topicPoseCmd;
   }
 
-  if (trajectory_executing_.load(std::memory_order_acquire)) {
+  if (motionBusy()) {
     RCLCPP_WARN_THROTTLE(
             this->get_logger(), *this->get_clock(), 3000,
             "Trajectory still executing; ignoring new pose command until it finishes.");
@@ -554,7 +554,7 @@ void m2Iface::planAndExecTopicPoseJoint()
     pose_snap = m_topicPoseCmd;
   }
 
-  if (trajectory_executing_.load(std::memory_order_acquire)) {
+  if (motionBusy()) {
     RCLCPP_WARN_THROTTLE(
             this->get_logger(), *this->get_clock(), 3000,
             "Trajectory still executing; ignoring new pose command until it finishes.");
@@ -669,7 +669,7 @@ void m2Iface::planAndExecPosePath()
       result->success = false;
       gh->abort(result);
     };
-  if (trajectory_executing_.load(std::memory_order_acquire)) {
+  if (motionBusy()) {
     fail("BUSY_TRAJECTORY_EXECUTING", "Trajectory still executing; goal aborted", 0.0);
     return;
   }
@@ -742,7 +742,7 @@ void m2Iface::planAndExecTopicPosePath()
   target_pose.header.frame_id = PLANNING_FRAME;
   target_pose.pose = m_cartesianWaypoints.back();
 
-  if (trajectory_executing_.load(std::memory_order_acquire)) {
+  if (motionBusy()) {
     RCLCPP_WARN_THROTTLE(
             this->get_logger(), *this->get_clock(), 3000,
             "Trajectory still executing; ignoring Cartesian waypoint trajectory.");
@@ -887,6 +887,8 @@ bool m2Iface::planWithPlanner(
   std::vector<std::string> all_planners;
   last_planner_.clear();
   for (const auto & a : pose_planners_) {
+    // Pilz does not enforce path constraints (arm/set_path_constraints): skip it while set.
+    if (hasPathConstraints() && a.pipeline == "pilz_industrial_motion_planner") {continue;}
     m_moveGroupPtr->setPlanningPipelineId(a.pipeline);
     m_moveGroupPtr->setPlannerId(a.planner);
     m_moveGroupPtr->setPlanningTime(a.time > 0.0 ? a.time : original_planning_time);

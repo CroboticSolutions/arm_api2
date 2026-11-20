@@ -77,8 +77,15 @@
 
 - `robot.async_actions` now defaults to `true` (action goals no longer block `run()`; cancel stops the robot, `ctl_state`/`current_pose` keep publishing); set `false` for the old blocking behaviour
 
+## Nov 2026 (2) — tasks without MTC
+
+- tasks: `arm/plan` (plan only, `plan_id` + segments for preview), `arm/execute_plan`, `arm/execute_task`; the whole task is planned in a copy of move_group's scene (each step from the end of the previous, attach/detach in the copy, carried object collision checked), the robot moves only when every step planned, failures name the step; per-segment execution through the existing execution path (stop, cancel, goal checks, motion log); start-state check before every segment (`plans.start_tolerance_rad`)
+- `arm/move_relative` (TCP or base frame, linear or planned), `arm/move_to_named` + `arm/save_named_pose` / `list_named_poses` / `delete_named_pose` (saved file > YAML `named_poses:` > SRDF)
+- `arm/attach_object` / `arm/detach_object` with touch links; `arm/set_path_constraints` (joint, orientation, position) / `arm/clear_path_constraints`, Pilz skipped while constraints are set
+- scene under `arm/`: `add_collision_object` (now synchronous, also on the old root name), `add_collision_mesh`, `remove_collision_object`, `list_collision_objects`, `clear_collision_objects`
+- Python client `arm_api2_py` (blocking/async, task builder); unit tests `test_task_logic`, `tests/test_arm_api2_py.py`
+
 # Future potential features
 
 - realtime pose follower (teleoperation: servo via absolute position)
-- constraints for planners (e.g. orientation constraint for cup transport)
 - dynamic scene object update
